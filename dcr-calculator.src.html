@@ -72,6 +72,7 @@ h1 em{font-style:italic; color:var(--accent-ink)}
   border-radius:3px; color:var(--ink-2); background:var(--surface); white-space:nowrap;
 }
 .chip.on{border-color:var(--accent); color:var(--accent-ink); background:var(--accent-soft)}
+.chip.bad{border-color:var(--crit); color:var(--crit); background:var(--crit-soft)}
 
 /* ---------- shell ---------- */
 .cols{display:grid; grid-template-columns:minmax(0,340px) minmax(0,1fr); gap:28px; align-items:start; margin-top:28px}
@@ -331,6 +332,31 @@ tbody tr:last-child td{border-bottom:0}
   overflow:hidden; flex:1 1 130px; min-width:110px}
 .slotbar i{display:block; height:100%; background:var(--accent); opacity:.8}
 .slotbar i.over{background:var(--crit)}
+
+/* ---------- parking requirement ---------- */
+.park{display:grid; grid-template-columns:repeat(auto-fit,minmax(148px,1fr)); gap:1px;
+  background:var(--line); border-bottom:1px solid var(--line)}
+.park > div{background:var(--surface); padding:14px 16px; display:flex; flex-direction:column; gap:5px}
+.park .pk{font-family:"IBM Plex Mono",monospace; font-size:.62rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3)}
+.park .pv{font-family:"IBM Plex Mono",monospace; font-weight:500; font-size:clamp(1.2rem,1rem + .7vw,1.55rem);
+  letter-spacing:-.02em; font-variant-numeric:tabular-nums; color:var(--ink); line-height:1.1}
+.park .pv.hi{color:var(--accent-ink)}
+.park .pv.bad{color:var(--crit)}
+.park .ps{font-family:"IBM Plex Mono",monospace; font-size:.68rem; color:var(--ink-3)}
+.park.over > div{background:var(--crit-soft)}
+.pkbar{height:9px; border-radius:3px; background:var(--sunk); border:1px solid var(--line);
+  overflow:hidden; margin-top:3px; position:relative}
+.pkbar i{display:block; height:100%; background:var(--accent); opacity:.85}
+.pkbar i.bad{background:var(--crit)}
+.pkbar u{position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--ink-2)}
+.pknote{padding:13px 16px; font-size:.81rem; color:var(--ink-2); display:flex; gap:10px; align-items:flex-start}
+.pknote.bad{background:var(--crit-soft); color:var(--crit)}
+.pknote b{color:inherit; font-variant-numeric:tabular-nums}
+.pknote .mark{flex:0 0 auto; font-family:"IBM Plex Mono",monospace; font-size:.58rem;
+  letter-spacing:.1em; text-transform:uppercase; padding:3px 7px; border-radius:3px; margin-top:1px;
+  background:var(--accent-soft); color:var(--accent-ink)}
+.pknote.bad .mark{background:var(--crit); color:var(--surface)}
 </style>
 
 
@@ -345,7 +371,7 @@ tbody tr:last-child td{border-bottom:0}
     </div>
     <div class="mast-meta">
       <span class="chip" id="chipCode">code &#x2014;</span>
-      <span class="chip" id="chipItc">itc &#x2014;</span>
+      <span class="chip" id="chipPark">parking &#x2014;</span>
       <span class="chip" id="chipDb">db &#x2014;</span>
     </div>
   </header>
@@ -407,21 +433,6 @@ tbody tr:last-child td{border-bottom:0}
         <div class="rule"></div>
 
         <div class="field">
-          <label for="itcClass">ITC category</label>
-          <div class="ctl"><select id="itcClass"></select></div>
-        </div>
-
-        <div class="field" id="variantField">
-          <label for="itcVariant">Variant</label>
-          <div class="ctl"><select id="itcVariant"></select></div>
-          <p class="hint">AD = Abu Dhabi, AA = Al Ain, CBD = central business district.</p>
-        </div>
-
-        <div class="derived">
-          <span>Rate <b id="itcShow">&#x2014;</b></span><span class="src" id="itcSrc"></span>
-        </div>
-
-        <div class="field">
           <label for="itcLoc">ITC location</label>
           <div class="ctl"><select id="itcLoc">
             <option value="AD-CBD">Abu Dhabi &#x2014; CBD</option>
@@ -454,20 +465,10 @@ tbody tr:last-child td{border-bottom:0}
           <div class="derived" id="shareOut"><span></span><span class="src"></span></div>
         </div>
 
-        <div class="drv" id="driverField" hidden>
-          <span class="lbl" id="driverLabel">Quantity</span>
-          <div class="ctl">
-            <input id="driverQty" type="number" min="0" step="1" value="0" inputmode="decimal">
-            <span class="suffix" id="driverUnit">no.</span>
-          </div>
-          <p class="hint">This category is charged per unit, not per floor area, so the count
-            cannot be derived from the plot.</p>
-        </div>
-
         <div class="rule"></div>
 
-        <details class="coef">
-          <summary>Coefficients</summary>
+        <details class="coef" open>
+          <summary>Fixed values</summary>
           <div>
             <div class="field">
               <label for="unitArea">Unit area per activity</label>
@@ -507,18 +508,9 @@ tbody tr:last-child td{border-bottom:0}
     <div style="display:flex; flex-direction:column; gap:22px; min-width:0">
 
       <section class="panel">
-        <div class="panel-hd"><h2>Derivation</h2><span class="tag">5 steps</span></div>
+        <div class="panel-hd"><h2>Derivation</h2><span class="tag">4 steps</span></div>
         <div class="ladder" id="ladder"><div class="boot" id="bootMsg">opening database&#x2026;</div></div>
         <div class="flags" id="flags"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-hd">
-          <h2>ITC rate</h2>
-          <span class="tag" id="rateTag">from matrix</span>
-        </div>
-        <div class="rate-hd" id="rateHd"></div>
-        <div class="bars" id="rateBars"></div>
       </section>
 
       <section class="panel">
@@ -541,6 +533,14 @@ tbody tr:last-child td{border-bottom:0}
           <button type="button" class="btn mini" id="clearSched">Clear</button>
           <button type="button" class="btn mini" id="exampleSched">Load worked example</button>
         </div>
+      </section>
+
+      <section class="panel" id="parkPanel">
+        <div class="panel-hd">
+          <h2>Parking requirement</h2>
+          <span class="tag">from the selected activities</span>
+        </div>
+        <div id="parkBody"></div>
       </section>
 
       <section class="panel">
@@ -676,16 +676,6 @@ tbody tr:last-child td{border-bottom:0}
     return out;
   }
 
-  const SQL_COMBINED =
-    "SELECT code, class_name, variant, weekday_total, weekend_total,\n" +
-    "       rate_employee, rate_visitor, rate_truck, rate_total,\n" +
-    "       unit_label, driver_label, driver_kind, conversion\n" +
-    "FROM itc_combined WHERE code = :code";
-  const SQL_PERIOD =
-    "SELECT code, class_name, variant, rate_employee, rate_visitor, rate_truck,\n" +
-    "       rate_total, unit_label, driver_label, driver_kind, conversion\n" +
-    "FROM itc_rate WHERE period = :p AND code = :code";
-
   /* ---------- data access ---------------------------------------------- */
   function loadFromSql(){
     ITC = q("SELECT * FROM itc_rate ORDER BY id");
@@ -790,7 +780,7 @@ tbody tr:last-child td{border-bottom:0}
                 sched: SCHED.map(r=>({ act: r.act ? r.act.activity_id : null,
                                        slots: r.slots, itcOverride: r.itcOverride,
                                        qty: r.qty })) };
-    ["plotSize","dedCode","itcClass","itcVariant","farManual","driverQty","pcPct","glaPct",
+    ["plotSize","dedCode","farManual","pcPct","glaPct",
      "unitArea","bayArea","parkLimitPct"]
       .forEach(id => { const nd = document.getElementById(id); if(nd) o[id] = nd.value; });
     return o;
@@ -804,58 +794,10 @@ tbody tr:last-child td{border-bottom:0}
     catch(e){ return null; }
   }
 
-  /* ---------- selects --------------------------------------------------- */
-  function fillClassSelect(){
-    const list = classList();
-    state.groupOrder = [];
-    list.forEach(r=>{ if(!state.groupOrder.includes(r.class_group)) state.groupOrder.push(r.class_group); });
-    const sel = $("#itcClass"), keep = sel.value;
-    sel.innerHTML = "";
-    let group = null, og = null;
-    list.forEach(r=>{
-      if(r.class_group !== group){
-        group = r.class_group;
-        og = el("optgroup"); og.label = group; sel.appendChild(og);
-      }
-      const o = el("option", null, r.class_code + " — " + r.class_name +
-                   (r.variants>1 ? "  (" + r.variants + " variants)" : ""));
-      o.value = r.class_code;
-      og.appendChild(o);
-    });
-    if(list.some(r=>r.class_code===keep)) sel.value = keep;
-    else if(list.some(r=>r.class_code==="112")) sel.value = "112";
-    else if(list.length) sel.value = list[0].class_code;
-  }
 
-  function fillVariantSelect(){
-    const vs = variantsFor($("#itcClass").value);
-    const sel = $("#itcVariant"), keep = sel.value;
-    sel.innerHTML = "";
-    vs.forEach(r=>{
-      const o = el("option", null, r.variant ? r.variant : "(single rate)");
-      o.value = r.code;
-      sel.appendChild(o);
-    });
-    if(vs.length) sel.value = vs.some(r=>r.code===keep) ? keep : vs[0].code;
-    $("#variantField").hidden = vs.length < 2;
-  }
 
   /* The headline rate is read back out of SQLite when it is available, so the
      query shown under the rate panel is the one that produced the number. */
-  function currentRate(){
-    const code = $("#itcVariant").value;
-    if(!code) return null;
-    const local = effectiveRate(code);
-    if(sqlLive && local){
-      try{
-        const r = state.basis === "combined"
-          ? q(SQL_COMBINED, {":code":code})[0]
-          : q(SQL_PERIOD, {":p":state.basis, ":code":code})[0];
-        if(r) return Object.assign({}, local, r, { basis:state.basis });
-      }catch(e){/* fall through to the local blend */}
-    }
-    return local;
-  }
 
   /* ---------- calculation ---------------------------------------------- */
   function calc(){
@@ -867,26 +809,11 @@ tbody tr:last-child td{border-bottom:0}
     const pcAuto = $("#pcPct").value.trim() === "";
     const glaPct = num($("#glaPct").value);
 
-    const rate   = currentRate();
 
     const maxGFA  = plot>0 && Number.isFinite(far) ? plot*far : NaN;
     const covBase = state.base==="gfa" ? maxGFA : plot;
     const cover   = Number.isFinite(covBase) && Number.isFinite(pcPct) ? covBase*(pcPct/100) : NaN;
     const gla     = Number.isFinite(maxGFA) && Number.isFinite(glaPct) ? maxGFA*(glaPct/100) : NaN;
-
-    // the ITC rate is charged against whichever quantity the matrix names
-    let driver = NaN, driverSrc = "";
-    if(rate){
-      if(rate.driver_kind==="gfa"){ driver = maxGFA; driverSrc = "Max GFA"; }
-      else if(rate.driver_kind==="gla"){ driver = gla; driverSrc = "GLA"; }
-      else if(rate.driver_kind==="site"){ driver = plot; driverSrc = "plot area"; }
-      else { driver = num($("#driverQty").value); driverSrc = rate.driver_label; }
-    }
-    const per = rate ? Math.round(1/rate.conversion) : NaN;
-    const bay = k => rate && Number.isFinite(driver) ? driver*rate.conversion*rate[k] : NaN;
-    const parkEmp = bay("rate_employee"), parkVis = bay("rate_visitor"), parkTrk = bay("rate_truck");
-    const parkRaw = rate && Number.isFinite(driver) ? driver*rate.conversion*rate.rate_total : NaN;
-    const park    = Number.isFinite(parkRaw) ? Math.ceil(parkRaw) : NaN;
 
     // Max allowed activities = GLA / unit area, floored: a partial unit is no unit.
     const unit    = num($("#unitArea").value);
@@ -894,9 +821,8 @@ tbody tr:last-child td{border-bottom:0}
     const act     = Number.isFinite(actRaw) ? Math.floor(actRaw) : NaN;
     const sched   = schedTotals(act);
 
-    return { plot, dRow, far, farOv, pcPct, pcAuto, glaPct, rate, per, unit,
-             maxGFA, covBase, cover, gla, driver, driverSrc,
-             parkEmp, parkVis, parkTrk, parkRaw, park, actRaw, act, sched };
+    return { plot, dRow, far, farOv, pcPct, pcAuto, glaPct, unit,
+             maxGFA, covBase, cover, gla, actRaw, act, sched };
   }
 
   /* ==================== ACTIVITY SCHEDULE ==============================
@@ -975,27 +901,31 @@ tbody tr:last-child td{border-bottom:0}
     } else {
       driver = slots * unit;                    // floor area this activity holds
     }
-    return { code:code, rate:rate, bays: driver * code.conversion * rate,
+    const raw = driver * code.conversion * rate;
+    // Each activity is a separate tenancy, so its bays round up on their own.
+    return { code:code, rate:rate, raw:raw, bays: Math.max(0, Math.ceil(raw - 1e-9)),
              needsQty:false, eff:eff };
   }
 
   function schedTotals(allowed){
     const unit = num($("#unitArea").value) || 60;
-    let slots = 0, bays = 0, incomplete = 0;
+    let slots = 0, bays = 0, raw = 0, incomplete = 0;
     SCHED.forEach(r => {
       slots += Math.max(0, num(r.slots) || 0);
       const p = rowParking(r, unit);
-      if(Number.isFinite(p.bays)) bays += p.bays;
+      if(Number.isFinite(p.bays)){ bays += p.bays; raw += p.raw; }
       else if(r.act || r.itcOverride) incomplete++;
     });
     const bayArea = num($("#bayArea").value);
     const limitPct = num($("#parkLimitPct").value);
     const plot = num($("#plotSize").value);
-    const baysCeil = Math.max(0, Math.ceil(bays - 1e-9));
+    const baysCeil = bays;                       // already whole: each row rounded up
     const area = Number.isFinite(bayArea) ? baysCeil * bayArea : NaN;
     const cap = Number.isFinite(plot) && Number.isFinite(limitPct) ? plot * (limitPct/100) : NaN;
-    return { slots:slots, allowed:allowed, bays:bays, baysCeil:baysCeil,
+    const pctPlot = Number.isFinite(area) && plot > 0 ? area/plot*100 : NaN;
+    return { slots:slots, allowed:allowed, bays:bays, baysCeil:baysCeil, raw:raw,
              area:area, cap:cap, limitPct:limitPct, bayArea:bayArea,
+             plot:plot, pctPlot:pctPlot,
              over: Number.isFinite(area) && Number.isFinite(cap) && area > cap,
              overSlots: Number.isFinite(allowed) && slots > allowed,
              incomplete:incomplete, rows:SCHED.length };
@@ -1120,7 +1050,13 @@ tbody tr:last-child td{border-bottom:0}
 
       const td4 = el("td", "n");
       td4.appendChild(Object.assign(el("span"),
-        {textContent: Number.isFinite(p.bays) ? fmt(p.bays,3) : "\u2014"}));
+        {textContent: Number.isFinite(p.bays) ? fmt(p.bays,0) : "\u2014"}));
+      if(Number.isFinite(p.raw) && Math.abs(p.raw - p.bays) > 1e-9){
+        const rw = el("div");
+        rw.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.6rem; color:var(--ink-3)";
+        rw.textContent = "raw " + fmt(p.raw,3);
+        td4.appendChild(rw);
+      }
       tr.appendChild(td4);
 
       const td5 = el("td", "n");
@@ -1164,11 +1100,12 @@ tbody tr:last-child td{border-bottom:0}
     fill.style.width = Math.min(100, frac*100).toFixed(1) + "%";
     if(t.overSlots) fill.className = "over";
     bar.appendChild(fill); F.appendChild(bar);
-    m("parking", Number.isFinite(t.bays) ? fmt(t.baysCeil) + " " + plural(t.baysCeil,"bay","bays") : "\u2014", "hi");
-    m("area @ " + fmt(t.bayArea) + " m\u00b2", Number.isFinite(t.area) ? area(t.area) : "\u2014",
-      t.over ? "bad" : "");
-    m("cap " + fmt(t.limitPct) + "% of plot", Number.isFinite(t.cap) ? area(t.cap) : "\u2014",
-      t.over ? "bad" : "");
+    // parking totals live in their own panel below; keep this to slot usage
+    if(t.overSlots) m("over by", fmt(t.slots - t.allowed) + " " +
+      plural(t.slots - t.allowed, "slot", "slots"), "bad");
+    else if(Number.isFinite(t.allowed)) m("spare",
+      fmt(Math.max(0, t.allowed - t.slots)) + " " +
+      plural(t.allowed - t.slots, "slot", "slots"), "");
   }
 
   /* calc() needs schedule totals and the schedule needs the activity count, so
@@ -1228,85 +1165,107 @@ tbody tr:last-child td{border-bottom:0}
       formula: G + " m² × " + fmt(c.glaPct/100,2),
       value: Number.isFinite(c.gla)?fmt(c.gla):"—", unit:"m²" }));
 
-    const rt = c.rate;
-    L.appendChild(stepRow({ n:4, cls:"count", title:"Parking requirement", abbr:"ITC",
-      sub: rt ? "Code " + rt.code + " at " + fmt(rt.rate_total,3) + " per " + rt.unit_label
-              : "No ITC category selected",
-      formula: !rt ? "—"
-        : (c.per===1 ? (Number.isFinite(c.driver)?fmt(c.driver):"qty") + " × " + fmt(rt.rate_total,3)
-                     : "(" + (Number.isFinite(c.driver)?fmt(c.driver):"qty") + " ÷ " + fmt(c.per) + ") × " + fmt(rt.rate_total,3))
-          + "   [" + c.driverSrc + "]",
-      value: Number.isFinite(c.park)?fmt(c.park):"—", unit:plural(c.park,"bay","bays"),
-      raw: Number.isFinite(c.parkRaw)? "= " + fmt(c.parkRaw,3) + " → ceil" : "" }));
-
-    L.appendChild(stepRow({ n:5, cls:"count", title:"Max allowed activities", abbr:"ACT",
+    L.appendChild(stepRow({ n:4, cls:"count", title:"Max allowed activities", abbr:"ACT",
       sub: "GLA divided by a " + fmt(c.unit) + " m² unit, rounded down",
       formula: (Number.isFinite(c.gla)?fmt(c.gla):"GLA") + " ÷ " + fmt(c.unit),
       value: Number.isFinite(c.act)?fmt(c.act):"—",
       unit: plural(c.act,"activity","activities"),
       raw: Number.isFinite(c.actRaw) ? "= " + fmt(c.actRaw,3) + " → floor" : "" }));
 
-    renderRate(c);
     renderSchedFoot(c.act);
+    renderPark(c);
     renderFlags(c);
     renderPlan(c);
     renderChips(c);
     save();
   }
 
-  /* ---------- ITC rate panel ------------------------------------------- */
-  function renderRate(c){
-    const hd = $("#rateHd"), bs = $("#rateBars");
-    hd.innerHTML = ""; bs.innerHTML = "";
-    const rt = c.rate;
-    if(!rt){ hd.appendChild(el("span","hint","No category selected.")); return; }
+  /* ---------- parking requirement --------------------------------------- */
+  function renderPark(c){
+    const B = $("#parkBody");
+    B.innerHTML = "";
+    const t = c.sched;
+    const grid = el("div", "park" + (t.over ? " over" : ""));
 
-    hd.appendChild(el("span","code",rt.code));
-    hd.appendChild(el("span","nm",rt.class_name));
-    if(rt.variant) hd.appendChild(el("span","var",rt.variant));
-    hd.appendChild(el("span","pill","per " + rt.unit_label));
-    hd.appendChild(el("span","pill", BASIS_LABEL[state.basis] || state.basis));
-    const auto = rt.driver_kind !== "count";
-    hd.appendChild(el("span","pill"+(auto?"":" warn"), auto ? "auto: " + c.driverSrc : "needs " + rt.driver_label));
+    const cell = (label, value, sub, cls) => {
+      const d = el("div");
+      d.appendChild(el("span", "pk", label));
+      d.appendChild(el("span", "pv" + (cls ? " " + cls : ""), value));
+      if(sub) d.appendChild(el("span", "ps", sub));
+      return d;
+    };
 
-    const rows = [
-      ["employee", "Employee / res.", rt.rate_employee, c.parkEmp],
-      ["visitor",  "Visitor",         rt.rate_visitor,  c.parkVis],
-      ["truck",    "Truck / bus",     rt.rate_truck,    c.parkTrk]
-    ];
-    const max = Math.max(rt.rate_employee, rt.rate_visitor, rt.rate_truck, 1e-9);
-    rows.forEach(function(row){
-      const cls = row[0], label = row[1], rate = row[2], bays = row[3];
-      const b = el("div","bar "+cls);
-      b.appendChild(el("span","bk",label));
-      const track = el("div","track"), fill = el("div","fill");
-      fill.style.width = Math.max(rate/max*100, rate>0?1.5:0).toFixed(1)+"%";
-      track.appendChild(fill); b.appendChild(track);
-      b.appendChild(el("span","bv", fmt(rate,3) + (Number.isFinite(bays) ? "  ·  " + fmt(bays,2) : "")));
-      bs.appendChild(b);
-    });
-    const t = el("div","bar total");
-    t.appendChild(el("span","bk","Total"));
-    t.appendChild(el("div"));
-    t.appendChild(el("span","bv", fmt(rt.rate_total,3) +
-      (Number.isFinite(c.parkRaw) ? "  ·  " + fmt(c.parkRaw,3) + " " + plural(c.parkRaw,"bay","bays") : "")));
-    bs.appendChild(t);
+    const haveBays = Number.isFinite(t.baysCeil) && t.rows > 0;
+    grid.appendChild(cell("Parking required",
+      haveBays ? fmt(t.baysCeil) : "\u2014",
+      haveBays ? plural(t.baysCeil, "bay", "bays") + ", each activity rounded up" : "no activities yet",
+      "hi"));
+    grid.appendChild(cell("Parking area",
+      Number.isFinite(t.area) ? fmt(t.area) : "\u2014",
+      Number.isFinite(t.bayArea) ? "m\u00b2 at " + fmt(t.bayArea) + " m\u00b2 a bay" : "m\u00b2",
+      t.over ? "bad" : ""));
+    grid.appendChild(cell("Share of plot",
+      Number.isFinite(t.pctPlot) ? fmt(t.pctPlot,1) + "%" : "\u2014",
+      Number.isFinite(t.plot) && t.plot > 0 ? "of " + area(t.plot) : "set a plot size",
+      t.over ? "bad" : ""));
+    grid.appendChild(cell("Cap",
+      Number.isFinite(t.limitPct) ? fmt(t.limitPct) + "%" : "\u2014",
+      Number.isFinite(t.cap) ? area(t.cap) : "",
+      ""));
+    B.appendChild(grid);
 
-    // how the week blend was formed
-    if(Number.isFinite(rt.weekday_total) && Number.isFinite(rt.weekend_total)){
-      const sh = shares();
-      const same = Math.abs(rt.weekday_total - rt.weekend_total) < 1e-9;
-      const mix = el("div","mixline");
-      [["weekday", fmt(rt.weekday_total,3), "\u00D7 " + fmt(sh.wd*100,2) + "%", "weekday"],
-       ["weekend", fmt(rt.weekend_total,3), "\u00D7 " + fmt(sh.we*100,2) + "%", "weekend"],
-       ["\u2192 week", fmt(rt.weekday_total*sh.wd + rt.weekend_total*sh.we, 4),
-                        same ? "tabs identical" : "tabs differ", "combined"]].forEach(row=>{
-        const active = row[3] === state.basis;
-        mix.appendChild(el("span","mk",row[0]));
-        mix.appendChild(el("span","mv"+(active?" hi":""),row[1]));
-        mix.appendChild(el("span","ms",row[2] + (active ? "  \u25C0 in use" : "")));
-      });
-      bs.appendChild(mix);
+    // how the share sits against the cap
+    if(Number.isFinite(t.pctPlot) && Number.isFinite(t.limitPct)){
+      const wrap = el("div");
+      wrap.style.cssText = "padding:14px 16px 4px";
+      const bar = el("div", "pkbar");
+      const fill = el("i");
+      const scale = Math.max(t.limitPct * 1.6, t.pctPlot * 1.05, 1);
+      fill.style.width = Math.min(100, t.pctPlot / scale * 100).toFixed(1) + "%";
+      if(t.over) fill.className = "bad";
+      bar.appendChild(fill);
+      const mark = el("u");
+      mark.style.left = Math.min(100, t.limitPct / scale * 100).toFixed(1) + "%";
+      mark.title = "cap: " + fmt(t.limitPct) + "%";
+      bar.appendChild(mark);
+      wrap.appendChild(bar);
+      const lg = el("div");
+      lg.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.63rem; color:var(--ink-3); margin-top:5px";
+      lg.textContent = "0%   \u2502 marker = " + fmt(t.limitPct) + "% cap   \u2502   " + fmt(scale,0) + "%";
+      wrap.appendChild(lg);
+      B.appendChild(wrap);
+    }
+
+    const note = el("div", "pknote" + (t.over ? " bad" : ""));
+    note.appendChild(el("span", "mark" + "", t.over ? "over" : "ok"));
+    const txt = el("span");
+    if(!t.rows || !haveBays){
+      txt.textContent = "Add activities to the schedule to get a parking requirement.";
+    } else if(t.over){
+      txt.innerHTML = "The selected activities need <b>" + fmt(t.area) + " m\u00b2</b> of parking, " +
+        "<b>" + fmt(t.pctPlot,1) + "%</b> of the plot \u2014 over the <b>" + fmt(t.limitPct) +
+        "%</b> cap of <b>" + fmt(t.cap) + " m\u00b2</b>. Drop the parking-heavy activities, " +
+        "enlarge the plot, or revisit the bay-area assumption.";
+    } else {
+      txt.innerHTML = "Parking fits: <b>" + fmt(t.pctPlot,1) + "%</b> of the plot against a <b>" +
+        fmt(t.limitPct) + "%</b> cap, <b>" + fmt(Math.max(0, t.cap - t.area)) +
+        " m\u00b2</b> to spare.";
+    }
+    note.appendChild(txt);
+    B.appendChild(note);
+
+    // masthead chip
+    const chip = $("#chipPark");
+    if(chip){
+      if(haveBays){
+        chip.textContent = fmt(t.baysCeil) + " " + plural(t.baysCeil,"bay","bays") + " \u00b7 " +
+                           fmt(t.pctPlot,1) + "% of plot";
+        chip.classList.add("on");
+        chip.classList.toggle("bad", !!t.over);
+      } else {
+        chip.textContent = "parking \u2014";
+        chip.classList.remove("on","bad");
+      }
     }
   }
 
@@ -1341,24 +1300,6 @@ tbody tr:last-child td{border-bottom:0}
       ]));
     }
 
-    if(c.rate && c.rate.driver_kind==="count" && !(c.driver>0)){
-      F.appendChild(flag("crit","input",[
-        "Code ", strong(c.rate.code), " is charged per ", strong(c.rate.unit_label.toLowerCase()),
-        ", so enter the ", c.rate.driver_label.toLowerCase(), " to get a parking figure."
-      ]));
-    }
-    if(c.rate && c.rate.driver_kind==="gla"){
-      F.appendChild(flag("info","basis",[
-        "This category is charged against ", strong("GLA"), ", not GFA — so the ",
-        fmt(c.glaPct), "% GLA coefficient in step 3 drives the parking figure."
-      ]));
-    }
-    if(c.rate && c.rate.driver_kind==="site"){
-      F.appendChild(flag("info","basis",[
-        "This category is charged against ", strong("total site area"),
-        ", so parking scales with the plot, not the building."
-      ]));
-    }
     if(Number.isFinite(c.cover) && Number.isFinite(c.plot) && c.cover > c.plot){
       F.appendChild(flag("crit","check",[
         "The footprint of ", strong(area(c.cover)), " is larger than the ", strong(area(c.plot)),
@@ -1367,7 +1308,8 @@ tbody tr:last-child td{border-bottom:0}
     }
     // L-3 / L-4 from the issued DCR: parking demand above 2 spaces per 100 sqm of
     // GFA is barred on plots under 1,600 sqm, and is the developer's problem above.
-    const effRate = Number.isFinite(c.parkRaw) && c.maxGFA > 0 ? c.parkRaw/c.maxGFA*100 : NaN;
+    const effRate = c.sched && c.sched.raw > 0 && c.maxGFA > 0
+                  ? c.sched.raw/c.maxGFA*100 : NaN;
     if(Number.isFinite(effRate) && effRate > PARK_CAP + 1e-9){
       if(c.plot < SMALL_PLOT){
         F.appendChild(flag("crit","L-4",[
@@ -1409,17 +1351,6 @@ tbody tr:last-child td{border-bottom:0}
         "their parking can be counted."
       ]));
     }
-    if(t && Number.isFinite(c.park) && Number.isFinite(t.bays) && t.bays > 0){
-      const gap = Math.abs(t.baysCeil - c.park);
-      if(gap >= 1){
-        F.appendChild(flag("info","basis",[
-          "Two parking figures: ", strong(fmt(c.park) + " " + plural(c.park,"bay","bays")),
-          " from the plot's single ITC category (step 4), and ",
-          strong(fmt(t.baysCeil) + " " + plural(t.baysCeil,"bay","bays")),
-          " from the activity schedule. The schedule is the finer basis; confirm which governs."
-        ]));
-      }
-    }
     if(Number.isFinite(c.farOv))
       F.appendChild(flag("info","manual",["Using a typed FAR instead of the land-use table."]));
     if(!F.children.length)
@@ -1446,17 +1377,12 @@ tbody tr:last-child td{border-bottom:0}
   }
 
   function renderChips(c){
-    const cc = $("#chipCode"), ci = $("#chipItc");
+    const cc = $("#chipCode");
     if(Number.isFinite(c.far)){
       cc.textContent = (c.dRow && !Number.isFinite(c.farOv) ? c.dRow.designation : "manual") +
                        " · FAR " + fmt(c.far,3) + " · PC " + fmt(c.pcPct,0) + "%";
       cc.classList.add("on");
     } else { cc.textContent = "code —"; cc.classList.remove("on"); }
-    if(c.rate){
-      ci.textContent = c.rate.code + " · " + fmt(c.rate.rate_total,3) + " / " +
-                       c.rate.unit_label.replace("sqm","m²") + " · " + state.basis;
-      ci.classList.add("on");
-    } else { ci.textContent = "itc —"; ci.classList.remove("on"); }
     $("#farShow").textContent = Number.isFinite(c.far) ? fmt(c.far,3) : "—";
     $("#farSrc").textContent  = Number.isFinite(c.farOv) ? "overridden"
                               : (c.dRow ? (c.dRow.source==="code"?"from the Code":"added here") : "no designation");
@@ -1466,15 +1392,6 @@ tbody tr:last-child td{border-bottom:0}
         ? (c.dRow && Number.isFinite(num(c.dRow.coverage)) ? "from the Code" : "fallback default")
         : "overridden";
     }
-    $("#itcShow").textContent = c.rate ? fmt(c.rate.rate_total,3) : "—";
-    $("#itcSrc").textContent  = c.rate ? (BASIS_LABEL[state.basis]||"") + ", 3 components" : "—";
-
-    const drv = $("#driverField");
-    if(c.rate && c.rate.driver_kind==="count"){
-      drv.hidden = false;
-      $("#driverLabel").textContent = c.rate.driver_label;
-      $("#driverUnit").textContent  = c.rate.unit_label.toLowerCase();
-    } else drv.hidden = true;
   }
 
 
@@ -1523,7 +1440,7 @@ tbody tr:last-child td{border-bottom:0}
 
   /* ---------- wiring ---------------------------------------------------- */
   function wire(){
-    ["plotSize","farManual","driverQty","pcPct","glaPct"].forEach(id=>{
+    ["plotSize","farManual","pcPct","glaPct"].forEach(id=>{
       document.getElementById(id).addEventListener("input", render);
     });
     ["unitArea","bayArea","parkLimitPct"].forEach(id=>{
@@ -1562,8 +1479,6 @@ tbody tr:last-child td{border-bottom:0}
       setTimeout(()=>{ m.textContent = ""; }, 3200);
     });
     $("#dedCode").addEventListener("input", render);
-    $("#itcClass").addEventListener("input", ()=>{ fillVariantSelect(); render(); });
-    $("#itcVariant").addEventListener("input", render);
 
     document.querySelectorAll("[data-base]").forEach(b=>{
       b.addEventListener("click", ()=>{
@@ -1614,35 +1529,45 @@ tbody tr:last-child td{border-bottom:0}
     });
 
     $("#copySummary").addEventListener("click", ()=>{
-      const c = calc(), rt = c.rate;
+      const c = calc(), t = c.sched;
       const lines = [
         "PLOT YIELD - DCR calculation",
         "",
         "Plot size            " + area(c.plot),
-        "Land-use code        " + (c.dRow ? c.dRow.code + " (" + c.dRow.name + ")" : "manual"),
+        "Designation          " + (c.dRow ? c.dRow.designation + " (" + c.dRow.name + ")" : "manual"),
         "FAR                  " + fmt(c.far,3) + (Number.isFinite(c.farOv) ? "  [override]" : ""),
-        "ITC code             " + (rt ? rt.code + " - " + rt.class_name + (rt.variant?" ["+rt.variant+"]":"") : "none"),
-        "ITC rate             " + (rt ? fmt(rt.rate_employee,3) + " empl + " + fmt(rt.rate_visitor,3) +
-                                   " vis + " + fmt(rt.rate_truck,3) + " truck = " + fmt(rt.rate_total,3) +
-                                   " per " + rt.unit_label : "-"),
-        "Charged against      " + (rt ? c.driverSrc + " = " + fmt(c.driver) : "-"),
+        "Max plot coverage    " + fmt(c.pcPct,2) + "%" + (c.pcAuto ? "" : "  [override]"),
+        "ITC location         " + state.itcLoc + "   basis " + state.basis,
         "",
         "1  Max GFA           " + area(c.maxGFA) + "   = " + fmt(c.plot) + " x " + fmt(c.far,3),
-        "2  Plot coverage     " + area(c.cover) + "   = " + fmt(c.covBase) + " x " + fmt(c.pcPct/100,2) +
-          "  (of " + (state.base==="gfa"?"Max GFA":"plot area") + ")",
+        "2  Plot coverage     " + area(c.cover) + "   = " + fmt(c.covBase) + " x " + fmt(c.pcPct/100,4),
         "3  GLA               " + area(c.gla) + "   = " + fmt(c.maxGFA) + " x " + fmt(c.glaPct/100,2),
-        "4  Parking required  " + fmt(c.park) + " " + plural(c.park,"bay","bays") + "   = " +
-          (c.per===1 ? fmt(c.driver) + " x " + fmt(rt?rt.rate_total:NaN,3)
-                     : "(" + fmt(c.driver) + " / " + fmt(c.per) + ") x " + fmt(rt?rt.rate_total:NaN,3)) +
-          " = " + fmt(c.parkRaw,3) + " -> ceil",
-        "5  Max activities    " + fmt(c.act) + "   = " + fmt(c.gla) + " / " + fmt(c.unit) +
-          " = " + fmt(c.actRaw,2) + " -> floor",
+        "4  Max activities    " + fmt(c.act) + "   = " + fmt(c.gla) + " / " + fmt(c.unit) +
+          " = " + fmt(c.actRaw,3) + " -> floor",
         "",
-        "Footprint / plot     " + (c.plot>0 ? fmt(c.cover/c.plot*100,1) + "%" : "-"),
-        "Indicative storeys   " + (c.cover>0 ? fmt(c.maxGFA/c.cover,2) + " x" : "-"),
-        "",
-        "Rates: " + (META.source_file||"ITC matrix") + " (" + (META.sheets||"weekday") + ")."
+        "ACTIVITY SCHEDULE",
       ];
+      const unit = num($("#unitArea").value) || 60;
+      SCHED.forEach((r,i)=>{
+        const p = rowParking(r, unit);
+        lines.push("  " + String(i+1).padStart(2) + ". " +
+          (r.act ? r.act.name : "(unassigned)").slice(0,38).padEnd(38) +
+          " x" + String(r.slots).padStart(3) +
+          "  " + (p.code ? p.code.code : "-").padEnd(16) +
+          "  rate " + (Number.isFinite(p.rate) ? fmt(p.rate,3) : "-").padStart(7) +
+          "  " + (Number.isFinite(p.bays) ? fmt(p.bays,0) + " bays" : "needs qty"));
+      });
+      lines.push("",
+        "Slots used           " + fmt(t.slots) + " of " + fmt(t.allowed),
+        "Parking required     " + fmt(t.baysCeil) + " bays   (each activity rounded up)",
+        "Parking area         " + (Number.isFinite(t.area) ? fmt(t.area) + " m2" : "-") +
+          "   at " + fmt(t.bayArea) + " m2 a bay",
+        "Share of plot        " + (Number.isFinite(t.pctPlot) ? fmt(t.pctPlot,1) + "%" : "-") +
+          "   cap " + fmt(t.limitPct) + "% = " + (Number.isFinite(t.cap) ? fmt(t.cap) + " m2" : "-"),
+        "Verdict              " + (t.over ? "OVER THE CAP" : "within the cap"),
+        "",
+        "Rates: " + (META.source_file || "ITC matrix") + ". Designations: " +
+          (META.designation_file || "-") + ". Activities: " + (META.activity_file || "-") + ".");
       copy(lines.join("\n")).then(ok=>{
         const m = $("#copyMsg");
         m.textContent = ok ? "Summary copied." : "Copy blocked by the browser.";
@@ -1664,8 +1589,6 @@ tbody tr:last-child td{border-bottom:0}
         syncDed(); fillDedSelect();
       }
       $("#dedCode").value = String(nr.id);
-      if([...$("#itcClass").options].some(o=>o.value==="112")) $("#itcClass").value = "112";
-      fillVariantSelect();
       $("#resetCoef").click();
       const m = $("#copyMsg");
       m.textContent = "Loaded: 1,000 m² · NR · ITC 112";
@@ -1702,13 +1625,11 @@ tbody tr:last-child td{border-bottom:0}
     $("#glaPct").value = COEF.glaPct;
 
     fillDedSelect();
-    fillClassSelect();
-    fillVariantSelect();
 
     if(saved && saved.form){
       Object.keys(saved.form).forEach(k=>{
         const n = document.getElementById(k);
-        if(n && saved.form[k]!=null && k!=="itcVariant") n.value = saved.form[k];
+          if(n && saved.form[k]!=null) n.value = saved.form[k];
       });
       if(saved.form.base){
         state.base = saved.form.base;
@@ -1724,12 +1645,7 @@ tbody tr:last-child td{border-bottom:0}
       }
       if(!LU.some(r=>String(r.id)===$("#dedCode").value) && $("#dedCode").value!=="__none")
         $("#dedCode").value = LU[0] ? String(LU[0].id) : "__none";
-      if(![...$("#itcClass").options].some(o=>o.value===$("#itcClass").value)) fillClassSelect();
-      fillVariantSelect();
-      if(saved.form.itcVariant && [...$("#itcVariant").options].some(o=>o.value===saved.form.itcVariant))
-        $("#itcVariant").value = saved.form.itcVariant;
     }
-
     $("#itcLoc").value = state.itcLoc;
     if(!SCHED.length) addSchedRow(null, 1, null);
     wire();

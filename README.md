@@ -1,6 +1,6 @@
 # DCR Plot Yield Calculator
 
-Derives Max GFA, plot coverage, GLA, ITC parking and the permitted activity count from
+Derives Max GFA, plot coverage, GLA and the permitted activity count from
 a plot area, a land-use designation and an ITC category. The designation schedule and the
 ITC rate matrix are both embedded as a SQLite database and queried live in the page.
 
@@ -193,12 +193,16 @@ Worked example — Warehousing `713` on a 1,000 m² plot at FAR 1.05 (GFA 1,050 
 ## The calculation
 
 ```
-1  Max GFA        = plot size x FAR                    FAR from the designation
-2  Plot coverage  = Max GFA x coverage%                coverage from the designation
-3  GLA            = Max GFA x GLA%                     default 75%, user-set
-4  Parking        = ceil( driver x conversion x rate ) week-weighted rate
-5  Activities     = floor( GLA / unit area )        unit area default 60 m2
+1  Max GFA        = plot size x FAR                  FAR from the designation
+2  Plot coverage  = Max GFA x coverage%              coverage from the designation
+3  GLA            = Max GFA x GLA%                   GLA% an input, default 75%
+4  Activities     = floor( GLA / unit area )         unit area an input, default 60 m2
+
+   Parking        = sum over the activity schedule   see below
 ```
+
+Parking is no longer a derivation step. It depends on *which* activities occupy the plot,
+so it comes from the activity schedule and has its own panel.
 
 Coverage drives the footprint in step 2;
 so it is a single input, auto-filled from the designation and editable.
@@ -212,6 +216,7 @@ Worked example — 1,000 m&sup2; plot, code `NR` (FAR 1.05), ITC `112` Local Sho
 | GLA | 787.5 m&sup2; |
 | Parking | (1,050 / 100) x 1.318 = 13.839 &rarr; **14 bays** |
 | Activities | 787.5 / 60 = 13.125 → **13 activities** |
+| Parking (13-activity example) | **26 bays** = 650 m² = 65% of plot → **over the 50% cap** |
 
 Steps are ordered by dependency rather than as drawn on the source whiteboard: GLA moves
 ahead of parking because one category (`111` Regional Shopping Centre) is charged
@@ -229,9 +234,11 @@ Each row is an activity plus the number of slots it occupies:
   `DED قائمة الانشطة`, deduplicated by `ACTIVITY_ID`).
 - **ITC category** — auto-mapped from the activity, overridable per row. The confidence tag
   says how far to trust the mapping.
-- **Bays** — `slots × unit area × conversion × rate`. The slots an activity holds are its share
-  of GLA, and for GFA/GLA-charged categories that share is the driver. Categories charged per
-  seat, unit or student instead ask for a quantity.
+- **Bays** — `slots × unit area × conversion × rate`, **rounded up per row**: each activity is a
+  separate tenancy, so it takes whole bays. The raw figure is shown underneath. Rounding per row
+  rather than once at the end costs a little more parking — 26 bays against 24 on the example.
+  The slots an activity holds are its share of GLA, and for GFA/GLA-charged categories that share
+  is the driver. Categories charged per seat, unit or student instead ask for a quantity.
 - **ITC location** (Abu Dhabi/Al Ain × CBD/non-CBD) picks which variant of a class applies,
   falling back progressively when a class is not split that finely.
 
@@ -261,9 +268,13 @@ per bay. That figure is not in any source, so it is an input: **25 m² by defaul
 bay-plus-aisle allowance. **Confirm it** — the example lands at 600 m² against a 500 m² cap, so
 the verdict flips somewhere near 21 m² a bay.
 
-Both parking figures are shown: step 4 charges the whole plot at its single ITC category, the
-schedule charges each activity. They disagree (14 vs 24 bays on the example), and the page says
-so rather than picking one.
+The **Parking requirement** panel below the schedule reports bays, the area they need, that area
+as a share of the plot, and the cap — turning red when the cap is breached. The masthead chip
+carries the same figure.
+
+The earlier whole-plot basis (one ITC category applied to total GFA) has been removed, along with
+the ITC category picker and the ITC rate card, so there is now a single parking figure rather than
+two that disagreed.
 
 ## Removed from the page
 
