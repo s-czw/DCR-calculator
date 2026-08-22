@@ -9,10 +9,12 @@ on:
 permissions:
   contents: read
 
-# Pages deployments must queue rather than cancel each other.
+# Keyed by ref so branches do not serialise behind each other. Superseded PR
+# builds are cancelled (this is a private repo, so Actions minutes are metered),
+# but main is never cancelled mid-flight because Pages deploys must queue.
 concurrency:
-  group: deploy
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
