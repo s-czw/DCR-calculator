@@ -62,12 +62,17 @@ jobs:
 
   deploy-pages:
     # Needs Pages enabled: Settings -> Pages -> Source: GitHub Actions.
-    # On a private repo this requires a paid plan, and the published site is
-    # PUBLIC unless the org is on Enterprise Cloud with Pages access control.
+    # The published site is PUBLIC. That is fine for this repository, which is
+    # public and holds no plot-specific data, but note it before adding any.
     needs: build
     if: vars.DEPLOY_TARGET == 'pages' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    # Job-level permissions REPLACE the workflow-level block rather than adding
+    # to it, so contents/actions have to be restated here: deploy-pages reads the
+    # uploaded artifact through the Actions API.
     permissions:
+      contents: read
+      actions: read
       pages: write
       id-token: write
     environment:
