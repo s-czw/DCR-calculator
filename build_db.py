@@ -12,6 +12,7 @@ Legacy .xls needs xlrd:  pip install xlrd
 .xlsx needs openpyxl.
 """
 import os
+import re
 import sqlite3
 import sys
 from datetime import date
@@ -24,6 +25,7 @@ DB = os.path.join(HERE, "itc_rates.db")
 SRC = os.environ.get("DCR_SOURCE_DIR") or os.path.join(HERE, "sources")
 DEFAULT_XLS = os.path.join(SRC, "ITC_Trip & Parking Calculation Sheet_V1.xls")
 DEFAULT_DESIG = os.path.join(SRC, "Designation_Index.xlsx")
+DEFAULT_DED = os.path.join(SRC, "DED \u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0627\u0646\u0634\u0637\u0629 (2026 \u064a\u0648\u0644\u064a\u0648).xlsx")
 
 # A standard week: five weekdays, two weekend days.
 WEEK = {"weekday": 5.0, "weekend": 2.0}
@@ -62,6 +64,7 @@ SCHEMA = """
 DROP VIEW  IF EXISTS itc_combined;
 DROP TABLE IF EXISTS itc_rate;
 DROP TABLE IF EXISTS weighting;
+DROP TABLE IF EXISTS ded_activity;
 DROP TABLE IF EXISTS land_use;
 DROP TABLE IF EXISTS ded_code;
 DROP TABLE IF EXISTS coefficient;
@@ -116,6 +119,24 @@ CREATE TABLE land_use (
     source      TEXT NOT NULL DEFAULT 'code'
 );
 CREATE INDEX idx_lu_desig ON land_use (designation);
+
+-- DED economic activities, one row per distinct active ACTIVITY_ID.
+-- itc_class is a HEURISTIC crosswalk authored here, not a client-supplied
+-- mapping: see ITC_RULES in this script. map_confidence says how much to trust
+-- it, and the calculator lets any activity be reassigned by hand.
+CREATE TABLE ded_activity (
+    activity_id    TEXT PRIMARY KEY,
+    name           TEXT NOT NULL,
+    section        TEXT,
+    division       TEXT,
+    isic_class     TEXT,
+    nature         TEXT,
+    itc_class      TEXT,
+    map_confidence TEXT CHECK (map_confidence IN ('high','medium','low')),
+    map_reason     TEXT
+);
+CREATE INDEX idx_act_div  ON ded_activity (division);
+CREATE INDEX idx_act_itc  ON ded_activity (itc_class);
 
 CREATE TABLE coefficient (key TEXT PRIMARY KEY, value REAL NOT NULL, note TEXT);
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -213,6 +234,114 @@ def load_designations(path):
     return rows
 
 
+# Heuristic DED -> ITC crosswalk. Ordered; first match wins. Keyed on the
+# numeric ISIC levels because the workbook's LEVEL_0 letters are re-lettered and
+# do not follow ISIC sections. Confidence is deliberately conservative: "high"
+# means the ISIC class and the ITC category describe the same thing, "low" means
+# the ITC category is the closest available analogue and should be reviewed.
+#   kind: name3 = keyword within a given 4-digit class
+#         l3    = exact 4-digit ISIC class
+#         div   = exact 2-digit division
+#         range = inclusive division range
+ITC_RULES = [
+    ("name3", ("5610", r"fast food|cafeteria|caf\u00e9|cafe\b|coffee|snack|juice|shawarma|kiosk"),
+     "123", "high",   "food service, quick-service format"),
+    ("l3",    "5610", "122", "medium", "restaurant, assumed quality/high-turnover"),
+    ("div",   "56",   "122", "medium", "food and beverage service"),
+
+    ("name3", ("4772", r"pharmac"), "831", "high",   "pharmaceutical retail"),
+    ("l3",    "4711", "114", "high",   "non-specialised food retail = supermarket"),
+    ("l3",    "4719", "113", "high",   "other non-specialised retail = superstore"),
+    ("l3",    "4741", "142", "high",   "computer and telecom retail"),
+    ("l3",    "4742", "142", "high",   "audio/video equipment retail"),
+    ("l3",    "4759", "141", "high",   "furniture and household equipment retail"),
+    ("div",   "47",   "112", "medium", "specialised retail, assumed local shopping centre"),
+    ("div",   "45",   "144", "medium", "motor vehicle trade = vehicle showroom"),
+    ("div",   "46",   "112", "low",    "wholesale trade; shopfront assumed, review if warehousing"),
+
+    ("div",   "64",   "235", "high",   "financial service = banking service"),
+    ("div",   "65",   "235", "high",   "insurance, treated as banking service"),
+    ("div",   "66",   "235", "high",   "auxiliary financial service"),
+
+    ("l3",    "8510", "516", "high",   "kindergarten"),
+    ("div",   "85",   "515", "medium", "education, assumed private school"),
+    ("l3",    "8610", "812", "high",   "hospital activities"),
+    ("div",   "86",   "822", "medium", "human health, assumed private clinic"),
+    ("div",   "87",   "822", "low",    "residential care, closest analogue is clinic"),
+    ("div",   "88",   "822", "low",    "social work, closest analogue is clinic"),
+
+    ("div",   "55",   "411", "medium", "accommodation"),
+    ("div",   "84",   "211", "medium", "public administration"),
+    ("div",   "93",   "632", "medium", "sports and recreation"),
+    ("div",   "90",   "631", "low",    "creative and arts, closest analogue is social club"),
+    ("div",   "91",   "532", "low",    "libraries and museums"),
+    ("div",   "92",   "631", "low",    "gambling, closest analogue is social club"),
+
+    ("range", (5, 9),   "731", "medium", "mining and quarrying = heavy industry"),
+    ("range", (10, 33), "711", "medium", "manufacturing = production oriented industry"),
+    ("range", (35, 39), "711", "low",    "utilities and waste, closest analogue is industry"),
+    ("range", (41, 43), "222", "low",    "construction, assumed contractor office"),
+    ("range", (49, 53), "713", "medium", "transport and storage = warehousing"),
+    ("range", (58, 63), "222", "medium", "information and communication = office"),
+    ("range", (68, 75), "222", "medium", "real estate and professional services = office"),
+    ("range", (77, 82), "222", "medium", "administrative and support services = office"),
+    ("range", (94, 96), "112", "low",    "membership, repair and personal services; shopfront assumed"),
+    ("range", (1, 3),   "711", "low",    "agriculture, closest analogue is industry"),
+]
+FALLBACK = ("112", "low", "no rule matched; defaulted to local shopping centre retail")
+
+
+def map_activity(division, isic_class, name):
+    """DED activity -> (itc_class, confidence, reason)."""
+    low = (name or "").lower()
+    for kind, val, cls, conf, why in ITC_RULES:
+        if kind == "name3":
+            l3, pattern = val
+            if isic_class == l3 and re.search(pattern, low):
+                return cls, conf, why
+        elif kind == "l3":
+            if isic_class == val:
+                return cls, conf, why
+        elif kind == "div":
+            if division == val:
+                return cls, conf, why
+        elif kind == "range":
+            lo, hi = val
+            if division.isdigit() and lo <= int(division) <= hi:
+                return cls, conf, why
+    return FALLBACK
+
+
+def load_activities(path):
+    """Distinct active DED activities. ACTIVITY_ID repeats across sub-natures,
+    so keep the first occurrence of each."""
+    import openpyxl
+    ws = openpyxl.load_workbook(path, data_only=True, read_only=True)["DED"]
+    it = ws.iter_rows(values_only=True)
+    hdr = next(it)
+    C = {h: i for i, h in enumerate(hdr)}
+    need = ("ACTIVITY_ID", "ACTIVITY_NAME_EN", "ACTIVITY_STATUS_EN",
+            "LEVEL_0", "LEVEL_1", "LEVEL_3", "NATURE_EN")
+    for k in need:
+        if k not in C:
+            sys.exit(f"DED sheet is missing column {k}; columns present: {list(C)[:8]}...")
+    out = {}
+    for r in it:
+        aid = norm(r[C["ACTIVITY_ID"]])
+        if not aid or aid in out:
+            continue
+        if norm(r[C["ACTIVITY_STATUS_EN"]]) != "Active":
+            continue
+        name = norm(r[C["ACTIVITY_NAME_EN"]])
+        div = norm(r[C["LEVEL_1"]])
+        l3 = norm(r[C["LEVEL_3"]])
+        cls, conf, why = map_activity(div, l3, name)
+        out[aid] = dict(activity_id=aid, name=name, section=norm(r[C["LEVEL_0"]]),
+                        division=div, isic_class=l3, nature=norm(r[C["NATURE_EN"]]),
+                        itc_class=cls, map_confidence=conf, map_reason=why)
+    return list(out.values())
+
+
 def norm(v):
     if v is None:
         return ""
@@ -297,6 +426,24 @@ def main():
 
     desig = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_DESIG
     lu = load_designations(desig) if os.path.exists(desig) else []
+
+    ded = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_DED
+    acts = load_activities(ded) if os.path.exists(ded) else []
+    con.executemany(
+        "INSERT INTO ded_activity (activity_id, name, section, division, isic_class, "
+        "nature, itc_class, map_confidence, map_reason) VALUES "
+        "(:activity_id,:name,:section,:division,:isic_class,:nature,:itc_class,"
+        ":map_confidence,:map_reason)", acts)
+
+    # An activity mapped to an ITC class that does not exist would silently give
+    # no rate in the calculator, so fail the build instead.
+    orphan_cls = con.execute("""
+        SELECT DISTINCT a.itc_class FROM ded_activity a
+        WHERE a.itc_class NOT IN (SELECT class_code FROM itc_rate)
+        ORDER BY 1""").fetchall()
+    if orphan_cls:
+        sys.exit(f"ded_activity maps to ITC classes absent from the matrix: "
+                 f"{[c[0] for c in orphan_cls]}")
     con.executemany(
         "INSERT INTO land_use (category, designation, name, far, coverage, remarks, source) "
         "VALUES (:category,:designation,:name,:far,:coverage,:remarks,'code')", lu)
@@ -313,6 +460,8 @@ def main():
         ("week_split", " / ".join(f"{p} {int(d)}d" for p, d in WEEK.items())),
         ("designation_file", os.path.basename(desig) if lu else "(none)"),
         ("designations", str(len(lu))),
+        ("activity_file", os.path.basename(ded) if acts else "(none)"),
+        ("activities", str(len(acts))),
         ("built", date.today().isoformat()),
     ])
     con.commit()
@@ -332,6 +481,18 @@ def main():
         for cat, k in con.execute("SELECT category, COUNT(*) FROM land_use "
                                   "GROUP BY category ORDER BY MIN(id)"):
             print(f"    {cat:12s} {k:3d}")
+    if acts:
+        print(f"  ded_activity: {len(acts)} active activities")
+        for conf, k in con.execute("SELECT map_confidence, COUNT(*) FROM ded_activity "
+                                   "GROUP BY 1 ORDER BY CASE map_confidence "
+                                   "WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END"):
+            print(f"    {conf:8s} {k:5d}  ({k/len(acts)*100:4.1f}%)")
+        print("    top ITC classes:")
+        for cls, k, nm in con.execute(
+                "SELECT itc_class, COUNT(*), "
+                "  (SELECT class_name FROM itc_rate r WHERE r.class_code = a.itc_class LIMIT 1) "
+                "FROM ded_activity a GROUP BY itc_class ORDER BY 2 DESC LIMIT 10"):
+            print(f"      {cls:5s} {k:5d}  {str(nm)[:44]}")
     con.close()
 
 

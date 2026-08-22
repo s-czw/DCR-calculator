@@ -275,6 +275,62 @@ tbody tr:last-child td{border-bottom:0}
 .drv{border:1px solid var(--brass); background:var(--brass-soft); border-radius:5px; padding:11px 12px; display:flex; flex-direction:column; gap:7px}
 .drv .lbl{color:var(--brass)}
 .dbtag{font-family:"IBM Plex Mono",monospace; font-size:.62rem; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3)}
+
+/* ---------- activity schedule ---------- */
+.sched{width:100%; border-collapse:collapse; font-size:.8rem}
+.sched th{
+  text-align:left; font-family:"IBM Plex Mono",monospace; font-size:.6rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-2); font-weight:400; padding:8px;
+  border-bottom:1px solid var(--line-strong); background:var(--surface-2); white-space:nowrap;
+}
+.sched th.n,.sched td.n{text-align:right}
+.sched td{padding:5px 6px; border-bottom:1px solid var(--line); vertical-align:middle}
+.sched tr:last-child td{border-bottom:0}
+.sched td.n{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
+.sched .act-cell{position:relative; min-width:200px}
+.sched input[type=text],.sched input[type=number]{
+  width:100%; min-width:44px; background:transparent; border:1px solid transparent;
+  border-radius:3px; color:var(--ink); font-family:Archivo,sans-serif; font-size:.8rem; padding:5px;
+}
+.sched input:hover{border-color:var(--line)}
+.sched input:focus{border-color:var(--accent); background:var(--sunk); outline:none}
+.sched input[type=number]{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; text-align:right}
+.sched select{
+  background:var(--sunk); border:1px solid var(--line-strong); border-radius:3px;
+  color:var(--ink); font-size:.72rem; padding:4px; max-width:172px;
+}
+.sched .rate{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--accent-ink)}
+.conf{
+  font-family:"IBM Plex Mono",monospace; font-size:.55rem; letter-spacing:.08em;
+  text-transform:uppercase; padding:2px 5px; border-radius:2px; white-space:nowrap;
+  display:inline-block; margin-top:3px;
+}
+.conf-high{background:var(--accent-soft); color:var(--accent-ink)}
+.conf-medium{background:var(--surface-2); color:var(--ink-2)}
+.conf-low{background:var(--brass-soft); color:var(--brass)}
+.conf-manual{background:var(--crit-soft); color:var(--crit)}
+.hits{
+  position:absolute; z-index:20; left:4px; right:4px; top:calc(100% - 2px);
+  background:var(--surface); border:1px solid var(--accent); border-radius:0 0 4px 4px;
+  max-height:220px; overflow:auto; box-shadow:var(--shadow);
+}
+.hits div{padding:6px 8px; font-size:.76rem; cursor:pointer; border-bottom:1px solid var(--line)}
+.hits div:last-child{border-bottom:0}
+.hits div:hover{background:var(--accent-soft)}
+.hits .aid{font-family:"IBM Plex Mono",monospace; font-size:.63rem; color:var(--ink-3); margin-right:6px}
+.hits .none{color:var(--ink-3); cursor:default}
+.sched-foot{
+  display:flex; flex-wrap:wrap; gap:10px 22px; align-items:center;
+  padding:13px 16px; border-top:1px solid var(--line-strong); background:var(--surface-2);
+}
+.sched-foot .m{font-family:"IBM Plex Mono",monospace; font-size:.74rem; color:var(--ink-3)}
+.sched-foot .m b{color:var(--ink); font-variant-numeric:tabular-nums}
+.sched-foot .m b.hi{color:var(--accent-ink)}
+.sched-foot .m b.bad{color:var(--crit)}
+.slotbar{height:6px; border-radius:3px; background:var(--sunk); border:1px solid var(--line);
+  overflow:hidden; flex:1 1 130px; min-width:110px}
+.slotbar i{display:block; height:100%; background:var(--accent); opacity:.8}
+.slotbar i.over{background:var(--crit)}
 </style>
 
 
@@ -366,6 +422,19 @@ tbody tr:last-child td{border-bottom:0}
         </div>
 
         <div class="field">
+          <label for="itcLoc">ITC location</label>
+          <div class="ctl"><select id="itcLoc">
+            <option value="AD-CBD">Abu Dhabi &#x2014; CBD</option>
+            <option value="AD-Non-CBD">Abu Dhabi &#x2014; non-CBD</option>
+            <option value="AA-CBD">Al Ain &#x2014; CBD</option>
+            <option value="AA-Non-CBD">Al Ain &#x2014; non-CBD</option>
+            <option value="Other">Other</option>
+          </select></div>
+          <p class="hint">Chooses which variant of an ITC class applies, falling back when a class
+            is not split that finely.</p>
+        </div>
+
+        <div class="field">
           <span class="lbl">Rate basis</span>
           <div class="seg" id="basisSeg" role="group" aria-label="Rate basis">
             <button type="button" data-basis="combined" aria-pressed="true">Week</button>
@@ -401,6 +470,24 @@ tbody tr:last-child td{border-bottom:0}
           <summary>Coefficients</summary>
           <div>
             <div class="field">
+              <label for="unitArea">Unit area per activity</label>
+              <div class="ctl"><input id="unitArea" type="number" min="1" step="1" value="60"><span class="suffix">m&#x00B2;</span></div>
+              <p class="hint">Divides GLA to give the activity count in step 5.</p>
+            </div>
+            <div class="grid2">
+              <div class="field">
+                <label for="bayArea">Area per parking bay</label>
+                <div class="ctl"><input id="bayArea" type="number" min="1" step="1" value="25"><span class="suffix">m&#x00B2;</span></div>
+              </div>
+              <div class="field">
+                <label for="parkLimitPct">Parking area cap</label>
+                <div class="ctl"><input id="parkLimitPct" type="number" min="1" max="100" step="1" value="50"><span class="suffix">% plot</span></div>
+              </div>
+            </div>
+            <p class="hint">Bay area is an <b>assumption</b>: the cap is a share of plot area, but
+              ITC rates give a bay count, so a bay needs an area before the two can be compared.
+              25 m&#x00B2; is a typical bay-plus-aisle allowance &#x2014; confirm it.</p>
+            <div class="field">
               <span class="lbl">Coverage measured against</span>
               <div class="seg" role="group" aria-label="Coverage base">
                 <button type="button" data-base="gfa" aria-pressed="true">Max GFA</button>
@@ -432,6 +519,28 @@ tbody tr:last-child td{border-bottom:0}
         </div>
         <div class="rate-hd" id="rateHd"></div>
         <div class="bars" id="rateBars"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-hd">
+          <h2>Activity schedule</h2>
+          <span class="tag" id="schedTag">per-activity parking</span>
+        </div>
+        <div class="tbl-scroll">
+          <table class="sched">
+            <thead><tr>
+              <th>Activity (DED)</th><th class="n">Slots</th><th>ITC category</th>
+              <th class="n">Rate</th><th class="n">Bays</th><th><span class="sr">Remove</span></th>
+            </tr></thead>
+            <tbody id="schedBody"></tbody>
+          </table>
+        </div>
+        <div class="sched-foot" id="schedFoot"></div>
+        <div style="padding:12px 16px; display:flex; flex-wrap:wrap; gap:8px">
+          <button type="button" class="btn mini" id="addSched">Add activity</button>
+          <button type="button" class="btn mini" id="clearSched">Clear</button>
+          <button type="button" class="btn mini" id="exampleSched">Load worked example</button>
+        </div>
       </section>
 
       <section class="panel">
@@ -533,7 +642,7 @@ tbody tr:last-child td{border-bottom:0}
      build-time snapshot of the same database so the calculator still works. */
   let db = null, sqlLive = false;
   let ITC = [], LU = [], META = {};   /* LU = base-district designations */
-  const state = { base:"gfa", basis:"combined", groupOrder:[] };
+  const state = { base:"gfa", basis:"combined", itcLoc:"AD-CBD", groupOrder:[] };
 
   /* ---------- helpers --------------------------------------------------- */
   const $ = s => document.querySelector(s);
@@ -677,9 +786,13 @@ tbody tr:last-child td{border-bottom:0}
 
   /* ---------- storage --------------------------------------------------- */
   function readForm(){
-    const o = { base:state.base, basis:state.basis };
-    ["plotSize","dedCode","itcClass","itcVariant","farManual","driverQty","pcPct","glaPct"]
-      .forEach(id => { o[id] = document.getElementById(id).value; });
+    const o = { base:state.base, basis:state.basis, itcLoc:state.itcLoc,
+                sched: SCHED.map(r=>({ act: r.act ? r.act.activity_id : null,
+                                       slots: r.slots, itcOverride: r.itcOverride,
+                                       qty: r.qty })) };
+    ["plotSize","dedCode","itcClass","itcVariant","farManual","driverQty","pcPct","glaPct",
+     "unitArea","bayArea","parkLimitPct"]
+      .forEach(id => { const nd = document.getElementById(id); if(nd) o[id] = nd.value; });
     return o;
   }
   function save(){
@@ -775,12 +888,302 @@ tbody tr:last-child td{border-bottom:0}
     const parkRaw = rate && Number.isFinite(driver) ? driver*rate.conversion*rate.rate_total : NaN;
     const park    = Number.isFinite(parkRaw) ? Math.ceil(parkRaw) : NaN;
 
-    // Max allowed activities = GLA x Max Plot Coverage % (per the designation)
-    const act = Number.isFinite(gla) && Number.isFinite(pcPct) ? gla*(pcPct/100) : NaN;
+    // Max allowed activities = GLA / unit area, floored: a partial unit is no unit.
+    const unit    = num($("#unitArea").value);
+    const actRaw  = Number.isFinite(gla) && unit > 0 ? gla/unit : NaN;
+    const act     = Number.isFinite(actRaw) ? Math.floor(actRaw) : NaN;
+    const sched   = schedTotals(act);
 
-    return { plot, dRow, far, farOv, pcPct, pcAuto, glaPct, rate, per,
+    return { plot, dRow, far, farOv, pcPct, pcAuto, glaPct, rate, per, unit,
              maxGFA, covBase, cover, gla, driver, driverSrc,
-             parkEmp, parkVis, parkTrk, parkRaw, park, act };
+             parkEmp, parkVis, parkTrk, parkRaw, park, actRaw, act, sched };
+  }
+
+  /* ==================== ACTIVITY SCHEDULE ==============================
+     The permitted activity count from step 5 is filled with DED activities.
+     Each activity carries an ITC category (auto-mapped, overridable), and its
+     parking is charged against the floor area its slots occupy.              */
+  let SCHED = [];
+  let schedSeq = 0;
+
+  /* Which variant of an ITC class applies at this plot's location. Variant
+     spelling in the matrix is irregular ("AD-Non-CBD", "AA+Other",
+     "AD-Non CBD (<4 bedroom units)"), so match on a normalised form and fall
+     back progressively rather than assuming a class is split that finely. */
+  const vnorm = v => String(v == null ? "" : v).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  function resolveCode(cls){
+    const rows = base().filter(r => r.class_code === cls);
+    if(!rows.length) return null;
+    if(rows.length === 1) return rows[0];
+    const want = vnorm(state.itcLoc);
+    const em = want.split("-")[0];
+    for(const cand of [want, em, em + "-other", "other"]){
+      if(!cand) continue;
+      const exact = rows.find(r => vnorm(r.variant) === cand);
+      if(exact) return exact;
+      const pre = rows.find(r => vnorm(r.variant).indexOf(cand + "-") === 0);
+      if(pre) return pre;
+    }
+    return rows[0];
+  }
+
+  function activityById(id){
+    if(!id) return null;
+    if(sqlLive){
+      const r = q("SELECT activity_id, name, division, isic_class, itc_class, " +
+                  "map_confidence, map_reason FROM ded_activity WHERE activity_id = :id",
+                  {":id": id})[0];
+      if(r) return r;
+    }
+    return (SNAPSHOT.ded_activity || []).find(a => a.activity_id === id) || null;
+  }
+
+  function searchActivities(term, limit){
+    const t = term.trim();
+    if(t.length < 2) return [];
+    if(sqlLive){
+      return q("SELECT activity_id, name, division, itc_class, map_confidence " +
+               "FROM ded_activity WHERE name LIKE :q OR activity_id LIKE :q " +
+               "ORDER BY CASE WHEN name LIKE :pre THEN 0 ELSE 1 END, length(name) LIMIT :n",
+               {":q": "%" + t + "%", ":pre": t + "%", ":n": limit});
+    }
+    const low = t.toLowerCase(), out = [];
+    for(const a of (SNAPSHOT.ded_activity || [])){
+      if(String(a.name).toLowerCase().indexOf(low) > -1 || String(a.activity_id).indexOf(t) > -1){
+        out.push(a);
+        if(out.length >= limit) break;
+      }
+    }
+    return out;
+  }
+
+  /* Per-row parking. The slots an activity holds are its share of GLA, and for
+     the GFA/GLA-charged categories that share is the driver. Categories charged
+     per seat, unit, student and so on need a count instead, so the row asks. */
+  function rowParking(row, unit){
+    const cls = row.itcOverride || (row.act ? row.act.itc_class : null);
+    const code = cls ? resolveCode(cls) : null;
+    if(!code) return { code:null, rate:NaN, bays:NaN, needsQty:false };
+    const slots = Math.max(0, num(row.slots) || 0);
+    const eff = effectiveRate(code.code);
+    const rate = eff ? eff.rate_total : code.rate_total;
+    let driver;
+    if(code.driver_kind === "count"){
+      const qty = num(row.qty);
+      if(!(qty > 0)) return { code:code, rate:rate, bays:NaN, needsQty:true, eff:eff };
+      driver = qty;
+    } else {
+      driver = slots * unit;                    // floor area this activity holds
+    }
+    return { code:code, rate:rate, bays: driver * code.conversion * rate,
+             needsQty:false, eff:eff };
+  }
+
+  function schedTotals(allowed){
+    const unit = num($("#unitArea").value) || 60;
+    let slots = 0, bays = 0, incomplete = 0;
+    SCHED.forEach(r => {
+      slots += Math.max(0, num(r.slots) || 0);
+      const p = rowParking(r, unit);
+      if(Number.isFinite(p.bays)) bays += p.bays;
+      else if(r.act || r.itcOverride) incomplete++;
+    });
+    const bayArea = num($("#bayArea").value);
+    const limitPct = num($("#parkLimitPct").value);
+    const plot = num($("#plotSize").value);
+    const baysCeil = Math.max(0, Math.ceil(bays - 1e-9));
+    const area = Number.isFinite(bayArea) ? baysCeil * bayArea : NaN;
+    const cap = Number.isFinite(plot) && Number.isFinite(limitPct) ? plot * (limitPct/100) : NaN;
+    return { slots:slots, allowed:allowed, bays:bays, baysCeil:baysCeil,
+             area:area, cap:cap, limitPct:limitPct, bayArea:bayArea,
+             over: Number.isFinite(area) && Number.isFinite(cap) && area > cap,
+             overSlots: Number.isFinite(allowed) && slots > allowed,
+             incomplete:incomplete, rows:SCHED.length };
+  }
+
+  function addSchedRow(actId, slots, override){
+    SCHED.push({ id: ++schedSeq, act: actId ? activityById(actId) : null,
+                 slots: slots == null ? 1 : slots, itcOverride: override || null,
+                 qty: "", search: "" });
+  }
+
+  function renderSched(){
+    const c = calcLite();
+    const tb = $("#schedBody");
+    tb.innerHTML = "";
+    const unit = num($("#unitArea").value) || 60;
+
+    SCHED.forEach(row => {
+      const tr = el("tr");
+
+      // activity picker
+      const td0 = el("td", "act-cell");
+      const inp = el("input");
+      inp.type = "text";
+      inp.placeholder = "search DED activities\u2026";
+      inp.value = row.act ? row.act.name : (row.search || "");
+      td0.appendChild(inp);
+      if(row.act){
+        const meta = el("div");
+        meta.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.62rem; color:var(--ink-3); padding:0 5px";
+        meta.textContent = row.act.activity_id + "  \u00b7  ISIC " + (row.act.division || "?");
+        td0.appendChild(meta);
+      }
+      let box = null;
+      const closeBox = ()=>{ if(box){ box.remove(); box = null; } };
+      inp.addEventListener("input", ()=>{
+        row.search = inp.value;
+        row.act = null;
+        closeBox();
+        const hits = searchActivities(inp.value, 14);
+        if(!inp.value.trim() || inp.value.trim().length < 2) return;
+        box = el("div", "hits");
+        if(!hits.length){
+          const d = el("div", "none", "no activity matches that");
+          box.appendChild(d);
+        } else hits.forEach(h => {
+          const d = el("div");
+          d.appendChild(Object.assign(el("span","aid"), {textContent: h.activity_id}));
+          d.appendChild(document.createTextNode(h.name));
+          d.addEventListener("mousedown", ev => {
+            ev.preventDefault();
+            row.act = activityById(h.activity_id);
+            row.search = "";
+            row.itcOverride = null;
+            closeBox();
+            renderSched(); render();
+          });
+          box.appendChild(d);
+        });
+        td0.appendChild(box);
+      });
+      inp.addEventListener("blur", ()=> setTimeout(closeBox, 120));
+      tr.appendChild(td0);
+
+      // slots
+      const td1 = el("td", "n");
+      const sl = el("input");
+      sl.type = "number"; sl.min = "0"; sl.step = "1"; sl.value = row.slots;
+      sl.addEventListener("input", ()=>{ row.slots = sl.value; renderSched(); render(); });
+      td1.appendChild(sl);
+      tr.appendChild(td1);
+
+      // ITC category, auto or overridden
+      const td2 = el("td");
+      const sel = el("select");
+      const autoCls = row.act ? row.act.itc_class : null;
+      const autoRow = autoCls ? base().find(r => r.class_code === autoCls) : null;
+      sel.appendChild(Object.assign(el("option", null,
+        autoCls ? "auto \u2192 " + autoCls + " " + (autoRow ? autoRow.class_name : "")
+                : "\u2014 pick a category \u2014"), { value: "" }));
+      classList().forEach(cl => {
+        sel.appendChild(Object.assign(
+          el("option", null, cl.class_code + " \u2014 " + cl.class_name),
+          { value: cl.class_code }));
+      });
+      sel.value = row.itcOverride || "";
+      sel.addEventListener("input", ()=>{
+        row.itcOverride = sel.value || null;
+        renderSched(); render();
+      });
+      td2.appendChild(sel);
+      const conf = row.itcOverride ? "manual" : (row.act ? row.act.map_confidence : null);
+      if(conf){
+        const tag = el("span", "conf conf-" + conf, conf === "manual" ? "set by hand" : conf);
+        if(!row.itcOverride && row.act) tag.title = row.act.map_reason || "";
+        td2.appendChild(tag);
+      }
+      tr.appendChild(td2);
+
+      const p = rowParking(row, unit);
+
+      // rate, or a quantity box when the category is charged per unit
+      const td3 = el("td", "n");
+      if(p.needsQty){
+        const qi = el("input");
+        qi.type = "number"; qi.min = "0"; qi.step = "1";
+        qi.value = row.qty; qi.placeholder = "qty";
+        qi.title = "Charged per " + (p.code ? p.code.unit_label : "unit");
+        qi.addEventListener("input", ()=>{ row.qty = qi.value; renderSched(); render(); });
+        td3.appendChild(qi);
+      } else {
+        td3.appendChild(Object.assign(el("span","rate"),
+          {textContent: Number.isFinite(p.rate) ? fmt(p.rate,3) : "\u2014"}));
+        if(p.code){
+          const cd = el("div");
+          cd.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.6rem; color:var(--ink-3)";
+          cd.textContent = p.code.code;
+          td3.appendChild(cd);
+        }
+      }
+      tr.appendChild(td3);
+
+      const td4 = el("td", "n");
+      td4.appendChild(Object.assign(el("span"),
+        {textContent: Number.isFinite(p.bays) ? fmt(p.bays,3) : "\u2014"}));
+      tr.appendChild(td4);
+
+      const td5 = el("td", "n");
+      const del = el("button", "btn mini icon", "\u00d7");
+      del.type = "button"; del.title = "Remove"; del.setAttribute("aria-label","Remove activity");
+      del.addEventListener("click", ()=>{
+        SCHED = SCHED.filter(x => x.id !== row.id);
+        renderSched(); render();
+      });
+      td5.appendChild(del);
+      tr.appendChild(td5);
+
+      tb.appendChild(tr);
+    });
+
+    if(!SCHED.length){
+      const tr = el("tr"), td = el("td", null,
+        "No activities yet \u2014 add one, or load the worked example.");
+      td.colSpan = 6;
+      td.style.cssText = "color:var(--ink-3); padding:15px 10px; font-size:.8rem";
+      tr.appendChild(td); tb.appendChild(tr);
+    }
+
+    renderSchedFoot(c.act);
+  }
+
+  function renderSchedFoot(allowed){
+    const t = schedTotals(allowed);
+    const F = $("#schedFoot");
+    F.innerHTML = "";
+    const m = (label, val, cls) => {
+      const s = el("span","m");
+      s.innerHTML = label + " <b class='" + (cls||"") + "'>" + val + "</b>";
+      F.appendChild(s);
+      return s;
+    };
+    m("slots", fmt(t.slots) + " / " + (Number.isFinite(t.allowed) ? fmt(t.allowed) : "\u2014"),
+      t.overSlots ? "bad" : "");
+    const bar = el("div","slotbar"), fill = el("i");
+    const frac = Number.isFinite(t.allowed) && t.allowed > 0 ? t.slots/t.allowed : 0;
+    fill.style.width = Math.min(100, frac*100).toFixed(1) + "%";
+    if(t.overSlots) fill.className = "over";
+    bar.appendChild(fill); F.appendChild(bar);
+    m("parking", Number.isFinite(t.bays) ? fmt(t.baysCeil) + " " + plural(t.baysCeil,"bay","bays") : "\u2014", "hi");
+    m("area @ " + fmt(t.bayArea) + " m\u00b2", Number.isFinite(t.area) ? area(t.area) : "\u2014",
+      t.over ? "bad" : "");
+    m("cap " + fmt(t.limitPct) + "% of plot", Number.isFinite(t.cap) ? area(t.cap) : "\u2014",
+      t.over ? "bad" : "");
+  }
+
+  /* calc() needs schedule totals and the schedule needs the activity count, so
+     this computes just the count, without touching the schedule. */
+  function calcLite(){
+    const plot = num($("#plotSize").value);
+    const dRow = luRow();
+    const farOv = $("#farManual").value.trim() === "" ? NaN : num($("#farManual").value);
+    const far = Number.isFinite(farOv) ? farOv : (dRow ? num(dRow.far) : NaN);
+    const glaPct = num($("#glaPct").value);
+    const unit = num($("#unitArea").value);
+    const maxGFA = plot > 0 && Number.isFinite(far) ? plot*far : NaN;
+    const gla = Number.isFinite(maxGFA) && Number.isFinite(glaPct) ? maxGFA*(glaPct/100) : NaN;
+    const actRaw = Number.isFinite(gla) && unit > 0 ? gla/unit : NaN;
+    return { act: Number.isFinite(actRaw) ? Math.floor(actRaw) : NaN };
   }
 
   /* ---------- ladder ---------------------------------------------------- */
@@ -836,12 +1239,15 @@ tbody tr:last-child td{border-bottom:0}
       value: Number.isFinite(c.park)?fmt(c.park):"—", unit:plural(c.park,"bay","bays"),
       raw: Number.isFinite(c.parkRaw)? "= " + fmt(c.parkRaw,3) + " → ceil" : "" }));
 
-    L.appendChild(stepRow({ n:5, cls:"key", title:"Max allowed activities", abbr:"ACT",
-      sub: fmt(c.pcPct) + "% of GLA, at the designation's max plot coverage",
-      formula: (Number.isFinite(c.gla)?fmt(c.gla):"GLA") + " m² × " + fmt(c.pcPct/100,2),
-      value: Number.isFinite(c.act)?fmt(c.act):"—", unit:"m²" }));
+    L.appendChild(stepRow({ n:5, cls:"count", title:"Max allowed activities", abbr:"ACT",
+      sub: "GLA divided by a " + fmt(c.unit) + " m² unit, rounded down",
+      formula: (Number.isFinite(c.gla)?fmt(c.gla):"GLA") + " ÷ " + fmt(c.unit),
+      value: Number.isFinite(c.act)?fmt(c.act):"—",
+      unit: plural(c.act,"activity","activities"),
+      raw: Number.isFinite(c.actRaw) ? "= " + fmt(c.actRaw,3) + " → floor" : "" }));
 
     renderRate(c);
+    renderSchedFoot(c.act);
     renderFlags(c);
     renderPlan(c);
     renderChips(c);
@@ -979,6 +1385,41 @@ tbody tr:last-child td{border-bottom:0}
         ]));
       }
     }
+    const t = c.sched;
+    if(t && t.overSlots){
+      F.appendChild(flag("crit","slots",[
+        "The schedule uses ", strong(fmt(t.slots) + " slots"), " but only ",
+        strong(fmt(t.allowed) + " " + plural(t.allowed,"activity","activities")),
+        " are permitted by step 5."
+      ]));
+    }
+    if(t && t.over){
+      F.appendChild(flag("crit","parking",[
+        "The chosen activities need ", strong(fmt(t.baysCeil) + " " + plural(t.baysCeil,"bay","bays")),
+        " \u2248 ", strong(area(t.area)), " of parking at ", fmt(t.bayArea), " m\u00b2 a bay, over the ",
+        fmt(t.limitPct), "% cap of ", strong(area(t.cap)), ". Reduce the parking-heavy activities, ",
+        "enlarge the plot, or revisit the bay-area assumption."
+      ]));
+    }
+    if(t && t.incomplete){
+      F.appendChild(flag("","qty",[
+        strong(String(t.incomplete)),
+        t.incomplete === 1 ? " activity is" : " activities are",
+        " charged per seat, unit or student, so the schedule needs a quantity before ",
+        "their parking can be counted."
+      ]));
+    }
+    if(t && Number.isFinite(c.park) && Number.isFinite(t.bays) && t.bays > 0){
+      const gap = Math.abs(t.baysCeil - c.park);
+      if(gap >= 1){
+        F.appendChild(flag("info","basis",[
+          "Two parking figures: ", strong(fmt(c.park) + " " + plural(c.park,"bay","bays")),
+          " from the plot's single ITC category (step 4), and ",
+          strong(fmt(t.baysCeil) + " " + plural(t.baysCeil,"bay","bays")),
+          " from the activity schedule. The schedule is the finer basis; confirm which governs."
+        ]));
+      }
+    }
     if(Number.isFinite(c.farOv))
       F.appendChild(flag("info","manual",["Using a typed FAR instead of the land-use table."]));
     if(!F.children.length)
@@ -1084,6 +1525,41 @@ tbody tr:last-child td{border-bottom:0}
   function wire(){
     ["plotSize","farManual","driverQty","pcPct","glaPct"].forEach(id=>{
       document.getElementById(id).addEventListener("input", render);
+    });
+    ["unitArea","bayArea","parkLimitPct"].forEach(id=>{
+      document.getElementById(id).addEventListener("input", ()=>{ renderSched(); render(); });
+    });
+    $("#itcLoc").addEventListener("input", ()=>{
+      state.itcLoc = $("#itcLoc").value;
+      renderSched(); render();
+    });
+
+    /* ---------- activity schedule ---------- */
+    $("#addSched").addEventListener("click", ()=>{
+      addSchedRow(null, 1, null);
+      renderSched(); render();
+      const rows = $("#schedBody").querySelectorAll("tr");
+      const last = rows[rows.length-1];
+      if(last){ const i = last.querySelector("input[type=text]"); if(i) i.focus(); }
+    });
+    $("#clearSched").addEventListener("click", ()=>{ SCHED = []; renderSched(); render(); });
+    /* The worked example from the brief: 13 activities across five uses. */
+    $("#exampleSched").addEventListener("click", ()=>{
+      const pick = (term, div) => {
+        const hits = searchActivities(term, 40).filter(h => !div || String(h.division) === div);
+        return hits.length ? hits[0].activity_id : null;
+      };
+      SCHED = [];
+      [[pick("Dried Flowers","47") || pick("Flowers","47"), 1, null],
+       [pick("Selling of Books","47") || pick("Book","47"), 7, null],
+       [pick("Commercial Bank","64"), 1, null],
+       [null, 2, "115"],
+       [pick("Fast Food Restaurant","56"), 2, null]].forEach(r=> addSchedRow(r[0], r[1], r[2]));
+      renderSched(); render();
+      const m = $("#copyMsg");
+      m.textContent = "Loaded the 13-activity example";
+      m.classList.remove("err");
+      setTimeout(()=>{ m.textContent = ""; }, 3200);
     });
     $("#dedCode").addEventListener("input", render);
     $("#itcClass").addEventListener("input", ()=>{ fillVariantSelect(); render(); });
@@ -1240,6 +1716,12 @@ tbody tr:last-child td{border-bottom:0}
           x.setAttribute("aria-pressed", String(x.dataset.base===saved.form.base)));
       }
       if(saved.form.basis && BASIS_LABEL[saved.form.basis]) state.basis = saved.form.basis;
+      if(saved.form.itcLoc) state.itcLoc = saved.form.itcLoc;
+      if(Array.isArray(saved.form.sched) && saved.form.sched.length){
+        SCHED = [];
+        saved.form.sched.forEach(r => addSchedRow(r.act, r.slots, r.itcOverride));
+        saved.form.sched.forEach((r,i)=>{ if(SCHED[i]) SCHED[i].qty = r.qty || ""; });
+      }
       if(!LU.some(r=>String(r.id)===$("#dedCode").value) && $("#dedCode").value!=="__none")
         $("#dedCode").value = LU[0] ? String(LU[0].id) : "__none";
       if(![...$("#itcClass").options].some(o=>o.value===$("#itcClass").value)) fillClassSelect();
@@ -1248,7 +1730,10 @@ tbody tr:last-child td{border-bottom:0}
         $("#itcVariant").value = saved.form.itcVariant;
     }
 
+    $("#itcLoc").value = state.itcLoc;
+    if(!SCHED.length) addSchedRow(null, 1, null);
     wire();
+    renderSched();
     render();
   }
 

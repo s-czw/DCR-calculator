@@ -1,6 +1,6 @@
 # DCR Plot Yield Calculator
 
-Derives Max GFA, plot coverage, GLA, ITC parking and the max allowed activities figure from
+Derives Max GFA, plot coverage, GLA, ITC parking and the permitted activity count from
 a plot area, a land-use designation and an ITC category. The designation schedule and the
 ITC rate matrix are both embedded as a SQLite database and queried live in the page.
 
@@ -197,10 +197,10 @@ Worked example — Warehousing `713` on a 1,000 m² plot at FAR 1.05 (GFA 1,050 
 2  Plot coverage  = Max GFA x coverage%                coverage from the designation
 3  GLA            = Max GFA x GLA%                     default 75%, user-set
 4  Parking        = ceil( driver x conversion x rate ) week-weighted rate
-5  Activities     = GLA x coverage%
+5  Activities     = floor( GLA / unit area )        unit area default 60 m2
 ```
 
-Coverage does double duty — the footprint in step 2 and the activities figure in step 5 —
+Coverage drives the footprint in step 2;
 so it is a single input, auto-filled from the designation and editable.
 
 Worked example — 1,000 m&sup2; plot, code `NR` (FAR 1.05), ITC `112` Local Shopping Centre:
@@ -211,16 +211,59 @@ Worked example — 1,000 m&sup2; plot, code `NR` (FAR 1.05), ITC `112` Local Sho
 | Plot coverage | 630 m&sup2; |
 | GLA | 787.5 m&sup2; |
 | Parking | (1,050 / 100) x 1.318 = 13.839 &rarr; **14 bays** |
-| Activities | 787.5 x 0.6 = **472.5 m&sup2;** |
+| Activities | 787.5 / 60 = 13.125 → **13 activities** |
 
 Steps are ordered by dependency rather than as drawn on the source whiteboard: GLA moves
 ahead of parking because one category (`111` Regional Shopping Centre) is charged
 against GLA, not GFA.
 
-**Step 5 changed unit on instruction.** The whiteboard had `GLA / 60 m² = 13.13 → 13
-activities`, a count. It is now `GLA × coverage%`, which yields an **area** — 472.5 m² for
-the worked example — so the figure is no longer a tenancy count, and the 60 m²-per-unit
-coefficient is gone. Flagged because the field name still says "activities".
+## Activity schedule
+
+Step 5 gives how many activities the GLA supports. The **Activity schedule** panel fills those
+slots with real uses and prices the parking per activity, which is finer than charging the whole
+plot at one ITC rate.
+
+Each row is an activity plus the number of slots it occupies:
+
+- **Activity** — searched from the DED activity list (3,892 active activities from
+  `DED قائمة الانشطة`, deduplicated by `ACTIVITY_ID`).
+- **ITC category** — auto-mapped from the activity, overridable per row. The confidence tag
+  says how far to trust the mapping.
+- **Bays** — `slots × unit area × conversion × rate`. The slots an activity holds are its share
+  of GLA, and for GFA/GLA-charged categories that share is the driver. Categories charged per
+  seat, unit or student instead ask for a quantity.
+- **ITC location** (Abu Dhabi/Al Ain × CBD/non-CBD) picks which variant of a class applies,
+  falling back progressively when a class is not split that finely.
+
+The footer totals slots against the permitted count, and bays against the parking cap.
+
+### The DED → ITC crosswalk
+
+`ITC_RULES` in `build_db.py` is a **heuristic mapping written for this tool, not a client
+crosswalk**. It keys on the numeric ISIC levels, because the workbook's `LEVEL_0` letters are
+re-lettered and do not follow ISIC sections. Coverage of the 3,892 activities:
+
+| Confidence | Count | Meaning |
+|---|---|---|
+| high | 162 | the ISIC class and the ITC category describe the same thing |
+| medium | 2,722 | division-level match, e.g. all specialised retail → Local Shopping Centre |
+| low | 1,008 | closest available analogue; review before relying on it |
+
+Validated against the worked example — flower shop, book shop, commercial bank and fast food
+restaurant all auto-map to the ITC categories whose rates the brief quotes (1.318, 1.318,
+4.992, 7.702). Any row can be reassigned by hand, which then shows as *set by hand*.
+
+### The parking cap
+
+The rule is *"if the chosen activities need more than 50% of the plot as parking, error"*. ITC
+rates give a **bay count**, and the cap is an **area**, so converting between them needs an area
+per bay. That figure is not in any source, so it is an input: **25 m² by default**, a typical
+bay-plus-aisle allowance. **Confirm it** — the example lands at 600 m² against a 500 m² cap, so
+the verdict flips somewhere near 21 m² a bay.
+
+Both parking figures are shown: step 4 charges the whole plot at its single ITC category, the
+schedule charges each activity. They disagree (14 vs 24 bays on the example), and the page says
+so rather than picking one.
 
 ## Removed from the page
 
@@ -277,7 +320,13 @@ Still needs sign-off:
    treats it as an advisory, not a rule.
 3. **The GLA 75% share** is not a Code citation — it is the worked example's value and may
    vary by scheme. It is an input, seeded from the `coefficient` table.
-4. **Step 5's unit change.** `GLA × coverage%` returns an area, where the whiteboard
+4. **Parking bay area (25 m²).** Introduced here so a bay count can be compared with an area
+   cap; not from any source. The example's pass/fail flips near 21 m² a bay.
+5. **The DED → ITC crosswalk** is heuristic — 4% high confidence, 26% low. Review low-confidence
+   rows.
+6. **Which parking figure governs** — the whole-plot ITC category or the activity schedule.
+7. ~~**Step 5's unit change.**~~ Resolved: reverted to the whiteboard's count, `floor(GLA / 60)`.
+   Superseded note: `GLA × coverage%` returned an area, where the whiteboard
    returned a tenancy count. See *The calculation* above.
 5. **15 designations publish no FAR** and 12 no coverage; the Code governs them by note
    reference. Those note definitions live on the district pages of the Code PDF and were not

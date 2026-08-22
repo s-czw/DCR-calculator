@@ -80,6 +80,10 @@ def snapshot(db_path):
             "FROM land_use ORDER BY id")],
         "weighting": [dict(r) for r in
                       con.execute("SELECT period, days, share FROM weighting")],
+        # 3,900-odd rows; the picker searches these when SQLite is unavailable
+        "ded_activity": [dict(r) for r in con.execute(
+            "SELECT activity_id, name, division, isic_class, itc_class, map_confidence, "
+            "map_reason FROM ded_activity ORDER BY activity_id")],
         "coefficient": {r["key"]: r["value"] for r in
                         con.execute("SELECT key, value FROM coefficient")},
         "meta": {r["key"]: r["value"] for r in con.execute("SELECT key, value FROM meta")},
