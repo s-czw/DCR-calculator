@@ -1,0 +1,41 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # embed_db.py is standard library only, so there is nothing to install.
+      # build_db.py reads the source workbooks and needs xlrd/openpyxl, so it stays
+      # a local step: itc_rates.db is committed as its output.
+      - name: Build the page
+        run: python3 embed_db.py
+
+      - name: Verify the build
+        run: python3 verify_build.py
+
+      - name: Assemble dist
+        run: |
+          mkdir -p dist
+          cp dcr-calculator.html dist/index.html
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dcr-calculator
+          path: dist/
+          retention-days: 30
+
+      # To publish, add a deploy step here once a host is chosen — e.g.
+      # Azure/static-web-apps-deploy@v1, actions/deploy-pages@v4, or rsync over
+      # SSH to an internal box. See README.

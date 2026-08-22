@@ -1,0 +1,1273 @@
+<title>DCR Plot Yield Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap">
+<style>
+:root{
+  --paper:#F1F4F1; --surface:#FFFFFF; --surface-2:#E8EDEA; --sunk:#E3E9E5;
+  --line:#D3DBD6; --line-strong:#B2BEB8;
+  --ink:#161D1A; --ink-2:#3F4C47; --ink-3:#5F6E68;
+  --accent:#2C6A5C; --accent-ink:#1E4C42; --accent-soft:#DBE9E4;
+  --brass:#7C5B16; --brass-soft:#EFE6CD;
+  --ok:#2C6A5C; --warn:#856012; --crit:#9C3A2B;
+  --crit-soft:#F6E2DE;
+  --shadow:0 1px 2px rgba(22,29,26,.06), 0 8px 24px -12px rgba(22,29,26,.18);
+  --r:6px;
+  --step:clamp(.9rem,.85rem + .2vw,1rem);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0F1413; --surface:#161D1B; --surface-2:#1D2523; --sunk:#121817;
+    --line:#293331; --line-strong:#3B4744;
+    --ink:#E7EDE9; --ink-2:#AEBBB5; --ink-3:#7C8B85;
+    --accent:#69BFA8; --accent-ink:#8FD4C0; --accent-soft:#16302A;
+    --brass:#D3A854; --brass-soft:#2B2415;
+    --ok:#69BFA8; --warn:#D3A854; --crit:#E47964;
+    --crit-soft:#331E1A;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0F1413; --surface:#161D1B; --surface-2:#1D2523; --sunk:#121817;
+  --line:#293331; --line-strong:#3B4744;
+  --ink:#E7EDE9; --ink-2:#AEBBB5; --ink-3:#7C8B85;
+  --accent:#69BFA8; --accent-ink:#8FD4C0; --accent-soft:#16302A;
+  --brass:#D3A854; --brass-soft:#2B2415;
+  --ok:#69BFA8; --warn:#D3A854; --crit:#E47964;
+  --crit-soft:#331E1A;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:Archivo,"Helvetica Neue",Arial,sans-serif;
+  font-size:var(--step); line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1160px; margin:0 auto; padding:clamp(20px,4vw,44px) clamp(16px,3vw,32px) 72px}
+h1,h2,h3{margin:0; text-wrap:balance}
+a{color:var(--accent-ink)}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:3px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
+
+/* ---------- masthead ---------- */
+.mast{display:flex; flex-wrap:wrap; align-items:flex-end; gap:16px 28px; padding-bottom:18px; border-bottom:1.5px solid var(--line-strong)}
+.mast-id{flex:1 1 430px; min-width:0}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.66rem; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-3); display:block; margin-bottom:10px;
+}
+h1{
+  font-family:"Instrument Serif",Georgia,serif; font-weight:400;
+  font-size:clamp(2rem,1.5rem + 2.4vw,3.1rem); line-height:1.02; letter-spacing:-.01em;
+}
+h1 em{font-style:italic; color:var(--accent-ink)}
+.mast-note{margin:10px 0 0; color:var(--ink-2); max-width:52ch; font-size:.9rem}
+.mast-meta{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+.chip{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.66rem; letter-spacing:.09em;
+  text-transform:uppercase; padding:5px 9px; border:1px solid var(--line-strong);
+  border-radius:3px; color:var(--ink-2); background:var(--surface); white-space:nowrap;
+}
+.chip.on{border-color:var(--accent); color:var(--accent-ink); background:var(--accent-soft)}
+
+/* ---------- shell ---------- */
+.cols{display:grid; grid-template-columns:minmax(0,340px) minmax(0,1fr); gap:28px; align-items:start; margin-top:28px}
+@media (max-width:900px){.cols{grid-template-columns:1fr; gap:22px}}
+
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow)}
+.panel-hd{
+  display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+  padding:14px 16px; border-bottom:1px solid var(--line);
+}
+.panel-hd h2{font-family:"Instrument Serif",Georgia,serif; font-weight:400; font-size:1.25rem; line-height:1.1}
+.panel-hd .tag{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.64rem; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3)}
+.panel-bd{padding:16px; display:flex; flex-direction:column; gap:16px}
+
+/* ---------- fields ---------- */
+.field{display:flex; flex-direction:column; gap:6px}
+label,.lbl{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.66rem; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--ink-3);
+}
+.ctl{
+  display:flex; align-items:center; background:var(--sunk); border:1px solid var(--line-strong);
+  border-radius:4px; overflow:hidden;
+}
+.ctl:focus-within{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+.ctl input,.ctl select{
+  flex:1 1 auto; min-width:0; width:100%; background:transparent; border:0; color:var(--ink);
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.95rem; font-variant-numeric:tabular-nums;
+  padding:9px 10px;
+}
+.ctl select{font-family:Archivo,sans-serif; font-size:.88rem; cursor:pointer}
+.ctl input:focus,.ctl select:focus{outline:none}
+.ctl .suffix{
+  flex:0 0 auto; padding:0 10px; font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:.7rem; color:var(--ink-3); border-left:1px solid var(--line); align-self:stretch;
+  display:flex; align-items:center; background:var(--surface-2);
+}
+.hint{font-size:.76rem; color:var(--ink-3); margin:0}
+.hint b{color:var(--ink-2); font-weight:600}
+.derived{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.76rem; color:var(--accent-ink);
+  display:flex; justify-content:space-between; gap:8px;
+}
+.derived .src{color:var(--ink-3)}
+
+.seg{display:flex; border:1px solid var(--line-strong); border-radius:4px; overflow:hidden; background:var(--sunk)}
+.seg button{
+  flex:1; padding:8px 6px; background:transparent; border:0; cursor:pointer; color:var(--ink-2);
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.68rem; letter-spacing:.06em; text-transform:uppercase;
+}
+.seg button+button{border-left:1px solid var(--line-strong)}
+.seg button[aria-pressed="true"]{background:var(--accent); color:var(--surface); font-weight:500}
+
+fieldset{border:0; margin:0; padding:0; display:flex; flex-direction:column; gap:14px}
+.grid2{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px}
+.rule{height:1px; background:var(--line); margin:2px 0}
+details.coef>summary{
+  cursor:pointer; list-style:none; display:flex; align-items:center; justify-content:space-between;
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.66rem; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--ink-2); padding:4px 0;
+}
+details.coef>summary::-webkit-details-marker{display:none}
+details.coef>summary::after{content:"+"; font-size:1rem; color:var(--ink-3)}
+details.coef[open]>summary::after{content:"\2013 "}
+details.coef>div{padding-top:14px; display:flex; flex-direction:column; gap:14px}
+
+.btn{
+  font-family:Archivo,sans-serif; font-size:.82rem; font-weight:600; cursor:pointer;
+  padding:9px 13px; border-radius:4px; border:1px solid var(--line-strong);
+  background:var(--surface-2); color:var(--ink); transition:border-color .15s, background .15s;
+}
+.btn:hover{border-color:var(--accent); color:var(--accent-ink)}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:var(--surface)}
+.btn.primary:hover{filter:brightness(1.08); color:var(--surface)}
+.btn.mini{padding:5px 9px; font-size:.72rem; font-weight:500}
+.btn.icon{padding:4px 8px; font-family:"IBM Plex Mono",monospace; line-height:1}
+.btnrow{display:flex; flex-wrap:wrap; gap:8px}
+
+/* ---------- derivation ladder ---------- */
+.ladder{display:flex; flex-direction:column}
+.step{
+  display:grid; grid-template-columns:34px minmax(0,1fr) auto; gap:0 14px; align-items:center;
+  padding:15px 16px; border-bottom:1px solid var(--line); position:relative;
+}
+.step:last-child{border-bottom:0}
+.step-idx{
+  align-self:stretch; display:flex; align-items:center; justify-content:center;
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.72rem; color:var(--ink-3);
+  border-right:1px solid var(--line); margin-right:2px;
+}
+.step-body{min-width:0}
+.step-name{display:flex; align-items:baseline; gap:9px; flex-wrap:wrap}
+.step-name h3{font-size:.98rem; font-weight:600; letter-spacing:-.005em}
+.step-name .abbr{font-family:"IBM Plex Mono",monospace; font-size:.66rem; color:var(--brass); letter-spacing:.08em}
+.step-sub{margin:2px 0 0; font-size:.78rem; color:var(--ink-3)}
+.formula{
+  margin-top:7px; display:inline-block; max-width:100%;
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.78rem;
+  color:var(--ink-2); background:var(--sunk); border-left:2px solid var(--line-strong);
+  padding:5px 10px; border-radius:0 3px 3px 0; overflow-x:auto; white-space:nowrap;
+  font-variant-numeric:tabular-nums; vertical-align:top;
+}
+.step-val{text-align:right; white-space:nowrap; padding-left:8px}
+.step-val .num{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-weight:500;
+  font-size:clamp(1.3rem,1.1rem + .7vw,1.7rem); letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums; color:var(--ink); display:block; line-height:1.1;
+}
+.step-val .unit{font-family:"IBM Plex Mono",monospace; font-size:.66rem; color:var(--ink-3); letter-spacing:.08em}
+.step-val .raw{display:block; font-family:"IBM Plex Mono",monospace; font-size:.68rem; color:var(--ink-3); margin-top:3px}
+.step.key{background:linear-gradient(90deg,var(--accent-soft),transparent 70%)}
+.step.key .step-val .num{color:var(--accent-ink)}
+.step.count .step-val .num{color:var(--brass)}
+@media (max-width:620px){
+  .step{grid-template-columns:26px minmax(0,1fr); gap:0 10px}
+  .step-val{grid-column:2; text-align:left; padding:8px 0 0}
+  .step-val .num{font-size:1.4rem}
+}
+
+/* ---------- advisories ---------- */
+.flags{display:flex; flex-direction:column; gap:8px; padding:14px 16px; border-top:1px solid var(--line); background:var(--surface-2)}
+.flag{display:flex; gap:10px; align-items:flex-start; font-size:.81rem; color:var(--ink-2)}
+.flag .mark{
+  flex:0 0 auto; font-family:"IBM Plex Mono",monospace; font-size:.6rem; letter-spacing:.1em;
+  text-transform:uppercase; padding:3px 7px; border-radius:3px; margin-top:1px;
+  background:var(--brass-soft); color:var(--brass); border:1px solid transparent;
+}
+.flag.crit .mark{background:var(--crit-soft); color:var(--crit)}
+.flag.info .mark{background:var(--accent-soft); color:var(--accent-ink)}
+.flag b{color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums}
+
+/* ---------- plan diagram ---------- */
+.plan{display:grid; grid-template-columns:auto minmax(0,1fr); gap:22px; padding:18px 16px; align-items:center}
+@media (max-width:560px){.plan{grid-template-columns:1fr}}
+.plan svg{display:block; width:214px; height:auto}
+.plan-read{display:flex; flex-direction:column; gap:11px}
+.readout{display:flex; justify-content:space-between; align-items:baseline; gap:14px; border-bottom:1px dotted var(--line-strong); padding-bottom:6px}
+.readout .k{font-family:"IBM Plex Mono",monospace; font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3)}
+.readout .v{font-family:"IBM Plex Mono",monospace; font-size:.88rem; font-variant-numeric:tabular-nums; color:var(--ink)}
+.readout .v.hi{color:var(--accent-ink)}
+.swatch{display:inline-block; width:9px; height:9px; margin-right:6px; border:1px solid var(--line-strong); vertical-align:baseline}
+
+/* ---------- reference tables ---------- */
+table{width:100%; border-collapse:collapse; font-size:.83rem}
+thead th{
+  text-align:left; font-family:"IBM Plex Mono",monospace; font-size:.62rem; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--ink-2); font-weight:400; padding:9px 10px;
+  border-bottom:1px solid var(--line-strong); background:var(--surface-2); white-space:nowrap;
+}
+tbody td{padding:5px 6px; border-bottom:1px solid var(--line); vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+.io-msg{font-family:"IBM Plex Mono",monospace; font-size:.7rem; color:var(--accent-ink); min-height:1em}
+.io-msg.err{color:var(--crit)}
+
+/* ---------- footer ---------- */
+.foot{margin-top:34px; padding-top:18px; border-top:1.5px solid var(--line-strong); display:grid; grid-template-columns:1fr 1fr; gap:22px}
+@media (max-width:700px){.foot{grid-template-columns:1fr}}
+.foot h3{font-family:"Instrument Serif",Georgia,serif; font-weight:400; font-size:1.05rem; margin-bottom:8px}
+.foot ul{margin:0; padding-left:18px; color:var(--ink-2); font-size:.8rem; display:flex; flex-direction:column; gap:5px}
+.foot code{font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--brass); background:var(--brass-soft); padding:1px 4px; border-radius:2px}
+.sr{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+</style>
+
+<style>
+/* ---------- ITC rate detail ---------- */
+.rate-hd{display:flex; flex-wrap:wrap; gap:10px 16px; align-items:baseline; padding:14px 16px; border-bottom:1px solid var(--line)}
+.rate-hd .code{font-family:"IBM Plex Mono",monospace; font-size:1.05rem; color:var(--brass); font-weight:500}
+.rate-hd .nm{font-weight:600}
+.rate-hd .var{font-family:"IBM Plex Mono",monospace; font-size:.7rem; color:var(--ink-3); letter-spacing:.06em}
+.pill{
+  font-family:"IBM Plex Mono",monospace; font-size:.6rem; letter-spacing:.1em; text-transform:uppercase;
+  padding:3px 7px; border-radius:3px; background:var(--accent-soft); color:var(--accent-ink); white-space:nowrap;
+}
+.pill.warn{background:var(--brass-soft); color:var(--brass)}
+.bars{display:flex; flex-direction:column; gap:9px; padding:14px 16px}
+.bar{display:grid; grid-template-columns:minmax(96px,auto) 1fr minmax(96px,auto); gap:12px; align-items:center}
+.bar .bk{font-family:"IBM Plex Mono",monospace; font-size:.66rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3)}
+.bar .track{height:8px; background:var(--sunk); border-radius:2px; overflow:hidden; border:1px solid var(--line)}
+.bar .fill{height:100%; background:var(--accent); opacity:.75}
+.bar.visitor .fill{background:var(--brass)}
+.bar.truck .fill{background:var(--ink-3)}
+.bar .bv{font-family:"IBM Plex Mono",monospace; font-size:.8rem; text-align:right; font-variant-numeric:tabular-nums; color:var(--ink)}
+.bar.total{border-top:1px solid var(--line); padding-top:10px; margin-top:2px}
+.bar.total .bk{color:var(--ink); font-weight:500}
+.bar.total .bv{font-size:.95rem; color:var(--accent-ink)}
+.mixline{
+  display:grid; grid-template-columns:auto auto 1fr; gap:4px 10px; align-items:baseline;
+  margin-top:4px; padding-top:9px; border-top:1px dotted var(--line-strong);
+  font-family:"IBM Plex Mono",monospace; font-size:.72rem;
+}
+.mixline .mk{color:var(--ink-3); letter-spacing:.04em}
+.mixline .mv{font-variant-numeric:tabular-nums; color:var(--ink); text-align:right}
+.mixline .mv.hi{color:var(--accent-ink); font-weight:500}
+.mixline .ms{color:var(--ink-3)}
+@media (max-width:560px){.bar{grid-template-columns:1fr auto; } .bar .track{grid-column:1/-1; order:3}}
+
+
+/* ---------- boot / driver field ---------- */
+.boot{padding:26px 16px; text-align:center; color:var(--ink-3); font-family:"IBM Plex Mono",monospace; font-size:.78rem}
+.boot.err{color:var(--crit)}
+.drv{border:1px solid var(--brass); background:var(--brass-soft); border-radius:5px; padding:11px 12px; display:flex; flex-direction:column; gap:7px}
+.drv .lbl{color:var(--brass)}
+.dbtag{font-family:"IBM Plex Mono",monospace; font-size:.62rem; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3)}
+</style>
+
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="mast-id">
+      <span class="eyebrow">Development Control Regulations &#x00B7; Plot Yield</span>
+      <h1>Plot size in,<br><em>buildable yield out.</em></h1>
+      <p class="mast-note">Enter a plot area and pick the land-use code for its FAR. The ITC parking rate
+        comes from the conversion matrix, queried live from an embedded SQLite database.</p>
+    </div>
+    <div class="mast-meta">
+      <span class="chip" id="chipCode">code &#x2014;</span>
+      <span class="chip" id="chipItc">itc &#x2014;</span>
+      <span class="chip" id="chipDb">db &#x2014;</span>
+    </div>
+  </header>
+
+
+  <div class="cols">
+
+    <!-- ============ INPUTS ============ -->
+    <form class="panel" id="inputs" autocomplete="off" onsubmit="return false">
+      <div class="panel-hd"><h2>Inputs</h2><span class="tag">site &amp; code</span></div>
+      <div class="panel-bd">
+
+        <div class="field">
+          <label for="plotSize">Plot size</label>
+          <div class="ctl">
+            <input id="plotSize" type="number" min="0" step="1" value="1000" inputmode="decimal">
+            <span class="suffix">m&#x00B2;</span>
+          </div>
+        </div>
+
+        <div class="rule"></div>
+
+        <div class="field">
+          <label for="dedCode">Land use / designation</label>
+          <div class="ctl"><select id="dedCode"></select></div>
+          <div class="derived"><span>FAR <b id="farShow">&#x2014;</b></span><span class="src" id="farSrc"></span></div>
+        </div>
+
+        <div class="field">
+          <label for="farManual">FAR override</label>
+          <div class="ctl">
+            <input id="farManual" type="number" min="0" step="0.01" placeholder="from designation" inputmode="decimal">
+            <span class="suffix">ratio</span>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div class="field">
+            <label for="pcPct">Max plot coverage</label>
+            <div class="ctl">
+              <input id="pcPct" type="number" min="0" max="100" step="0.5" placeholder="auto" inputmode="decimal">
+              <span class="suffix">%</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="glaPct">GLA</label>
+            <div class="ctl">
+              <input id="glaPct" type="number" min="0" max="100" step="1" value="75" inputmode="decimal">
+              <span class="suffix">%</span>
+            </div>
+          </div>
+        </div>
+        <div class="derived">
+          <span>Coverage <b id="pcShow">&#x2014;</b></span><span class="src" id="pcSrc"></span>
+        </div>
+        <p class="hint">Coverage drives both the footprint (step 2) and the max allowed
+          activities (step 5). Blank the field to return to the designation's published value.</p>
+
+        <div class="rule"></div>
+
+        <div class="field">
+          <label for="itcClass">ITC category</label>
+          <div class="ctl"><select id="itcClass"></select></div>
+        </div>
+
+        <div class="field" id="variantField">
+          <label for="itcVariant">Variant</label>
+          <div class="ctl"><select id="itcVariant"></select></div>
+          <p class="hint">AD = Abu Dhabi, AA = Al Ain, CBD = central business district.</p>
+        </div>
+
+        <div class="derived">
+          <span>Rate <b id="itcShow">&#x2014;</b></span><span class="src" id="itcSrc"></span>
+        </div>
+
+        <div class="field">
+          <span class="lbl">Rate basis</span>
+          <div class="seg" id="basisSeg" role="group" aria-label="Rate basis">
+            <button type="button" data-basis="combined" aria-pressed="true">Week</button>
+            <button type="button" data-basis="weekday" aria-pressed="false">Weekday</button>
+            <button type="button" data-basis="weekend" aria-pressed="false">Weekend</button>
+          </div>
+          <div class="grid2" id="weekDays">
+            <div class="field">
+              <label for="wdDays">Weekdays</label>
+              <div class="ctl"><input id="wdDays" type="number" min="0" max="7" step="1" value="5"><span class="suffix">days</span></div>
+            </div>
+            <div class="field">
+              <label for="weDays">Weekend</label>
+              <div class="ctl"><input id="weDays" type="number" min="0" max="7" step="1" value="2"><span class="suffix">days</span></div>
+            </div>
+          </div>
+          <div class="derived" id="shareOut"><span></span><span class="src"></span></div>
+        </div>
+
+        <div class="drv" id="driverField" hidden>
+          <span class="lbl" id="driverLabel">Quantity</span>
+          <div class="ctl">
+            <input id="driverQty" type="number" min="0" step="1" value="0" inputmode="decimal">
+            <span class="suffix" id="driverUnit">no.</span>
+          </div>
+          <p class="hint">This category is charged per unit, not per floor area, so the count
+            cannot be derived from the plot.</p>
+        </div>
+
+        <div class="rule"></div>
+
+        <details class="coef">
+          <summary>Coefficients</summary>
+          <div>
+            <div class="field">
+              <span class="lbl">Coverage measured against</span>
+              <div class="seg" role="group" aria-label="Coverage base">
+                <button type="button" data-base="gfa" aria-pressed="true">Max GFA</button>
+                <button type="button" data-base="plot" aria-pressed="false">Plot area</button>
+              </div>
+              <p class="hint">The source worksheet takes <b>60% of Max GFA</b>. Switch to plot area if your
+                code defines coverage as a footprint ratio.</p>
+            </div>
+            <div class="btnrow"><button type="button" class="btn mini" id="resetCoef">Reset coefficients</button></div>
+          </div>
+        </details>
+
+      </div>
+    </form>
+
+    <!-- ============ RESULTS ============ -->
+    <div style="display:flex; flex-direction:column; gap:22px; min-width:0">
+
+      <section class="panel">
+        <div class="panel-hd"><h2>Derivation</h2><span class="tag">5 steps</span></div>
+        <div class="ladder" id="ladder"><div class="boot" id="bootMsg">opening database&#x2026;</div></div>
+        <div class="flags" id="flags"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-hd">
+          <h2>ITC rate</h2>
+          <span class="tag" id="rateTag">from matrix</span>
+        </div>
+        <div class="rate-hd" id="rateHd"></div>
+        <div class="bars" id="rateBars"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-hd"><h2>Plot &amp; footprint</h2><span class="tag">indicative</span></div>
+        <div class="plan">
+          <svg id="planSvg" viewBox="0 0 240 264" role="img" aria-labelledby="planTitle">
+            <title id="planTitle">Plot boundary with the allowed building footprint shown to scale</title>
+            <defs>
+              <pattern id="hatch" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+                <line x1="0" y1="0" x2="0" y2="7" stroke="var(--accent)" stroke-width="1.6" opacity=".55"></line>
+              </pattern>
+            </defs>
+            <rect id="plotRect" x="10" y="10" width="220" height="220" fill="var(--sunk)"
+                  stroke="var(--ink-2)" stroke-width="1.5"></rect>
+            <rect id="coverRect" x="10" y="10" width="0" height="0" fill="url(#hatch)"
+                  stroke="var(--accent)" stroke-width="1.5"></rect>
+            <line x1="10" y1="243" x2="230" y2="243" stroke="var(--ink-3)" stroke-width="1"></line>
+            <line x1="10" y1="239" x2="10" y2="247" stroke="var(--ink-3)" stroke-width="1"></line>
+            <line x1="230" y1="239" x2="230" y2="247" stroke="var(--ink-3)" stroke-width="1"></line>
+            <text id="sideLbl" x="120" y="260" text-anchor="middle" fill="var(--ink-3)"
+                  font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="0.5">&#x2014;</text>
+          </svg>
+          <div class="plan-read">
+            <div class="readout"><span class="k"><span class="swatch" style="background:var(--sunk)"></span>Plot</span><span class="v" id="roPlot">&#x2014;</span></div>
+            <div class="readout"><span class="k"><span class="swatch" style="background:var(--accent-soft); border-color:var(--accent)"></span>Footprint</span><span class="v hi" id="roCover">&#x2014;</span></div>
+            <div class="readout"><span class="k">Footprint / plot</span><span class="v" id="roRatio">&#x2014;</span></div>
+            <div class="readout"><span class="k">Indicative storeys</span><span class="v" id="roStoreys">&#x2014;</span></div>
+            <div class="readout"><span class="k">Open plot area</span><span class="v" id="roOpen">&#x2014;</span></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="btnrow">
+        <button type="button" class="btn primary" id="copySummary">Copy summary</button>
+        <button type="button" class="btn" id="loadBoard">Load worked example</button>
+        <span class="io-msg" id="copyMsg" aria-live="polite"></span>
+      </div>
+
+    </div>
+  </div>
+
+
+  <footer class="foot">
+    <div>
+      <h3>What the numbers mean</h3>
+      <ul>
+        <li><b>Max GFA</b> &#x2014; the total floor area the FAR permits on the plot.</li>
+        <li><b>Plot coverage</b> &#x2014; the ground footprint the code allows.</li>
+        <li><b>GLA</b> &#x2014; leasable area, the share of GFA excluding cores, services and circulation.</li>
+        <li><b>Parking</b> &#x2014; ITC bays: employee/resident + visitor + truck/bus, rounded up.</li>
+        <li><b>Activities</b> &#x2014; tenancies the GLA supports at the minimum unit size, rounded down.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Before you rely on it</h3>
+      <ul>
+        <li>The matrix holds <b id="footRows">&#x2014;</b> codes, each with a weekday and a
+          weekend rate, from <code id="footSrc">the ITC calculation sheet</code>. Parking uses
+          the week-weighted blend: 5 weekdays at 71.43%, 2 weekend days at 28.57%. Only
+          <b>19</b> codes differ between the two tabs.</li>
+        <li>Rates are charged against different quantities per category &#x2014; GFA, GLA, site area, or a
+          count of seats, units, bedrooms, students, beds or doctors. The calculator binds the first three
+          automatically and asks for the rest.</li>
+        <li>The sheet also carries trip generation rates (AM / Noon / PM / PHG) and the
+          surveyed-site counts. They are stored in the database but unused by this
+          calculator.</li>
+        <li>FAR and max plot coverage come from <b id="footDesig">&#x2014;</b> designations in the
+          Abu Dhabi Capital Development Code, picked in the Inputs panel. 15 publish no FAR
+          &#x2014; the Code governs those by note reference instead, so they cannot be
+          calculated without an override.</li>
+        <li>The <b>GLA 75%</b> share is not a Code citation; set it per scheme.</li>
+      </ul>
+    </div>
+  </footer>
+
+</div><!-- /.wrap -->
+
+<script>/*__SQLJS__*/</script>
+<script>
+(function(){
+  "use strict";
+
+  const WASM_B64 = "__WASM_B64__";
+  const DB_B64   = "__DB_B64__";
+  const SNAPSHOT = __SNAPSHOT__;   /* same tables, exported from itc_rates.db at build time */
+
+  /* The matrix ships weekday and weekend rates. A week is five weekdays and two
+     weekend days, so the default basis is the day-weighted blend of the two. */
+  const WEEK = { weekday:5, weekend:2 };
+  const BASIS_LABEL = { combined:"Combined week", weekday:"Weekday", weekend:"Weekend" };
+  function shares(){
+    const t = WEEK.weekday + WEEK.weekend;
+    return t > 0 ? { wd:WEEK.weekday/t, we:WEEK.weekend/t } : { wd:1, we:0 };
+  }
+  const KEY = "dcr.calc.v2";
+  const COEF = { glaPct:75, coverageDefault:60, base:"gfa" };
+
+  /* SQLite drives the page. If the host blocks WebAssembly we fall back to the
+     build-time snapshot of the same database so the calculator still works. */
+  let db = null, sqlLive = false;
+  let ITC = [], LU = [], META = {};   /* LU = base-district designations */
+  const state = { base:"gfa", basis:"combined", groupOrder:[] };
+
+  /* ---------- helpers --------------------------------------------------- */
+  const $ = s => document.querySelector(s);
+  const el = (t,c,txt)=>{ const n=document.createElement(t); if(c)n.className=c; if(txt!=null)n.textContent=txt; return n; };
+  const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : NaN; };
+  const strong = t => el("b",null,t);
+  const byCode = (a,b) => String(a.class_code).localeCompare(String(b.class_code), "en", {numeric:true})
+                          || (a.id||0)-(b.id||0);
+
+  function fmt(n, dp){
+    if(!Number.isFinite(n)) return "—";
+    if(dp==null) dp = Math.abs(n % 1) < 1e-9 ? 0 : 2;
+    return n.toLocaleString("en-US",{ minimumFractionDigits:0, maximumFractionDigits:dp });
+  }
+  const area = n => fmt(n) + " m²";
+  const plural = (n, one, many) => (Number.isFinite(n) && Math.abs(n)===1) ? one : many;
+
+  function b64ToBytes(b64){
+    const bin = atob(b64), out = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  /* ---------- SQL ------------------------------------------------------- */
+  function q(sql, params){
+    const st = db.prepare(sql);
+    if(params) st.bind(params);
+    const out = [];
+    while(st.step()) out.push(st.getAsObject());
+    st.free();
+    return out;
+  }
+
+  const SQL_COMBINED =
+    "SELECT code, class_name, variant, weekday_total, weekend_total,\n" +
+    "       rate_employee, rate_visitor, rate_truck, rate_total,\n" +
+    "       unit_label, driver_label, driver_kind, conversion\n" +
+    "FROM itc_combined WHERE code = :code";
+  const SQL_PERIOD =
+    "SELECT code, class_name, variant, rate_employee, rate_visitor, rate_truck,\n" +
+    "       rate_total, unit_label, driver_label, driver_kind, conversion\n" +
+    "FROM itc_rate WHERE period = :p AND code = :code";
+
+  /* ---------- data access ---------------------------------------------- */
+  function loadFromSql(){
+    ITC = q("SELECT * FROM itc_rate ORDER BY id");
+    q("SELECT period, days FROM weighting").forEach(r=>{
+      if(r.period === "weekday" || r.period === "weekend") WEEK[r.period] = r.days;
+    });
+    LU = q("SELECT id, category, designation, name, far, coverage, remarks, source "
+           + "FROM land_use ORDER BY id");
+    q("SELECT key, value FROM meta").forEach(r=> META[r.key] = r.value);
+    q("SELECT key, value FROM coefficient").forEach(r=>{
+      if(r.key==="gla_pct")              COEF.glaPct          = r.value;
+      if(r.key==="coverage_pct_default") COEF.coverageDefault = r.value;
+    });
+  }
+  function loadFromSnapshot(){
+    ITC = SNAPSHOT.itc_rate.map(r=>Object.assign({},r));
+    (SNAPSHOT.weighting || []).forEach(r=>{
+      if(r.period === "weekday" || r.period === "weekend") WEEK[r.period] = r.days;
+    });
+    LU = (SNAPSHOT.land_use || []).map(r=>Object.assign({},r));
+    META = Object.assign({}, SNAPSHOT.meta);
+    const c = SNAPSHOT.coefficient;
+    if(c.gla_pct!=null)              COEF.glaPct          = c.gla_pct;
+    if(c.coverage_pct_default!=null) COEF.coverageDefault = c.coverage_pct_default;
+  }
+
+  /* LU is the source of truth for designations; when SQLite is live the table is
+     rewritten to match, so anything reading the database sees what the page uses. */
+  function syncDed(){
+    if(!sqlLive) return;
+    db.run("DELETE FROM land_use");
+    LU.forEach(r=> db.run(
+      "INSERT INTO land_use (id, category, designation, name, far, coverage, remarks, source) " +
+      "VALUES (:i,:cat,:d,:n,:f,:cov,:rm,:s)",
+      {":i":r.id, ":cat":String(r.category||""), ":d":String(r.designation==null?"":r.designation),
+       ":n":String(r.name==null?"":r.name),
+       ":f":Number.isFinite(num(r.far)) ? num(r.far) : null,
+       ":cov":Number.isFinite(num(r.coverage)) ? num(r.coverage) : null,
+       ":rm":r.remarks||null, ":s":r.source||"custom"}));
+  }
+  const nextDedId = () => LU.reduce((m,r)=>Math.max(m, r.id||0), 0) + 1;
+  const luRow = () => LU.find(r=>String(r.id)===$("#dedCode").value) || null;
+
+  /* Coverage comes from the designation unless the user types over it. */
+  function coveragePct(){
+    const ov = $("#pcPct").value.trim();
+    if(ov !== ""){ const v = num(ov); if(Number.isFinite(v)) return v; }
+    const r = luRow();
+    if(r && Number.isFinite(num(r.coverage))) return num(r.coverage) * 100;
+    return COEF.coverageDefault;
+  }
+
+  const base = () => ITC.filter(r=>r.period==="weekday");
+  const weekendRow = code => ITC.find(r=>r.period==="weekend" && r.code===code) || null;
+
+  /* Blend the two tabs for the active basis. Keeps both totals on the result so
+     the panel can show what went in. */
+  function effectiveRate(code){
+    const wd = base().find(r=>r.code===code);
+    if(!wd) return null;
+    const we = weekendRow(code) || wd;
+    const s = shares(), b = state.basis;
+    const mix = (a,x) => b==="weekday" ? a : b==="weekend" ? x : a*s.wd + x*s.we;
+    return Object.assign({}, wd, {
+      rate_employee: mix(wd.rate_employee, we.rate_employee),
+      rate_visitor:  mix(wd.rate_visitor,  we.rate_visitor),
+      rate_truck:    mix(wd.rate_truck,    we.rate_truck),
+      rate_total:    mix(wd.rate_total,    we.rate_total),
+      weekday_total: wd.rate_total,
+      weekend_total: we.rate_total,
+      basis: b
+    });
+  }
+
+  /* The view carries the weights, so keep it in step with the day inputs. */
+  function syncWeighting(){
+    if(!sqlLive) return;
+    const s = shares();
+    try{
+      db.run("UPDATE weighting SET days = :d, share = :s WHERE period = 'weekday'",
+             {":d":WEEK.weekday, ":s":s.wd});
+      db.run("UPDATE weighting SET days = :d, share = :s WHERE period = 'weekend'",
+             {":d":WEEK.weekend, ":s":s.we});
+    }catch(e){}
+  }
+
+  function classList(){
+    const seen = new Map();
+    base().slice().sort(byCode).forEach(r=>{
+      if(!seen.has(r.class_code))
+        seen.set(r.class_code, { class_code:r.class_code, class_name:r.class_name,
+                                 class_group:r.class_group, variants:0 });
+      seen.get(r.class_code).variants++;
+    });
+    return [...seen.values()];
+  }
+  const variantsFor = cls => base().filter(r=>r.class_code===cls).sort(byCode);
+
+  /* ---------- storage --------------------------------------------------- */
+  function readForm(){
+    const o = { base:state.base, basis:state.basis };
+    ["plotSize","dedCode","itcClass","itcVariant","farManual","driverQty","pcPct","glaPct"]
+      .forEach(id => { o[id] = document.getElementById(id).value; });
+    return o;
+  }
+  function save(){
+    try{ localStorage.setItem(KEY, JSON.stringify({ form:readForm(), lu:LU })); }
+    catch(e){/* sandboxed storage: session only */}
+  }
+  function loadSaved(){
+    try{ const raw = localStorage.getItem(KEY); return raw ? JSON.parse(raw) : null; }
+    catch(e){ return null; }
+  }
+
+  /* ---------- selects --------------------------------------------------- */
+  function fillClassSelect(){
+    const list = classList();
+    state.groupOrder = [];
+    list.forEach(r=>{ if(!state.groupOrder.includes(r.class_group)) state.groupOrder.push(r.class_group); });
+    const sel = $("#itcClass"), keep = sel.value;
+    sel.innerHTML = "";
+    let group = null, og = null;
+    list.forEach(r=>{
+      if(r.class_group !== group){
+        group = r.class_group;
+        og = el("optgroup"); og.label = group; sel.appendChild(og);
+      }
+      const o = el("option", null, r.class_code + " — " + r.class_name +
+                   (r.variants>1 ? "  (" + r.variants + " variants)" : ""));
+      o.value = r.class_code;
+      og.appendChild(o);
+    });
+    if(list.some(r=>r.class_code===keep)) sel.value = keep;
+    else if(list.some(r=>r.class_code==="112")) sel.value = "112";
+    else if(list.length) sel.value = list[0].class_code;
+  }
+
+  function fillVariantSelect(){
+    const vs = variantsFor($("#itcClass").value);
+    const sel = $("#itcVariant"), keep = sel.value;
+    sel.innerHTML = "";
+    vs.forEach(r=>{
+      const o = el("option", null, r.variant ? r.variant : "(single rate)");
+      o.value = r.code;
+      sel.appendChild(o);
+    });
+    if(vs.length) sel.value = vs.some(r=>r.code===keep) ? keep : vs[0].code;
+    $("#variantField").hidden = vs.length < 2;
+  }
+
+  /* The headline rate is read back out of SQLite when it is available, so the
+     query shown under the rate panel is the one that produced the number. */
+  function currentRate(){
+    const code = $("#itcVariant").value;
+    if(!code) return null;
+    const local = effectiveRate(code);
+    if(sqlLive && local){
+      try{
+        const r = state.basis === "combined"
+          ? q(SQL_COMBINED, {":code":code})[0]
+          : q(SQL_PERIOD, {":p":state.basis, ":code":code})[0];
+        if(r) return Object.assign({}, local, r, { basis:state.basis });
+      }catch(e){/* fall through to the local blend */}
+    }
+    return local;
+  }
+
+  /* ---------- calculation ---------------------------------------------- */
+  function calc(){
+    const plot   = num($("#plotSize").value);
+    const dRow   = luRow();
+    const farOv  = $("#farManual").value.trim()==="" ? NaN : num($("#farManual").value);
+    const far    = Number.isFinite(farOv) ? farOv : (dRow ? num(dRow.far) : NaN);
+    const pcPct  = coveragePct();
+    const pcAuto = $("#pcPct").value.trim() === "";
+    const glaPct = num($("#glaPct").value);
+
+    const rate   = currentRate();
+
+    const maxGFA  = plot>0 && Number.isFinite(far) ? plot*far : NaN;
+    const covBase = state.base==="gfa" ? maxGFA : plot;
+    const cover   = Number.isFinite(covBase) && Number.isFinite(pcPct) ? covBase*(pcPct/100) : NaN;
+    const gla     = Number.isFinite(maxGFA) && Number.isFinite(glaPct) ? maxGFA*(glaPct/100) : NaN;
+
+    // the ITC rate is charged against whichever quantity the matrix names
+    let driver = NaN, driverSrc = "";
+    if(rate){
+      if(rate.driver_kind==="gfa"){ driver = maxGFA; driverSrc = "Max GFA"; }
+      else if(rate.driver_kind==="gla"){ driver = gla; driverSrc = "GLA"; }
+      else if(rate.driver_kind==="site"){ driver = plot; driverSrc = "plot area"; }
+      else { driver = num($("#driverQty").value); driverSrc = rate.driver_label; }
+    }
+    const per = rate ? Math.round(1/rate.conversion) : NaN;
+    const bay = k => rate && Number.isFinite(driver) ? driver*rate.conversion*rate[k] : NaN;
+    const parkEmp = bay("rate_employee"), parkVis = bay("rate_visitor"), parkTrk = bay("rate_truck");
+    const parkRaw = rate && Number.isFinite(driver) ? driver*rate.conversion*rate.rate_total : NaN;
+    const park    = Number.isFinite(parkRaw) ? Math.ceil(parkRaw) : NaN;
+
+    // Max allowed activities = GLA x Max Plot Coverage % (per the designation)
+    const act = Number.isFinite(gla) && Number.isFinite(pcPct) ? gla*(pcPct/100) : NaN;
+
+    return { plot, dRow, far, farOv, pcPct, pcAuto, glaPct, rate, per,
+             maxGFA, covBase, cover, gla, driver, driverSrc,
+             parkEmp, parkVis, parkTrk, parkRaw, park, act };
+  }
+
+  /* ---------- ladder ---------------------------------------------------- */
+  function stepRow(o){
+    const row = el("div","step"+(o.cls?" "+o.cls:""));
+    row.appendChild(el("div","step-idx",String(o.n)));
+    const body = el("div","step-body");
+    const name = el("div","step-name");
+    name.appendChild(el("h3",null,o.title));
+    if(o.abbr) name.appendChild(el("span","abbr",o.abbr));
+    body.appendChild(name);
+    body.appendChild(el("p","step-sub",o.sub));
+    body.appendChild(el("div","formula",o.formula));
+    row.appendChild(body);
+    const val = el("div","step-val");
+    val.appendChild(el("span","num",o.value));
+    val.appendChild(el("span","unit",o.unit));
+    if(o.raw) val.appendChild(el("span","raw",o.raw));
+    row.appendChild(val);
+    return row;
+  }
+
+  function render(){
+    const c = calc();
+    const L = $("#ladder"); L.innerHTML = "";
+    const P = Number.isFinite(c.plot) ? fmt(c.plot) : "plot";
+    const G = Number.isFinite(c.maxGFA) ? fmt(c.maxGFA) : "GFA";
+
+    L.appendChild(stepRow({ n:1, cls:"key", title:"Max GFA", abbr:"GFA",
+      sub:"Plot size × floor area ratio",
+      formula: P + " m² × " + (Number.isFinite(c.far)?fmt(c.far,3):"FAR"),
+      value: Number.isFinite(c.maxGFA)?fmt(c.maxGFA):"—", unit:"m²" }));
+
+    L.appendChild(stepRow({ n:2, title:"Plot coverage", abbr:"PC",
+      sub:"Allowed ground footprint, " + fmt(c.pcPct) + "% of " +
+          (state.base==="gfa"?"Max GFA":"plot area") + (c.pcAuto?" · from designation":" · overridden"),
+      formula: (Number.isFinite(c.covBase)?fmt(c.covBase):"base") + " m² × " + fmt(c.pcPct/100,2),
+      value: Number.isFinite(c.cover)?fmt(c.cover):"—", unit:"m²" }));
+
+    L.appendChild(stepRow({ n:3, cls:"key", title:"Gross leasable area", abbr:"GLA",
+      sub: fmt(c.glaPct) + "% of Max GFA",
+      formula: G + " m² × " + fmt(c.glaPct/100,2),
+      value: Number.isFinite(c.gla)?fmt(c.gla):"—", unit:"m²" }));
+
+    const rt = c.rate;
+    L.appendChild(stepRow({ n:4, cls:"count", title:"Parking requirement", abbr:"ITC",
+      sub: rt ? "Code " + rt.code + " at " + fmt(rt.rate_total,3) + " per " + rt.unit_label
+              : "No ITC category selected",
+      formula: !rt ? "—"
+        : (c.per===1 ? (Number.isFinite(c.driver)?fmt(c.driver):"qty") + " × " + fmt(rt.rate_total,3)
+                     : "(" + (Number.isFinite(c.driver)?fmt(c.driver):"qty") + " ÷ " + fmt(c.per) + ") × " + fmt(rt.rate_total,3))
+          + "   [" + c.driverSrc + "]",
+      value: Number.isFinite(c.park)?fmt(c.park):"—", unit:plural(c.park,"bay","bays"),
+      raw: Number.isFinite(c.parkRaw)? "= " + fmt(c.parkRaw,3) + " → ceil" : "" }));
+
+    L.appendChild(stepRow({ n:5, cls:"key", title:"Max allowed activities", abbr:"ACT",
+      sub: fmt(c.pcPct) + "% of GLA, at the designation's max plot coverage",
+      formula: (Number.isFinite(c.gla)?fmt(c.gla):"GLA") + " m² × " + fmt(c.pcPct/100,2),
+      value: Number.isFinite(c.act)?fmt(c.act):"—", unit:"m²" }));
+
+    renderRate(c);
+    renderFlags(c);
+    renderPlan(c);
+    renderChips(c);
+    save();
+  }
+
+  /* ---------- ITC rate panel ------------------------------------------- */
+  function renderRate(c){
+    const hd = $("#rateHd"), bs = $("#rateBars");
+    hd.innerHTML = ""; bs.innerHTML = "";
+    const rt = c.rate;
+    if(!rt){ hd.appendChild(el("span","hint","No category selected.")); return; }
+
+    hd.appendChild(el("span","code",rt.code));
+    hd.appendChild(el("span","nm",rt.class_name));
+    if(rt.variant) hd.appendChild(el("span","var",rt.variant));
+    hd.appendChild(el("span","pill","per " + rt.unit_label));
+    hd.appendChild(el("span","pill", BASIS_LABEL[state.basis] || state.basis));
+    const auto = rt.driver_kind !== "count";
+    hd.appendChild(el("span","pill"+(auto?"":" warn"), auto ? "auto: " + c.driverSrc : "needs " + rt.driver_label));
+
+    const rows = [
+      ["employee", "Employee / res.", rt.rate_employee, c.parkEmp],
+      ["visitor",  "Visitor",         rt.rate_visitor,  c.parkVis],
+      ["truck",    "Truck / bus",     rt.rate_truck,    c.parkTrk]
+    ];
+    const max = Math.max(rt.rate_employee, rt.rate_visitor, rt.rate_truck, 1e-9);
+    rows.forEach(function(row){
+      const cls = row[0], label = row[1], rate = row[2], bays = row[3];
+      const b = el("div","bar "+cls);
+      b.appendChild(el("span","bk",label));
+      const track = el("div","track"), fill = el("div","fill");
+      fill.style.width = Math.max(rate/max*100, rate>0?1.5:0).toFixed(1)+"%";
+      track.appendChild(fill); b.appendChild(track);
+      b.appendChild(el("span","bv", fmt(rate,3) + (Number.isFinite(bays) ? "  ·  " + fmt(bays,2) : "")));
+      bs.appendChild(b);
+    });
+    const t = el("div","bar total");
+    t.appendChild(el("span","bk","Total"));
+    t.appendChild(el("div"));
+    t.appendChild(el("span","bv", fmt(rt.rate_total,3) +
+      (Number.isFinite(c.parkRaw) ? "  ·  " + fmt(c.parkRaw,3) + " " + plural(c.parkRaw,"bay","bays") : "")));
+    bs.appendChild(t);
+
+    // how the week blend was formed
+    if(Number.isFinite(rt.weekday_total) && Number.isFinite(rt.weekend_total)){
+      const sh = shares();
+      const same = Math.abs(rt.weekday_total - rt.weekend_total) < 1e-9;
+      const mix = el("div","mixline");
+      [["weekday", fmt(rt.weekday_total,3), "\u00D7 " + fmt(sh.wd*100,2) + "%", "weekday"],
+       ["weekend", fmt(rt.weekend_total,3), "\u00D7 " + fmt(sh.we*100,2) + "%", "weekend"],
+       ["\u2192 week", fmt(rt.weekday_total*sh.wd + rt.weekend_total*sh.we, 4),
+                        same ? "tabs identical" : "tabs differ", "combined"]].forEach(row=>{
+        const active = row[3] === state.basis;
+        mix.appendChild(el("span","mk",row[0]));
+        mix.appendChild(el("span","mv"+(active?" hi":""),row[1]));
+        mix.appendChild(el("span","ms",row[2] + (active ? "  \u25C0 in use" : "")));
+      });
+      bs.appendChild(mix);
+    }
+  }
+
+  /* ---------- advisories ------------------------------------------------ */
+  function flag(kind, mark, nodes){
+    const f = el("div","flag "+kind);
+    f.appendChild(el("span","mark",mark));
+    const t = el("span");
+    nodes.forEach(n => t.appendChild(typeof n==="string" ? document.createTextNode(n) : n));
+    f.appendChild(t);
+    return f;
+  }
+
+  function renderFlags(c){
+    const F = $("#flags"); F.innerHTML = "";
+    if(!(c.plot>0)) F.appendChild(flag("crit","input",["Enter a plot size greater than zero."]));
+    if(!Number.isFinite(c.far)){
+      const d = c.dRow;
+      if(d && d.remarks){
+        F.appendChild(flag("crit","n/p",[
+          "The Code publishes no Maximum FAR for ", strong(d.designation), " — ",
+          d.remarks.split(".")[0], ". Type an override to proceed."
+        ]));
+      } else {
+        F.appendChild(flag("crit","input",["No FAR available — pick a designation or type an override."]));
+      }
+    }
+    if(c.dRow && !Number.isFinite(num(c.dRow.coverage)) && c.pcAuto){
+      F.appendChild(flag("","n/p",[
+        "No Maximum Plot Coverage published for ", strong(c.dRow.designation),
+        " either, so steps 2 and 5 fall back to ", strong(fmt(COEF.coverageDefault,0)+"%"), "."
+      ]));
+    }
+
+    if(c.rate && c.rate.driver_kind==="count" && !(c.driver>0)){
+      F.appendChild(flag("crit","input",[
+        "Code ", strong(c.rate.code), " is charged per ", strong(c.rate.unit_label.toLowerCase()),
+        ", so enter the ", c.rate.driver_label.toLowerCase(), " to get a parking figure."
+      ]));
+    }
+    if(c.rate && c.rate.driver_kind==="gla"){
+      F.appendChild(flag("info","basis",[
+        "This category is charged against ", strong("GLA"), ", not GFA — so the ",
+        fmt(c.glaPct), "% GLA coefficient in step 3 drives the parking figure."
+      ]));
+    }
+    if(c.rate && c.rate.driver_kind==="site"){
+      F.appendChild(flag("info","basis",[
+        "This category is charged against ", strong("total site area"),
+        ", so parking scales with the plot, not the building."
+      ]));
+    }
+    if(Number.isFinite(c.cover) && Number.isFinite(c.plot) && c.cover > c.plot){
+      F.appendChild(flag("crit","check",[
+        "The footprint of ", strong(area(c.cover)), " is larger than the ", strong(area(c.plot)),
+        " plot. Check the coverage basis in Coefficients."
+      ]));
+    }
+    // L-3 / L-4 from the issued DCR: parking demand above 2 spaces per 100 sqm of
+    // GFA is barred on plots under 1,600 sqm, and is the developer's problem above.
+    const effRate = Number.isFinite(c.parkRaw) && c.maxGFA > 0 ? c.parkRaw/c.maxGFA*100 : NaN;
+    if(Number.isFinite(effRate) && effRate > PARK_CAP + 1e-9){
+      if(c.plot < SMALL_PLOT){
+        F.appendChild(flag("crit","L-4",[
+          "This use demands ", strong(fmt(effRate,2) + " spaces / 100 m² GFA"),
+          ", over the cap of ", strong(String(PARK_CAP)),
+          ". Limitation L-4 bars it on plots under ", strong(fmt(SMALL_PLOT) + " m²"),
+          " — this plot is ", strong(area(c.plot)), "."
+        ]));
+      } else {
+        F.appendChild(flag("","L-3",[
+          "This use demands ", strong(fmt(effRate,2) + " spaces / 100 m² GFA"),
+          ", over the cap of ", strong(String(PARK_CAP)),
+          ". Permitted at this plot size, but L-3 makes the excess the developer's ",
+          "responsibility and grants no additional GFA."
+        ]));
+      }
+    }
+    if(Number.isFinite(c.farOv))
+      F.appendChild(flag("info","manual",["Using a typed FAR instead of the land-use table."]));
+    if(!F.children.length)
+      F.appendChild(flag("info","ok",["All five figures derive from the selected code and ITC category."]));
+  }
+
+  function renderPlan(c){
+    const ok = c.plot>0 && Number.isFinite(c.cover) && c.cover>0;
+    const ratio = ok ? c.cover/c.plot : 0;
+    const side = 220*Math.sqrt(Math.min(ratio,1));
+    const r = $("#coverRect"), off = 10 + (220-side)/2;
+    r.setAttribute("width", side.toFixed(2));
+    r.setAttribute("height", side.toFixed(2));
+    r.setAttribute("x", off.toFixed(2));
+    r.setAttribute("y", off.toFixed(2));
+    r.setAttribute("stroke", ratio>1 ? "var(--crit)" : "var(--accent)");
+    $("#sideLbl").textContent = c.plot>0 ? "≈ " + fmt(Math.sqrt(c.plot),1) + " m sq." : "—";
+    $("#roPlot").textContent  = c.plot>0 ? area(c.plot) : "—";
+    $("#roCover").textContent = Number.isFinite(c.cover) ? area(c.cover) : "—";
+    $("#roRatio").textContent = ok ? fmt(ratio*100,1) + "%" : "—";
+    const storeys = Number.isFinite(c.maxGFA) && c.cover>0 ? c.maxGFA/c.cover : NaN;
+    $("#roStoreys").textContent = Number.isFinite(storeys) ? fmt(storeys,2) + " ×" : "—";
+    $("#roOpen").textContent = ok ? area(c.plot-c.cover) : "—";
+  }
+
+  function renderChips(c){
+    const cc = $("#chipCode"), ci = $("#chipItc");
+    if(Number.isFinite(c.far)){
+      cc.textContent = (c.dRow && !Number.isFinite(c.farOv) ? c.dRow.designation : "manual") +
+                       " · FAR " + fmt(c.far,3) + " · PC " + fmt(c.pcPct,0) + "%";
+      cc.classList.add("on");
+    } else { cc.textContent = "code —"; cc.classList.remove("on"); }
+    if(c.rate){
+      ci.textContent = c.rate.code + " · " + fmt(c.rate.rate_total,3) + " / " +
+                       c.rate.unit_label.replace("sqm","m²") + " · " + state.basis;
+      ci.classList.add("on");
+    } else { ci.textContent = "itc —"; ci.classList.remove("on"); }
+    $("#farShow").textContent = Number.isFinite(c.far) ? fmt(c.far,3) : "—";
+    $("#farSrc").textContent  = Number.isFinite(c.farOv) ? "overridden"
+                              : (c.dRow ? (c.dRow.source==="code"?"from the Code":"added here") : "no designation");
+    if($("#pcShow")){
+      $("#pcShow").textContent = fmt(c.pcPct,2) + "%";
+      $("#pcSrc").textContent  = c.pcAuto
+        ? (c.dRow && Number.isFinite(num(c.dRow.coverage)) ? "from the Code" : "fallback default")
+        : "overridden";
+    }
+    $("#itcShow").textContent = c.rate ? fmt(c.rate.rate_total,3) : "—";
+    $("#itcSrc").textContent  = c.rate ? (BASIS_LABEL[state.basis]||"") + ", 3 components" : "—";
+
+    const drv = $("#driverField");
+    if(c.rate && c.rate.driver_kind==="count"){
+      drv.hidden = false;
+      $("#driverLabel").textContent = c.rate.driver_label;
+      $("#driverUnit").textContent  = c.rate.unit_label.toLowerCase();
+    } else drv.hidden = true;
+  }
+
+
+  /* ---------- land-use codes ------------------------------------------- */
+  function fillDedSelect(){
+    const sel = $("#dedCode"), keep = sel.value;
+    sel.innerHTML = "";
+    let cat = null, og = null;
+    LU.forEach(r=>{
+      if((r.category||"") !== cat){
+        cat = r.category || "";
+        og = el("optgroup"); og.label = cat || "Uncategorised"; sel.appendChild(og);
+      }
+      const far = num(r.far), cov = num(r.coverage);
+      const o = el("option", null,
+        (r.designation||"?") + " — " + (r.name||"unnamed") +
+        "  ·  FAR " + (Number.isFinite(far)?fmt(far,3):"n/p") +
+        "  ·  PC " + (Number.isFinite(cov)?fmt(cov*100,0)+"%":"n/p"));
+      o.value = String(r.id);
+      (og||sel).appendChild(o);
+    });
+    sel.appendChild(Object.assign(el("option",null,"— manual entry only —"),{value:"__none"}));
+    if(LU.some(r=>String(r.id)===keep) || keep==="__none"){ sel.value = keep; return; }
+    const nr = LU.find(r=>String(r.designation).toUpperCase()==="NR")
+            || LU.find(r=>Number.isFinite(num(r.far)) && Number.isFinite(num(r.coverage)));
+    sel.value = nr ? String(nr.id) : (LU[0] ? String(LU[0].id) : "__none");
+  }
+
+
+
+
+  function copy(text){
+    if(navigator.clipboard && navigator.clipboard.writeText)
+      return navigator.clipboard.writeText(text).then(()=>true).catch(()=>false);
+    return Promise.resolve(false);
+  }
+
+
+
+  /* Limitations L-3 and L-4 of the Development Control Regulations cap parking
+     demand at 2 spaces per 100 sqm of GFA, and bar anything above that on plots
+     under 1,600 sqm. */
+  const PARK_CAP = 2;
+  const SMALL_PLOT = 1600;
+
+
+  /* ---------- wiring ---------------------------------------------------- */
+  function wire(){
+    ["plotSize","farManual","driverQty","pcPct","glaPct"].forEach(id=>{
+      document.getElementById(id).addEventListener("input", render);
+    });
+    $("#dedCode").addEventListener("input", render);
+    $("#itcClass").addEventListener("input", ()=>{ fillVariantSelect(); render(); });
+    $("#itcVariant").addEventListener("input", render);
+
+    document.querySelectorAll("[data-base]").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        state.base = b.dataset.base;
+        document.querySelectorAll("[data-base]").forEach(x=>
+          x.setAttribute("aria-pressed", String(x===b)));
+        render();
+      });
+    });
+
+    /* rate basis: week blend, or a single tab */
+    function paintBasis(){
+      document.querySelectorAll("#basisSeg button").forEach(x=>
+        x.setAttribute("aria-pressed", String(x.dataset.basis===state.basis)));
+      $("#weekDays").hidden = state.basis !== "combined";
+      const sh = shares();
+      $("#shareOut").firstElementChild.textContent =
+        state.basis === "combined"
+          ? "Share " + fmt(sh.wd*100,2) + "% / " + fmt(sh.we*100,2) + "%"
+          : BASIS_LABEL[state.basis] + " rates only";
+      $("#shareOut").lastElementChild.textContent =
+        state.basis === "combined" ? WEEK.weekday + " : " + WEEK.weekend + " days" : "";
+    }
+    document.querySelectorAll("#basisSeg button").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        state.basis = b.dataset.basis;
+        paintBasis(); render();
+      });
+    });
+    ["wdDays","weDays"].forEach(id=>{
+      document.getElementById(id).addEventListener("input", ()=>{
+        const v = num(document.getElementById(id).value);
+        WEEK[id === "wdDays" ? "weekday" : "weekend"] = Number.isFinite(v) && v >= 0 ? v : 0;
+        syncWeighting(); paintBasis(); render();
+      });
+    });
+    $("#wdDays").value = WEEK.weekday;
+    $("#weDays").value = WEEK.weekend;
+    paintBasis();
+
+    $("#resetCoef").addEventListener("click", ()=>{
+      $("#pcPct").value = "";                 // back to the designation's value
+      $("#glaPct").value = COEF.glaPct;
+      state.base = COEF.base;
+      document.querySelectorAll("[data-base]").forEach(x=>
+        x.setAttribute("aria-pressed", String(x.dataset.base===COEF.base)));
+      render();
+    });
+
+    $("#copySummary").addEventListener("click", ()=>{
+      const c = calc(), rt = c.rate;
+      const lines = [
+        "PLOT YIELD - DCR calculation",
+        "",
+        "Plot size            " + area(c.plot),
+        "Land-use code        " + (c.dRow ? c.dRow.code + " (" + c.dRow.name + ")" : "manual"),
+        "FAR                  " + fmt(c.far,3) + (Number.isFinite(c.farOv) ? "  [override]" : ""),
+        "ITC code             " + (rt ? rt.code + " - " + rt.class_name + (rt.variant?" ["+rt.variant+"]":"") : "none"),
+        "ITC rate             " + (rt ? fmt(rt.rate_employee,3) + " empl + " + fmt(rt.rate_visitor,3) +
+                                   " vis + " + fmt(rt.rate_truck,3) + " truck = " + fmt(rt.rate_total,3) +
+                                   " per " + rt.unit_label : "-"),
+        "Charged against      " + (rt ? c.driverSrc + " = " + fmt(c.driver) : "-"),
+        "",
+        "1  Max GFA           " + area(c.maxGFA) + "   = " + fmt(c.plot) + " x " + fmt(c.far,3),
+        "2  Plot coverage     " + area(c.cover) + "   = " + fmt(c.covBase) + " x " + fmt(c.pcPct/100,2) +
+          "  (of " + (state.base==="gfa"?"Max GFA":"plot area") + ")",
+        "3  GLA               " + area(c.gla) + "   = " + fmt(c.maxGFA) + " x " + fmt(c.glaPct/100,2),
+        "4  Parking required  " + fmt(c.park) + " " + plural(c.park,"bay","bays") + "   = " +
+          (c.per===1 ? fmt(c.driver) + " x " + fmt(rt?rt.rate_total:NaN,3)
+                     : "(" + fmt(c.driver) + " / " + fmt(c.per) + ") x " + fmt(rt?rt.rate_total:NaN,3)) +
+          " = " + fmt(c.parkRaw,3) + " -> ceil",
+        "5  Max activities    " + fmt(c.act) + "   = " + fmt(c.gla) + " / " + fmt(c.unit) +
+          " = " + fmt(c.actRaw,2) + " -> floor",
+        "",
+        "Footprint / plot     " + (c.plot>0 ? fmt(c.cover/c.plot*100,1) + "%" : "-"),
+        "Indicative storeys   " + (c.cover>0 ? fmt(c.maxGFA/c.cover,2) + " x" : "-"),
+        "",
+        "Rates: " + (META.source_file||"ITC matrix") + " (" + (META.sheets||"weekday") + ")."
+      ];
+      copy(lines.join("\n")).then(ok=>{
+        const m = $("#copyMsg");
+        m.textContent = ok ? "Summary copied." : "Copy blocked by the browser.";
+        m.classList.toggle("err", !ok);
+        setTimeout(()=>{ m.textContent = ""; }, 3200);
+      });
+    });
+
+    $("#loadBoard").addEventListener("click", ()=>{
+      $("#plotSize").value = 1000;
+      $("#farManual").value = "";
+      $("#pcPct").value = "";
+      let nr = LU.find(r=>String(r.designation).toUpperCase()==="NR");
+      if(!nr){
+        nr = { id:nextDedId(), category:"COMMERCIAL", designation:"NR",
+               name:"NEIGHBOURHOOD RETAIL", far:1.05, coverage:0.6,
+               remarks:null, source:"code" };
+        LU.unshift(nr);
+        syncDed(); fillDedSelect();
+      }
+      $("#dedCode").value = String(nr.id);
+      if([...$("#itcClass").options].some(o=>o.value==="112")) $("#itcClass").value = "112";
+      fillVariantSelect();
+      $("#resetCoef").click();
+      const m = $("#copyMsg");
+      m.textContent = "Loaded: 1,000 m² · NR · ITC 112";
+      m.classList.remove("err");
+      setTimeout(()=>{ m.textContent = ""; }, 3200);
+    });
+
+  }
+
+  /* ---------- boot ------------------------------------------------------ */
+  function start(){
+    const saved = loadSaved();
+    if(saved && Array.isArray(saved.lu) && saved.lu.length){
+      LU = saved.lu.map((r,i)=>({
+        id: r.id || i+1, category: String(r.category||""),
+        designation: String(r.designation==null?"":r.designation),
+        name: String(r.name==null?"":r.name),
+        far: Number.isFinite(num(r.far)) ? num(r.far) : null,
+        coverage: Number.isFinite(num(r.coverage)) ? num(r.coverage) : null,
+        remarks: r.remarks || null, source: r.source || "custom"
+      }));
+      syncDed();
+    }
+
+    $("#chipDb").textContent = (sqlLive ? "sqlite · " : "snapshot · ") + (META.codes||base().length) + " codes";
+    $("#chipDb").classList.add("on");
+    $("#chipDb").title = sqlLive
+      ? "Rates queried from an embedded SQLite database"
+      : "WebAssembly unavailable; using the build-time snapshot of the same database";
+    $("#footRows").textContent = META.codes || String(base().length);
+    if($("#footDesig")) $("#footDesig").textContent = META.designations || String(LU.length);
+    const fs = $("#footSrc");
+    if(fs && META.source_file) fs.textContent = META.source_file;
+    $("#glaPct").value = COEF.glaPct;
+
+    fillDedSelect();
+    fillClassSelect();
+    fillVariantSelect();
+
+    if(saved && saved.form){
+      Object.keys(saved.form).forEach(k=>{
+        const n = document.getElementById(k);
+        if(n && saved.form[k]!=null && k!=="itcVariant") n.value = saved.form[k];
+      });
+      if(saved.form.base){
+        state.base = saved.form.base;
+        document.querySelectorAll("[data-base]").forEach(x=>
+          x.setAttribute("aria-pressed", String(x.dataset.base===saved.form.base)));
+      }
+      if(saved.form.basis && BASIS_LABEL[saved.form.basis]) state.basis = saved.form.basis;
+      if(!LU.some(r=>String(r.id)===$("#dedCode").value) && $("#dedCode").value!=="__none")
+        $("#dedCode").value = LU[0] ? String(LU[0].id) : "__none";
+      if(![...$("#itcClass").options].some(o=>o.value===$("#itcClass").value)) fillClassSelect();
+      fillVariantSelect();
+      if(saved.form.itcVariant && [...$("#itcVariant").options].some(o=>o.value===saved.form.itcVariant))
+        $("#itcVariant").value = saved.form.itcVariant;
+    }
+
+    wire();
+    render();
+  }
+
+  function bootSnapshot(why){
+    sqlLive = false;
+    loadFromSnapshot();
+    start();
+    if(why && window.console) console.warn("SQLite unavailable, using snapshot:", why);
+  }
+
+  try{
+    initSqlJs({ wasmBinary: b64ToBytes(WASM_B64) }).then(function(SQL){
+      try{
+        db = new SQL.Database(b64ToBytes(DB_B64));
+        sqlLive = true;
+        loadFromSql();
+        start();
+      }catch(e){ bootSnapshot(e); }
+    }).catch(function(e){ bootSnapshot(e); });
+  }catch(e){ bootSnapshot(e); }
+})();
+</script>
