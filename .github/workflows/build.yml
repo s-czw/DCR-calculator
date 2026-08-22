@@ -1,10 +1,18 @@
-name: build
+name: build & deploy
 
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Pages deployments must queue rather than cancel each other.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -17,8 +25,8 @@ jobs:
           python-version: '3.12'
 
       # embed_db.py is standard library only, so there is nothing to install.
-      # build_db.py reads the source workbooks and needs xlrd/openpyxl, so it stays
-      # a local step: itc_rates.db is committed as its output.
+      # build_db.py reads the source workbooks and needs xlrd/openpyxl, so it
+      # stays a local step: itc_rates.db is committed as its output.
       - name: Build the page
         run: python3 embed_db.py
 
@@ -30,12 +38,62 @@ jobs:
           mkdir -p dist
           cp dcr-calculator.html dist/index.html
 
-      - uses: actions/upload-artifact@v4
+      # Always downloadable from the run summary, whatever the deploy target is.
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
           name: dcr-calculator
           path: dist/
           retention-days: 30
 
-      # To publish, add a deploy step here once a host is chosen — e.g.
-      # Azure/static-web-apps-deploy@v1, actions/deploy-pages@v4, or rsync over
-      # SSH to an internal box. See README.
+      - name: Upload Pages artifact
+        if: vars.DEPLOY_TARGET == 'pages' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  # ---------------------------------------------------------------------------
+  # Deploy targets. Both stay inert until the repository variable DEPLOY_TARGET
+  # is set, so the pipeline never fails on a half-configured deployment.
+  #   Settings -> Secrets and variables -> Actions -> Variables -> DEPLOY_TARGET
+  # ---------------------------------------------------------------------------
+
+  deploy-pages:
+    # Needs Pages enabled: Settings -> Pages -> Source: GitHub Actions.
+    # On a private repo this requires a paid plan, and the published site is
+    # PUBLIC unless the org is on Enterprise Cloud with Pages access control.
+    needs: build
+    if: vars.DEPLOY_TARGET == 'pages' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  deploy-azure:
+    # Azure Static Web Apps. Repo stays private, and Entra ID auth can restrict
+    # the site to invited people. Needs the repository secret
+    # AZURE_STATIC_WEB_APPS_TOKEN (deployment token from the Static Web App).
+    needs: build
+    if: vars.DEPLOY_TARGET == 'azure' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dcr-calculator
+          path: dist
+
+      - uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_TOKEN }}
+          action: upload
+          app_location: dist
+          skip_app_build: true
+          skip_api_build: true

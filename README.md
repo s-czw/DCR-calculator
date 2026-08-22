@@ -15,7 +15,7 @@ ITC rate matrix are both embedded as a SQLite database and queried live in the p
 | `embed_db.py` | `dcr-calculator.src.html` + db + sql.js &rarr; `dcr-calculator.html` |
 | `verify_build.py` | Post-build checks: placeholders substituted, output pure ASCII, no plot data. |
 | `vendor/sql-wasm.{js,wasm}` | sql.js 1.13.0 — SQLite compiled to WebAssembly. See `vendor/README.md`. |
-| `.github/workflows/build.yml` | CI: builds and verifies on every push. No deploy step yet. |
+| `.github/workflows/build.yml` | CI: build, verify, then deploy to whichever target `DEPLOY_TARGET` selects. |
 
 ## Rebuilding
 
@@ -59,6 +59,52 @@ WebAssembly is blocked it falls back to a JSON snapshot of the same tables expor
 `embed_db.py` at build time. Same source, two encodings — figures are identical either
 way. The status chip in the header reads `sqlite` or `snapshot` so you can tell which
 path ran.
+
+## Deploying
+
+CI builds and verifies on every push and pull request, and uploads the page as a run
+artifact. Deployment is **off until you opt in**, so nothing fails while it is unconfigured.
+
+Pick a target by setting a repository variable — *Settings → Secrets and variables → Actions
+→ Variables* — named `DEPLOY_TARGET`:
+
+| `DEPLOY_TARGET` | Also needs | Result |
+|---|---|---|
+| unset | — | build + verify only; download the page from the run summary |
+| `azure` | secret `AZURE_STATIC_WEB_APPS_TOKEN` | Azure Static Web Apps; repo stays private, Entra ID can restrict access to invited people |
+| `pages` | *Settings → Pages → Source: GitHub Actions* | GitHub Pages |
+
+### A caveat on GitHub Pages
+
+This repository is private. Pages on a private repository requires a paid plan, and the
+published site is **public** regardless — the repository stays private, the site does not.
+Access control for Pages exists only on GitHub Enterprise Cloud. So Pages is the wrong
+choice if the point is to limit the audience; use `azure` (or put Cloudflare Access in front
+of a static host) for that.
+
+The page carries no secrets, and no plot-specific data — `verify_build.py` enforces that. But
+it does hold the land-use designation schedule and the full ITC rate matrix, and several
+figures are not yet confirmed with DMT. Read *Confirmed vs. assumed* before making it
+reachable by anyone who might quote it.
+
+### Adding another target
+
+`build` produces `dist/` and uploads it as the `dcr-calculator` artifact. Any new deploy job
+downloads that artifact and ships it — for an internal box, that is an rsync over SSH:
+
+```yaml
+  deploy-ssh:
+    needs: build
+    if: vars.DEPLOY_TARGET == 'ssh' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: dcr-calculator, path: dist }
+      - run: |
+          install -m 600 /dev/stdin key <<< "${{ secrets.DEPLOY_KEY }}"
+          rsync -az --delete -e "ssh -i key -o StrictHostKeyChecking=accept-new" \
+            dist/ "${{ secrets.DEPLOY_TARGET_HOST }}"
+```
 
 ## Schema
 
