@@ -194,7 +194,7 @@ Worked example — Warehousing `713` on a 1,000 m² plot at FAR 1.05 (GFA 1,050 
 
 ```
 1  Max GFA        = plot size x FAR                  FAR from the designation
-2  Plot coverage  = Max GFA x coverage%              coverage from the designation
+2  Plot coverage  = Max GFA x coverage%              always against Max GFA
 3  GLA            = Max GFA x GLA%                   GLA% an input, default 75%
 4  Activities     = floor( GLA / unit area )         unit area an input, default 60 m2
 
@@ -319,11 +319,11 @@ Confirmed from source:
 
 Still needs sign-off:
 
-1. **Plot coverage is taken as 60% of Max GFA**, not of plot area — as drawn on the
-   whiteboard. The issued report prints `MAX. PLOT COVERAGE   60%` as a bare percentage
+1. **Plot coverage is taken as coverage% of Max GFA**, not of plot area — as drawn on the
+   whiteboard. The toggle offering the plot-area basis was removed on request, so this is now
+   the only basis. The issued report prints `MAX. PLOT COVERAGE   60%` as a bare percentage
    with no area, consistent with coverage being a footprint ratio of *plot area* and
-   suggesting the whiteboard's reading is wrong. Both bases are available under
-   *Coefficients*; Max GFA is still the default, pending confirmation.
+   suggesting the whiteboard's reading is wrong. Still worth confirming against the Code.
 2. **The handwritten Arabic note** reading roughly "take 50% of the PCT" now has a likely
    referent: limitation **L-2** of the issued report requires "a minimum of 50% of the
    plot's total GFA … allocated to the specified uses and … not less than 50% of the total

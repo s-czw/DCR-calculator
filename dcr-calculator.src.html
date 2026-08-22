@@ -127,7 +127,15 @@ label,.lbl{
 .seg button[aria-pressed="true"]{background:var(--accent); color:var(--surface); font-weight:500}
 
 fieldset{border:0; margin:0; padding:0; display:flex; flex-direction:column; gap:14px}
-.grid2{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px}
+.grid2{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px;
+  grid-template-rows:auto auto}
+/* Line the controls up even when one label wraps to two lines. */
+@supports (grid-template-rows: subgrid){
+  .grid2>.field{display:grid; grid-template-rows:subgrid; grid-row:span 2}
+}
+@supports not (grid-template-rows: subgrid){
+  .grid2{align-items:end}
+}
 .rule{height:1px; background:var(--line); margin:2px 0}
 details.coef>summary{
   cursor:pointer; list-style:none; display:flex; align-items:center; justify-content:space-between;
@@ -477,7 +485,7 @@ tbody tr:last-child td{border-bottom:0}
             </div>
             <div class="grid2">
               <div class="field">
-                <label for="bayArea">Area per parking bay</label>
+                <label for="bayArea">Bay area</label>
                 <div class="ctl"><input id="bayArea" type="number" min="1" step="1" value="25"><span class="suffix">m&#x00B2;</span></div>
               </div>
               <div class="field">
@@ -488,16 +496,7 @@ tbody tr:last-child td{border-bottom:0}
             <p class="hint">Bay area is an <b>assumption</b>: the cap is a share of plot area, but
               ITC rates give a bay count, so a bay needs an area before the two can be compared.
               25 m&#x00B2; is a typical bay-plus-aisle allowance &#x2014; confirm it.</p>
-            <div class="field">
-              <span class="lbl">Coverage measured against</span>
-              <div class="seg" role="group" aria-label="Coverage base">
-                <button type="button" data-base="gfa" aria-pressed="true">Max GFA</button>
-                <button type="button" data-base="plot" aria-pressed="false">Plot area</button>
-              </div>
-              <p class="hint">The source worksheet takes <b>60% of Max GFA</b>. Switch to plot area if your
-                code defines coverage as a footprint ratio.</p>
-            </div>
-            <div class="btnrow"><button type="button" class="btn mini" id="resetCoef">Reset coefficients</button></div>
+            <div class="btnrow"><button type="button" class="btn mini" id="resetCoef">Reset fixed values</button></div>
           </div>
         </details>
 
@@ -636,13 +635,13 @@ tbody tr:last-child td{border-bottom:0}
     return t > 0 ? { wd:WEEK.weekday/t, we:WEEK.weekend/t } : { wd:1, we:0 };
   }
   const KEY = "dcr.calc.v2";
-  const COEF = { glaPct:75, coverageDefault:60, base:"gfa" };
+  const COEF = { glaPct:75, coverageDefault:60 };
 
   /* SQLite drives the page. If the host blocks WebAssembly we fall back to the
      build-time snapshot of the same database so the calculator still works. */
   let db = null, sqlLive = false;
   let ITC = [], LU = [], META = {};   /* LU = base-district designations */
-  const state = { base:"gfa", basis:"combined", itcLoc:"AD-CBD", groupOrder:[] };
+  const state = { basis:"combined", itcLoc:"AD-CBD", groupOrder:[] };
 
   /* ---------- helpers --------------------------------------------------- */
   const $ = s => document.querySelector(s);
@@ -776,7 +775,7 @@ tbody tr:last-child td{border-bottom:0}
 
   /* ---------- storage --------------------------------------------------- */
   function readForm(){
-    const o = { base:state.base, basis:state.basis, itcLoc:state.itcLoc,
+    const o = { basis:state.basis, itcLoc:state.itcLoc,
                 sched: SCHED.map(r=>({ act: r.act ? r.act.activity_id : null,
                                        slots: r.slots, itcOverride: r.itcOverride,
                                        qty: r.qty })) };
@@ -811,8 +810,7 @@ tbody tr:last-child td{border-bottom:0}
 
 
     const maxGFA  = plot>0 && Number.isFinite(far) ? plot*far : NaN;
-    const covBase = state.base==="gfa" ? maxGFA : plot;
-    const cover   = Number.isFinite(covBase) && Number.isFinite(pcPct) ? covBase*(pcPct/100) : NaN;
+    const cover   = Number.isFinite(maxGFA) && Number.isFinite(pcPct) ? maxGFA*(pcPct/100) : NaN;
     const gla     = Number.isFinite(maxGFA) && Number.isFinite(glaPct) ? maxGFA*(glaPct/100) : NaN;
 
     // Max allowed activities = GLA / unit area, floored: a partial unit is no unit.
@@ -822,7 +820,7 @@ tbody tr:last-child td{border-bottom:0}
     const sched   = schedTotals(act);
 
     return { plot, dRow, far, farOv, pcPct, pcAuto, glaPct, unit,
-             maxGFA, covBase, cover, gla, actRaw, act, sched };
+             maxGFA, cover, gla, actRaw, act, sched };
   }
 
   /* ==================== ACTIVITY SCHEDULE ==============================
@@ -1156,8 +1154,8 @@ tbody tr:last-child td{border-bottom:0}
 
     L.appendChild(stepRow({ n:2, title:"Plot coverage", abbr:"PC",
       sub:"Allowed ground footprint, " + fmt(c.pcPct) + "% of " +
-          (state.base==="gfa"?"Max GFA":"plot area") + (c.pcAuto?" · from designation":" · overridden"),
-      formula: (Number.isFinite(c.covBase)?fmt(c.covBase):"base") + " m² × " + fmt(c.pcPct/100,2),
+          "Max GFA" + (c.pcAuto?" · from designation":" · overridden"),
+      formula: (Number.isFinite(c.maxGFA)?fmt(c.maxGFA):"GFA") + " m² × " + fmt(c.pcPct/100,2),
       value: Number.isFinite(c.cover)?fmt(c.cover):"—", unit:"m²" }));
 
     L.appendChild(stepRow({ n:3, cls:"key", title:"Gross leasable area", abbr:"GLA",
@@ -1480,14 +1478,6 @@ tbody tr:last-child td{border-bottom:0}
     });
     $("#dedCode").addEventListener("input", render);
 
-    document.querySelectorAll("[data-base]").forEach(b=>{
-      b.addEventListener("click", ()=>{
-        state.base = b.dataset.base;
-        document.querySelectorAll("[data-base]").forEach(x=>
-          x.setAttribute("aria-pressed", String(x===b)));
-        render();
-      });
-    });
 
     /* rate basis: week blend, or a single tab */
     function paintBasis(){
@@ -1522,9 +1512,6 @@ tbody tr:last-child td{border-bottom:0}
     $("#resetCoef").addEventListener("click", ()=>{
       $("#pcPct").value = "";                 // back to the designation's value
       $("#glaPct").value = COEF.glaPct;
-      state.base = COEF.base;
-      document.querySelectorAll("[data-base]").forEach(x=>
-        x.setAttribute("aria-pressed", String(x.dataset.base===COEF.base)));
       render();
     });
 
@@ -1540,7 +1527,7 @@ tbody tr:last-child td{border-bottom:0}
         "ITC location         " + state.itcLoc + "   basis " + state.basis,
         "",
         "1  Max GFA           " + area(c.maxGFA) + "   = " + fmt(c.plot) + " x " + fmt(c.far,3),
-        "2  Plot coverage     " + area(c.cover) + "   = " + fmt(c.covBase) + " x " + fmt(c.pcPct/100,4),
+        "2  Plot coverage     " + area(c.cover) + "   = " + fmt(c.maxGFA) + " x " + fmt(c.pcPct/100,4),
         "3  GLA               " + area(c.gla) + "   = " + fmt(c.maxGFA) + " x " + fmt(c.glaPct/100,2),
         "4  Max activities    " + fmt(c.act) + "   = " + fmt(c.gla) + " / " + fmt(c.unit) +
           " = " + fmt(c.actRaw,3) + " -> floor",
@@ -1631,11 +1618,6 @@ tbody tr:last-child td{border-bottom:0}
         const n = document.getElementById(k);
           if(n && saved.form[k]!=null) n.value = saved.form[k];
       });
-      if(saved.form.base){
-        state.base = saved.form.base;
-        document.querySelectorAll("[data-base]").forEach(x=>
-          x.setAttribute("aria-pressed", String(x.dataset.base===saved.form.base)));
-      }
       if(saved.form.basis && BASIS_LABEL[saved.form.basis]) state.basis = saved.form.basis;
       if(saved.form.itcLoc) state.itcLoc = saved.form.itcLoc;
       if(Array.isArray(saved.form.sched) && saved.form.sched.length){
