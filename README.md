@@ -138,7 +138,13 @@ values never looks like one derived from a hand-entered assumption.
 
 ## Visual design
 
-One dark palette, from the project Figma, applied deliberately rather than derived:
+Two palettes. **Light is the default** — a first visit is light whatever the operating system
+is set to, because `prefers-color-scheme` is deliberately not consulted. The masthead carries a
+Light/Dark segmented control; the choice is remembered in `localStorage` under `dcr.theme` and
+re-applied by a small inline script in the head, ahead of the stylesheet, so a stored dark
+choice does not flash light first.
+
+Dark is the project Figma palette, applied deliberately rather than derived:
 
 | Token | Value | Use |
 |---|---|---|
@@ -149,13 +155,39 @@ One dark palette, from the project Figma, applied deliberately rather than deriv
 | blue | `#4786C9` | Max GFA and GLA figures, links, primary actions |
 | yellow | `#DC9530` | the activity count, and warnings |
 
-Type is **Manrope** throughout, with IBM Plex Mono kept for formula chips and small numeric
-annotations. There is no light variant: the page commits to this palette and paints every
-colour explicitly, so it renders the same whatever the viewer's theme.
+Light inverts the depth relationship — cards sit *above* the page rather than below it, so the
+surface is white and the page a light grey:
+
+| Token | Value | Use |
+|---|---|---|
+| page | `#F4F4F5` | ground |
+| panel | `#FFFFFF` | surfaces |
+| ink | `#1C1C1C` | headings, values, table text |
+| grey | `#5C5C61` | labels, hints, sub-lines, units |
+| blue | `#2C6098` | figures and links at text size; `#4786C9` for large display and borders |
+| yellow | `#8A5A0C` | the activity count, and warnings |
+| border | `#8D8D91` | field borders and structural rules |
+
+Type is **Manrope** throughout in both themes, with IBM Plex Mono kept for formula chips and
+small numeric annotations. Every colour is painted explicitly, so neither theme inherits
+anything from the viewer.
 
 ### Contrast, on the record
 
-Two of the four text colours do not meet WCAG AA for normal-size text on `#242425`:
+**Light mode clears WCAG AA in full** — an in-browser audit over every element with its own
+text found 0 failures out of 203, checked against the effective background and the real font
+size, at 4.5:1 for normal text and 3.0:1 for large. Two token splits are what make that work,
+and both are load-bearing:
+
+- `--accent` (`#4786C9`) is only 3.80:1 on white, so it is confined to borders and the large
+  display figures, where 3.0 applies. Text-size accent uses `--accent-ink` (`#2C6098`, 6.49:1).
+- `--accent-solid` (`#2C6098` in light) is the fill behind white button labels. On `#4786C9`
+  white is 3.80:1; on `#2C6098` it is 6.49:1.
+
+`--line-strong` is `#8D8D91` rather than a hairline because it borders form fields, which WCAG
+1.4.11 holds to 3:1 — it clears it at 3.31:1 on a card and 3.01:1 on the page.
+
+**Dark mode does not, and is unchanged.** Two of its four text colours fall short on `#242425`:
 
 | Colour | Ratio | Status |
 |---|---|---|
@@ -164,14 +196,19 @@ Two of the four text colours do not meet WCAG AA for normal-size text on `#24242
 | `#4786C9` | 4.08 | large text only (AA needs 4.5 for normal, 3.0 for large) |
 | `#7D7D81` | 3.78 | large text only |
 
-That affects roughly 22 styles — labels, hints, sub-lines, table headers, chips, the status
-badges — plus white on the blue button fill at 3.80. The large figures pass, because at weight
-700 and 18.66 px or more they only need 3.0.
+The same audit run in dark mode reports 158 failures on those two colours. That affects labels,
+hints, sub-lines, table headers, chips and the status badges. The large figures pass, because at
+weight 700 and 18.66 px or more they only need 3.0.
 
 **This is a deliberate design decision, not an oversight.** Do not "fix" it without checking
 first. If it is ever revisited, the minimum change that clears AA is `#7D7D81` -> `#8A8A8E`
-and `#4786C9` -> `#4F8ED1`, both visually near-identical, plus darkening the primary button's
-label or deepening its fill.
+and `#4786C9` -> `#4F8ED1`, both visually near-identical, plus pointing `--accent-solid` at a
+deeper blue in dark as it already is in light.
+
+The one dark-mode contrast fix that *was* made is the theme control itself, since it is new
+rather than specified: its active option is `--ink` on the accent tint (11.77:1 dark, 14.79:1
+light) rather than the accent blue, which would have been 3.09:1 in dark. The inactive option
+stays on `--ink-3`, matching the chips beside it.
 
 ## Batch export from a geodatabase
 

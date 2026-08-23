@@ -1,21 +1,54 @@
 <title>DCR Plot Yield Calculator</title>
+<script>
+/* Runs before the stylesheet so a stored dark choice does not flash light first.
+   No stored choice means light: the default is light regardless of the OS
+   setting, which is why prefers-color-scheme is not consulted. */
+(function(){
+  try{
+    var t = localStorage.getItem("dcr.theme");
+    if(t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+  }catch(e){}
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root{
-  /* Single dark palette, from the Figma. No light variant is specified, so the
-     page commits to this one and paints every colour explicitly. */
+  /* Light is the default: a bare :root, no prefers-color-scheme, so a first
+     visit is light whatever the OS is set to. Cards sit above the page rather
+     than below it, so surface is lighter than paper -- the inverse of dark.
+     Every text colour here clears WCAG AA on the grounds it is painted on;
+     line-strong is #8D8D91 rather than a hairline because it is the border of
+     a form field, which 1.4.11 holds to 3:1. */
+  color-scheme:light;
+  --paper:#F4F4F5; --surface:#FFFFFF; --surface-2:#FAFAFA; --sunk:#EFEFF0;
+  --line:#E2E2E4; --line-strong:#8D8D91;
+  --ink:#1C1C1C; --ink-2:#5C5C61; --ink-3:#5C5C61;
+  --accent:#4786C9; --accent-ink:#2C6098; --accent-soft:#E7F0F9;
+  --accent-solid:#2C6098;
+  --brass:#8A5A0C; --brass-soft:#FBF1DE;
+  --ok:#2C6098; --warn:#8A5A0C; --crit:#BE3123;
+  --crit-soft:#FBEBE9;
+  --shadow:0 1px 2px rgba(16,16,20,.07), 0 4px 14px rgba(16,16,20,.06);
+
+  --r:10px;
+  --step:clamp(.9rem,.85rem + .2vw,1rem);
+}
+:root[data-theme="dark"]{
+  /* The Figma palette, unchanged. Its borders are deliberately near-invisible
+     (line-strong is 1.4:1 on surface); that is the specified look, so it is
+     left alone rather than quietly corrected. */
+  color-scheme:dark;
   --paper:#1C1C1C; --surface:#242425; --surface-2:#2A2A2B; --sunk:#1C1C1C;
   --line:#323233; --line-strong:#3C3C3E;
   --ink:#FFFFFF; --ink-2:#7D7D81; --ink-3:#7D7D81;
   --accent:#4786C9; --accent-ink:#4786C9; --accent-soft:#2B3949;
+  --accent-solid:#4786C9;
   --brass:#DC9530; --brass-soft:#3A2C16;
   --ok:#4786C9; --warn:#DC9530; --crit:#E8776B;
   --crit-soft:#3A211E;
   --shadow:none;
-  --r:10px;
-  --step:clamp(.9rem,.85rem + .2vw,1rem);
 }
 
 *{box-sizing:border-box}
@@ -54,6 +87,20 @@ h1 em{font-style:normal; color:var(--accent)}
 }
 .chip.on{color:var(--ink-2)}
 .chip.bad{border-color:var(--crit); color:var(--crit)}
+/* Segmented light/dark control. Both options stay visible so the current one is
+   legible without a tooltip, which a single cycling button cannot manage. */
+.theme{display:inline-flex; padding:2px; gap:2px; border:1px solid var(--line);
+  border-radius:8px; background:var(--surface)}
+.theme button{
+  font-family:Manrope,sans-serif; font-size:.66rem; letter-spacing:.09em; font-weight:500;
+  text-transform:uppercase; padding:5px 10px; border:0; border-radius:6px; cursor:pointer;
+  background:none; color:var(--ink-3);
+}
+.theme button:hover{color:var(--ink)}
+/* --ink, not --accent-ink: the active choice has to stay legible in dark too,
+   where the accent is only 3.1:1 on the tint. */
+.theme button[aria-pressed="true"]{background:var(--accent-soft); color:var(--ink)}
+.theme button:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
 
 /* ---------- shell ---------- */
 .cols{display:grid; grid-template-columns:minmax(0,340px) minmax(0,1fr); gap:28px; align-items:start; margin-top:28px}
@@ -79,7 +126,7 @@ h1 em{font-style:normal; color:var(--accent)}
 }
 .panel.fold[open]>summary::after{content:"\2013"}
 .panel.fold:not([open])>summary{border-bottom:0}
-.panel.fold>summary:hover h2{color:var(--accent)}
+.panel.fold>summary:hover h2{color:var(--accent-ink)}
 /* The UA rule that hides a closed details' children is a UA rule, so an author
    display on a child (.plan is display:grid) wins and the panel stays open. */
 .panel.fold:not([open])>*:not(summary){display:none !important}
@@ -111,10 +158,10 @@ label,.lbl{
 .hint{font-size:.76rem; color:var(--ink-3); margin:0}
 .hint b{color:var(--ink-2); font-weight:600}
 .derived{
-  font-family:Manrope,sans-serif; font-size:.76rem; color:var(--accent);
+  font-family:Manrope,sans-serif; font-size:.76rem; color:var(--accent-ink);
   display:flex; justify-content:space-between; gap:8px;
 }
-.derived b{color:var(--accent); font-weight:600}
+.derived b{color:var(--accent-ink); font-weight:600}
 .derived .src{color:var(--ink-3)}
 
 .seg{display:flex; border:1px solid var(--line); border-radius:7px; overflow:hidden; background:var(--sunk)}
@@ -124,7 +171,7 @@ label,.lbl{
   font-weight:500;
 }
 .seg button+button{border-left:1px solid var(--line)}
-.seg button[aria-pressed="true"]{background:var(--accent); color:#FFFFFF; font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--accent-solid); color:#FFFFFF; font-weight:600}
 
 fieldset{border:0; margin:0; padding:0; display:flex; flex-direction:column; gap:14px}
 .grid2{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px;
@@ -152,8 +199,8 @@ details.coef>div{padding-top:14px; display:flex; flex-direction:column; gap:14px
   padding:10px 16px; border-radius:7px; border:1px solid var(--line-strong);
   background:transparent; color:var(--ink); transition:border-color .15s, background .15s;
 }
-.btn:hover{border-color:var(--accent); color:var(--accent)}
-.btn.primary{background:var(--accent); border-color:var(--accent); color:#FFFFFF}
+.btn:hover{border-color:var(--accent-ink); color:var(--accent-ink)}
+.btn.primary{background:var(--accent-solid); border-color:var(--accent-solid); color:#FFFFFF}
 .btn.primary:hover{filter:brightness(1.1); color:#FFFFFF}
 .btn.mini{padding:5px 9px; font-size:.72rem; font-weight:500}
 .btn.icon{padding:4px 8px; font-family:"IBM Plex Mono",monospace; line-height:1}
@@ -233,7 +280,7 @@ details.coef>div{padding-top:14px; display:flex; flex-direction:column; gap:14px
   background:var(--brass-soft); color:var(--brass); border:1px solid transparent;
 }
 .flag.crit .mark{background:var(--crit-soft); color:var(--crit)}
-.flag.info .mark{background:var(--accent-soft); color:var(--accent)}
+.flag.info .mark{background:var(--accent-soft); color:var(--accent-ink)}
 .flag b{color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums}
 
 /* ---------- plan diagram ---------- */
@@ -246,7 +293,7 @@ details.coef>div{padding-top:14px; display:flex; flex-direction:column; gap:14px
   text-transform:uppercase; color:var(--ink-3)}
 .readout .v{font-family:Manrope,sans-serif; font-size:.85rem; font-weight:600;
   font-variant-numeric:tabular-nums; color:var(--ink)}
-.readout .v.hi{color:var(--accent)}
+.readout .v.hi{color:var(--accent-ink)}
 .swatch{display:inline-block; width:9px; height:9px; margin-right:6px; border:1px solid var(--line-strong); vertical-align:baseline}
 
 /* ---------- reference tables ---------- */
@@ -382,7 +429,7 @@ tbody tr:last-child td{border-bottom:0}
   text-transform:uppercase; color:var(--ink-3)}
 .park .pv{font-family:Manrope,sans-serif; font-weight:700; font-size:clamp(1.25rem,1rem + .8vw,1.65rem);
   letter-spacing:-.025em; font-variant-numeric:tabular-nums; color:var(--ink); line-height:1.1}
-.park .pv.hi{color:var(--accent)}
+.park .pv.hi{color:var(--accent-ink)}
 .park .pv.bad{color:var(--crit)}
 .park .ps{font-family:Manrope,sans-serif; font-size:.68rem; color:var(--ink-3)}
 .park.over > div{background:var(--crit-soft)}
@@ -426,6 +473,10 @@ tbody tr:last-child td{border-bottom:0}
       <span class="chip" id="chipCode">code &#x2014;</span>
       <span class="chip" id="chipPark">parking &#x2014;</span>
       <span class="chip" id="chipOv" hidden>overrides &#x2014;</span>
+      <div class="theme" role="group" aria-label="Colour theme">
+        <button type="button" id="themeLight" aria-pressed="true">Light</button>
+        <button type="button" id="themeDark" aria-pressed="false">Dark</button>
+      </div>
     </div>
   </header>
 
@@ -1820,7 +1871,30 @@ tbody tr:last-child td{border-bottom:0}
 
 
   /* ---------- wiring ---------------------------------------------------- */
+  /* ---------- theme ------------------------------------------------------ */
+  /* The inline script in the head has already applied any stored choice; this
+     only keeps the control in step with it and writes changes back. */
+  function applyTheme(t, store){
+    const dark = t === "dark";
+    if(dark) document.documentElement.setAttribute("data-theme", "dark");
+    else     document.documentElement.removeAttribute("data-theme");
+    const l = document.getElementById("themeLight"),
+          d = document.getElementById("themeDark");
+    if(l) l.setAttribute("aria-pressed", String(!dark));
+    if(d) d.setAttribute("aria-pressed", String(dark));
+    if(store){ try{ localStorage.setItem("dcr.theme", dark ? "dark" : "light"); }catch(e){} }
+  }
+  function wireTheme(){
+    applyTheme(document.documentElement.getAttribute("data-theme") === "dark"
+               ? "dark" : "light", false);
+    const l = document.getElementById("themeLight"),
+          d = document.getElementById("themeDark");
+    if(l) l.addEventListener("click", ()=>applyTheme("light", true));
+    if(d) d.addEventListener("click", ()=>applyTheme("dark", true));
+  }
+
   function wire(){
+    wireTheme();
     ["plotSize","farManual","pcPct","glaPct"].forEach(id=>{
       document.getElementById(id).addEventListener("input", render);
     });
