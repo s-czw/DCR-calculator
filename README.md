@@ -58,8 +58,9 @@ SQLite in the browser is sql.js — SQLite compiled to WebAssembly — and WebAs
 host, so the page carries both: it opens the real database and queries it, and if
 WebAssembly is blocked it falls back to a JSON snapshot of the same tables exported by
 `embed_db.py` at build time. Same source, two encodings — figures are identical either
-way. The status chip in the header reads `sqlite` or `snapshot` so you can tell which
-path ran.
+way. If the fallback ever engages the only trace is a `console.warn` — a masthead chip used to
+report which path ran, but the distinction does not affect any figure, so it was not worth the
+space.
 
 ## Deploying
 
