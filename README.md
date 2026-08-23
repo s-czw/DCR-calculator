@@ -444,8 +444,8 @@ and not from the coverage.
 ```
 total parking area = spaces x 32.5 m2
 open ground        = plot area - plot coverage
-spaces on grade    = min(required, floor(open ground / 32.5))
-basement spaces    = required - on grade
+spaces on ground   = min(required, floor(open ground / 32.5))
+basement spaces    = required - on ground
 basement area      = basement spaces x 32.5
 basement floors    = ceil(basement area / (basement floor area x 75%))
 ```
@@ -458,7 +458,7 @@ Both cases from the brief, reproduced exactly:
 | Total parking area | 975 m² | 3,900 m² |
 | Plot / coverage | 1,000 m² / 60% | 1,000 m² / **100%** |
 | Open ground | 400 m² → holds 12 | **0 m² → holds 0** |
-| On grade | 12 | 0 |
+| On ground | 12 | 0 |
 | In basement | 18 → 585 m² | 120 → 3,900 m² |
 | Floors at 75% usable | 1 | **6** |
 

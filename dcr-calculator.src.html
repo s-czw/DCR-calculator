@@ -1035,11 +1035,11 @@ tbody tr:last-child td{border-bottom:0}
                     ? Math.max(0, plot - cover) : NaN;
     const needArea  = Number.isFinite(need) && per > 0 ? need*per : NaN;
     const openCap   = Number.isFinite(open) && per > 0 ? Math.floor(open/per) : NaN;
-    const onGrade   = Number.isFinite(openCap) && Number.isFinite(need)
+    const onGround   = Number.isFinite(openCap) && Number.isFinite(need)
                     ? Math.min(need, openCap) : NaN;
-    const basement= Number.isFinite(onGrade) && Number.isFinite(need)
-                    ? Math.max(0, need - onGrade) : NaN;
-    const gradeArea = Number.isFinite(onGrade) ? onGrade*per : NaN;
+    const basement= Number.isFinite(onGround) && Number.isFinite(need)
+                    ? Math.max(0, need - onGround) : NaN;
+    const groundArea = Number.isFinite(onGround) ? onGround*per : NaN;
     const basementArea= Number.isFinite(basement) ? basement*per : NaN;
 
     const perFloor  = Number.isFinite(fArea) && Number.isFinite(useP)
@@ -1048,8 +1048,8 @@ tbody tr:last-child td{border-bottom:0}
                     ? basementArea/perFloor : NaN;
     const floors    = Number.isFinite(floorsRaw) ? Math.max(0, Math.ceil(floorsRaw - 1e-9)) : NaN;
 
-    return { per, need, open, needArea, openCap, onGrade, basement,
-             gradeArea, basementArea, perFloor, floorsRaw, floors, isCR,
+    return { per, need, open, needArea, openCap, onGround, basement,
+             groundArea, basementArea, perFloor, floorsRaw, floors, isCR,
              fits: Number.isFinite(basement) && basement === 0,
              fArea, useP };
   }
@@ -1582,10 +1582,10 @@ tbody tr:last-child td{border-bottom:0}
       Number.isFinite(p.open) ? fmt(p.open) : "\u2014",
       Number.isFinite(p.openCap) ? "m\u00b2 \u2014 holds " + fmt(p.openCap) + " " +
         plural(p.openCap,"space","spaces") : "m\u00b2 outside the footprint", ""));
-    grid.appendChild(cell("On grade",
-      Number.isFinite(p.onGrade) ? fmt(p.onGrade) : "\u2014",
-      Number.isFinite(p.gradeArea) ? plural(p.onGrade,"space","spaces") + ", " +
-        fmt(p.gradeArea) + " m\u00b2" : "", ""));
+    grid.appendChild(cell("On ground",
+      Number.isFinite(p.onGround) ? fmt(p.onGround) : "\u2014",
+      Number.isFinite(p.groundArea) ? plural(p.onGround,"space","spaces") + ", " +
+        fmt(p.groundArea) + " m\u00b2" : "", ""));
     grid.appendChild(cell("In basement",
       Number.isFinite(p.basement) ? fmt(p.basement) : "\u2014",
       Number.isFinite(p.basementArea) ? plural(p.basement,"space","spaces") + ", " +
@@ -1612,9 +1612,9 @@ tbody tr:last-child td{border-bottom:0}
       w.appendChild(line(fmt(need) + " \u00d7 " + fmt(p.per,1) + " = " +
         fmt(p.needArea) + " m\u00b2 of parking needed"));
       w.appendChild(line("open ground " + fmt(p.open) + " m\u00b2 \u00f7 " + fmt(p.per,1) +
-        " = " + fmt(p.open/p.per,2) + " \u2192 " + fmt(p.openCap) + " on grade"));
+        " = " + fmt(p.open/p.per,2) + " \u2192 " + fmt(p.openCap) + " on ground"));
       if(p.basement > 0){
-        w.appendChild(line(fmt(need) + " \u2212 " + fmt(p.onGrade) + " = " + fmt(p.basement) +
+        w.appendChild(line(fmt(need) + " \u2212 " + fmt(p.onGround) + " = " + fmt(p.basement) +
           " in basement \u00d7 " + fmt(p.per,1) + " = " + fmt(p.basementArea) + " m\u00b2"));
         w.appendChild(line(fmt(p.basementArea) + " m\u00b2 \u00f7 (" + fmt(p.fArea) + " \u00d7 " +
           fmt(p.useP) + "%) = " + fmt(p.floorsRaw,2) + " \u2192 " + fmt(p.floors) + " " +
@@ -1639,7 +1639,7 @@ tbody tr:last-child td{border-bottom:0}
         fmt(p.basementArea) + " m\u00b2</b> over <b>" + fmt(p.floors) + "</b> " +
         plural(p.floors,"floor","floors") + " at " + fmt(p.useP) + "% usable.";
     } else if(p.basement > 0){
-      txt.innerHTML = "The open ground takes <b>" + fmt(p.onGrade) + "</b> of <b>" + fmt(need) +
+      txt.innerHTML = "The open ground takes <b>" + fmt(p.onGround) + "</b> of <b>" + fmt(need) +
         "</b> spaces. The remaining <b>" + fmt(p.basement) + "</b> need <b>" +
         fmt(p.basementArea) + " m\u00b2</b> of basement parking \u2014 <b>" + fmt(p.floors) +
         "</b> " + plural(p.floors,"floor","floors") + " at " + fmt(p.useP) + "% usable.";
@@ -1655,7 +1655,7 @@ tbody tr:last-child td{border-bottom:0}
       if(haveNeed){
         chip.textContent = fmt(need) + " " + plural(need,"space","spaces") +
           (p.basement > 0 ? " \u00b7 " + fmt(p.floors) + " " +
-             plural(p.floors,"floor","floors") : " \u00b7 on grade");
+             plural(p.floors,"floor","floors") : " \u00b7 on ground");
         chip.classList.add("on");
         chip.classList.toggle("bad", p.basement > 0);
       } else {
@@ -2027,8 +2027,8 @@ tbody tr:last-child td{border-bottom:0}
         "  Total parking area " + fmt(c.parking.needArea) + " m2",
         "  Open ground        " + fmt(c.parking.open) + " m2  holds " +
           fmt(c.parking.openCap) + " spaces",
-        "  On grade           " + fmt(c.parking.onGrade) + " spaces, " +
-          fmt(c.parking.gradeArea) + " m2",
+        "  On ground          " + fmt(c.parking.onGround) + " spaces, " +
+          fmt(c.parking.groundArea) + " m2",
         "  In basement        " + fmt(c.parking.basement) + " spaces, " +
           fmt(c.parking.basementArea) + " m2",
         "  Basement floors    " + fmt(c.parking.floors) + "   (" + fmt(c.parking.fArea) +
