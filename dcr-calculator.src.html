@@ -318,6 +318,13 @@ tbody tr:last-child td{border-bottom:0}
 .conf-medium{background:var(--surface-2); color:var(--ink-2)}
 .conf-low{background:var(--brass-soft); color:var(--brass)}
 .conf-manual{background:var(--crit-soft); color:var(--crit)}
+.uflag{
+  font-family:"IBM Plex Mono",monospace; font-size:.53rem; letter-spacing:.09em;
+  text-transform:uppercase; padding:2px 5px; border-radius:2px; margin-top:3px;
+  display:inline-block; white-space:nowrap;
+}
+.uflag-manual{background:var(--brass-soft); color:var(--brass); font-weight:500}
+.uflag-auto{background:transparent; color:var(--ink-3)}
 .hits{
   position:absolute; z-index:20; left:4px; right:4px; top:calc(100% - 2px);
   background:var(--surface); border:1px solid var(--accent); border-radius:0 0 4px 4px;
@@ -365,6 +372,17 @@ tbody tr:last-child td{border-bottom:0}
   letter-spacing:.1em; text-transform:uppercase; padding:3px 7px; border-radius:3px; margin-top:1px;
   background:var(--accent-soft); color:var(--accent-ink)}
 .pknote.bad .mark{background:var(--crit); color:var(--surface)}
+.park .pv.ug{color:var(--brass)}
+.ugnote{
+  display:flex; gap:10px; align-items:flex-start; padding:13px 16px; font-size:.81rem;
+  background:var(--brass-soft); color:var(--brass); border-top:1px solid var(--line);
+}
+.ugnote .mark{
+  flex:0 0 auto; font-family:"IBM Plex Mono",monospace; font-size:.58rem; letter-spacing:.1em;
+  text-transform:uppercase; padding:3px 7px; border-radius:3px; margin-top:1px;
+  background:var(--brass); color:var(--surface);
+}
+.ugnote b{color:inherit; font-variant-numeric:tabular-nums}
 </style>
 
 
@@ -493,6 +511,12 @@ tbody tr:last-child td{border-bottom:0}
                 <div class="ctl"><input id="parkLimitPct" type="number" min="1" max="100" step="1" value="50"><span class="suffix">% plot</span></div>
               </div>
             </div>
+            <div class="field">
+              <label for="ugTriggerPct">Underground parking trigger</label>
+              <div class="ctl"><input id="ugTriggerPct" type="number" min="1" max="100" step="1" value="16"><span class="suffix">% coverage</span></div>
+              <p class="hint">Above this share of the <b>allowed plot coverage</b>, parking must go
+                underground.</p>
+            </div>
             <p class="hint">Bay area is an <b>assumption</b>: the cap is a share of plot area, but
               ITC rates give a bay count, so a bay needs an area before the two can be compared.
               25 m&#x00B2; is a typical bay-plus-aisle allowance &#x2014; confirm it.</p>
@@ -520,8 +544,9 @@ tbody tr:last-child td{border-bottom:0}
         <div class="tbl-scroll">
           <table class="sched">
             <thead><tr>
-              <th>Activity (DED)</th><th class="n">Slots</th><th>ITC category</th>
-              <th class="n">Rate</th><th class="n">Bays</th><th><span class="sr">Remove</span></th>
+              <th>Activity (DED)</th><th class="n">Slots</th><th class="n">Unit area</th>
+              <th>ITC category</th><th class="n">Rate</th><th class="n">Bays</th>
+              <th><span class="sr">Remove</span></th>
             </tr></thead>
             <tbody id="schedBody"></tbody>
           </table>
@@ -778,9 +803,9 @@ tbody tr:last-child td{border-bottom:0}
     const o = { basis:state.basis, itcLoc:state.itcLoc,
                 sched: SCHED.map(r=>({ act: r.act ? r.act.activity_id : null,
                                        slots: r.slots, itcOverride: r.itcOverride,
-                                       qty: r.qty })) };
+                                       unitArea: r.unitArea, qty: r.qty })) };
     ["plotSize","dedCode","farManual","pcPct","glaPct",
-     "unitArea","bayArea","parkLimitPct"]
+     "unitArea","bayArea","parkLimitPct","ugTriggerPct"]
       .forEach(id => { const nd = document.getElementById(id); if(nd) o[id] = nd.value; });
     return o;
   }
@@ -817,7 +842,7 @@ tbody tr:last-child td{border-bottom:0}
     const unit    = num($("#unitArea").value);
     const actRaw  = Number.isFinite(gla) && unit > 0 ? gla/unit : NaN;
     const act     = Number.isFinite(actRaw) ? Math.floor(actRaw) : NaN;
-    const sched   = schedTotals(act);
+    const sched   = schedTotals(act, cover);
 
     return { plot, dRow, far, farOv, pcPct, pcAuto, glaPct, unit,
              maxGFA, cover, gla, actRaw, act, sched };
@@ -884,32 +909,44 @@ tbody tr:last-child td{border-bottom:0}
   /* Per-row parking. The slots an activity holds are its share of GLA, and for
      the GFA/GLA-charged categories that share is the driver. Categories charged
      per seat, unit, student and so on need a count instead, so the row asks. */
+  /* A row may carry its own unit area; blank inherits the fixed value. */
+  function rowUnit(row, unit){
+    const own = num(row.unitArea);
+    return (row.unitArea !== "" && row.unitArea != null && own > 0)
+      ? { area:own, manual:true } : { area:unit, manual:false };
+  }
+
   function rowParking(row, unit){
+    const u = rowUnit(row, unit);
     const cls = row.itcOverride || (row.act ? row.act.itc_class : null);
     const code = cls ? resolveCode(cls) : null;
-    if(!code) return { code:null, rate:NaN, bays:NaN, needsQty:false };
+    if(!code) return { code:null, rate:NaN, bays:NaN, needsQty:false, unit:u };
     const slots = Math.max(0, num(row.slots) || 0);
     const eff = effectiveRate(code.code);
     const rate = eff ? eff.rate_total : code.rate_total;
     let driver;
     if(code.driver_kind === "count"){
       const qty = num(row.qty);
-      if(!(qty > 0)) return { code:code, rate:rate, bays:NaN, needsQty:true, eff:eff };
+      if(!(qty > 0)) return { code:code, rate:rate, bays:NaN, needsQty:true, eff:eff, unit:u };
       driver = qty;
     } else {
-      driver = slots * unit;                    // floor area this activity holds
+      driver = slots * u.area;                  // floor area this activity holds
     }
     const raw = driver * code.conversion * rate;
     // Each activity is a separate tenancy, so its bays round up on their own.
     return { code:code, rate:rate, raw:raw, bays: Math.max(0, Math.ceil(raw - 1e-9)),
-             needsQty:false, eff:eff };
+             needsQty:false, eff:eff, unit:u, floor: slots * u.area };
   }
 
-  function schedTotals(allowed){
+  function schedTotals(allowed, coverArea){
     const unit = num($("#unitArea").value) || 60;
-    let slots = 0, bays = 0, raw = 0, incomplete = 0;
+    let slots = 0, bays = 0, raw = 0, incomplete = 0, floor = 0, manualUnits = 0;
     SCHED.forEach(r => {
-      slots += Math.max(0, num(r.slots) || 0);
+      const sl = Math.max(0, num(r.slots) || 0);
+      slots += sl;
+      const u = rowUnit(r, unit);
+      if(u.manual) manualUnits++;
+      floor += sl * u.area;
       const p = rowParking(r, unit);
       if(Number.isFinite(p.bays)){ bays += p.bays; raw += p.raw; }
       else if(r.act || r.itcOverride) incomplete++;
@@ -921,9 +958,19 @@ tbody tr:last-child td{border-bottom:0}
     const area = Number.isFinite(bayArea) ? baysCeil * bayArea : NaN;
     const cap = Number.isFinite(plot) && Number.isFinite(limitPct) ? plot * (limitPct/100) : NaN;
     const pctPlot = Number.isFinite(area) && plot > 0 ? area/plot*100 : NaN;
+
+    /* Above a share of the allowed plot coverage, surface parking is not an
+       option and the parking has to go underground. */
+    const ugPct = num($("#ugTriggerPct").value);
+    const ugLimit = Number.isFinite(coverArea) && Number.isFinite(ugPct)
+                  ? coverArea * (ugPct/100) : NaN;
+    const pctCover = Number.isFinite(area) && coverArea > 0 ? area/coverArea*100 : NaN;
+
     return { slots:slots, allowed:allowed, bays:bays, baysCeil:baysCeil, raw:raw,
              area:area, cap:cap, limitPct:limitPct, bayArea:bayArea,
-             plot:plot, pctPlot:pctPlot,
+             plot:plot, pctPlot:pctPlot, floor:floor, manualUnits:manualUnits,
+             coverArea:coverArea, ugPct:ugPct, ugLimit:ugLimit, pctCover:pctCover,
+             underground: Number.isFinite(area) && Number.isFinite(ugLimit) && area > ugLimit,
              over: Number.isFinite(area) && Number.isFinite(cap) && area > cap,
              overSlots: Number.isFinite(allowed) && slots > allowed,
              incomplete:incomplete, rows:SCHED.length };
@@ -932,7 +979,7 @@ tbody tr:last-child td{border-bottom:0}
   function addSchedRow(actId, slots, override){
     SCHED.push({ id: ++schedSeq, act: actId ? activityById(actId) : null,
                  slots: slots == null ? 1 : slots, itcOverride: override || null,
-                 qty: "", search: "" });
+                 unitArea: "", qty: "", search: "" });
   }
 
   function renderSched(){
@@ -995,6 +1042,21 @@ tbody tr:last-child td{border-bottom:0}
       sl.addEventListener("input", ()=>{ row.slots = sl.value; renderSched(); render(); });
       td1.appendChild(sl);
       tr.appendChild(td1);
+
+      // unit area: blank inherits the fixed value, a number overrides it
+      const gu = num($("#unitArea").value) || 60;
+      const u = rowUnit(row, gu);
+      const tdU = el("td", "n");
+      const ui = el("input");
+      ui.type = "number"; ui.min = "1"; ui.step = "1";
+      ui.value = row.unitArea == null ? "" : row.unitArea;
+      ui.placeholder = fmt(gu);
+      ui.title = u.manual ? "Entered for this activity" : "Inherited from Fixed values";
+      ui.addEventListener("input", ()=>{ row.unitArea = ui.value; renderSched(); render(); });
+      tdU.appendChild(ui);
+      tdU.appendChild(el("div", "uflag " + (u.manual ? "uflag-manual" : "uflag-auto"),
+                         u.manual ? "entered" : "inherited"));
+      tr.appendChild(tdU);
 
       // ITC category, auto or overridden
       const td2 = el("td");
@@ -1073,16 +1135,16 @@ tbody tr:last-child td{border-bottom:0}
     if(!SCHED.length){
       const tr = el("tr"), td = el("td", null,
         "No activities yet \u2014 add one, or load the worked example.");
-      td.colSpan = 6;
+      td.colSpan = 7;
       td.style.cssText = "color:var(--ink-3); padding:15px 10px; font-size:.8rem";
       tr.appendChild(td); tb.appendChild(tr);
     }
 
-    renderSchedFoot(c.act);
+    renderSchedFoot(c.act, c.cover);
   }
 
-  function renderSchedFoot(allowed){
-    const t = schedTotals(allowed);
+  function renderSchedFoot(allowed, coverArea){
+    const t = schedTotals(allowed, coverArea);
     const F = $("#schedFoot");
     F.innerHTML = "";
     const m = (label, val, cls) => {
@@ -1104,6 +1166,9 @@ tbody tr:last-child td{border-bottom:0}
     else if(Number.isFinite(t.allowed)) m("spare",
       fmt(Math.max(0, t.allowed - t.slots)) + " " +
       plural(t.allowed - t.slots, "slot", "slots"), "");
+    // per-row unit areas mean the slot count no longer stands in for floor area
+    if(Number.isFinite(t.floor)) m("floor area", area(t.floor), "");
+    if(t.manualUnits) m("unit areas entered", fmt(t.manualUnits) + " of " + fmt(t.rows), "");
   }
 
   /* calc() needs schedule totals and the schedule needs the activity count, so
@@ -1117,8 +1182,12 @@ tbody tr:last-child td{border-bottom:0}
     const unit = num($("#unitArea").value);
     const maxGFA = plot > 0 && Number.isFinite(far) ? plot*far : NaN;
     const gla = Number.isFinite(maxGFA) && Number.isFinite(glaPct) ? maxGFA*(glaPct/100) : NaN;
+    const pcPct = num($("#pcPct").value.trim() === ""
+      ? (dRow && Number.isFinite(num(dRow.coverage)) ? num(dRow.coverage)*100 : COEF.coverageDefault)
+      : $("#pcPct").value);
+    const cover = Number.isFinite(maxGFA) && Number.isFinite(pcPct) ? maxGFA*(pcPct/100) : NaN;
     const actRaw = Number.isFinite(gla) && unit > 0 ? gla/unit : NaN;
-    return { act: Number.isFinite(actRaw) ? Math.floor(actRaw) : NaN };
+    return { act: Number.isFinite(actRaw) ? Math.floor(actRaw) : NaN, cover: cover };
   }
 
   /* ---------- ladder ---------------------------------------------------- */
@@ -1170,7 +1239,7 @@ tbody tr:last-child td{border-bottom:0}
       unit: plural(c.act,"activity","activities"),
       raw: Number.isFinite(c.actRaw) ? "= " + fmt(c.actRaw,3) + " → floor" : "" }));
 
-    renderSchedFoot(c.act);
+    renderSchedFoot(c.act, c.cover);
     renderPark(c);
     renderFlags(c);
     renderPlan(c);
@@ -1210,7 +1279,24 @@ tbody tr:last-child td{border-bottom:0}
       Number.isFinite(t.limitPct) ? fmt(t.limitPct) + "%" : "\u2014",
       Number.isFinite(t.cap) ? area(t.cap) : "",
       ""));
+    grid.appendChild(cell("Share of coverage",
+      Number.isFinite(t.pctCover) ? fmt(t.pctCover,1) + "%" : "\u2014",
+      Number.isFinite(t.ugPct) ? "underground above " + fmt(t.ugPct) + "%" : "",
+      t.underground ? "ug" : ""));
     B.appendChild(grid);
+
+    // underground parking is a requirement, not a failure: style it apart
+    if(t.underground){
+      const ug = el("div", "ugnote");
+      ug.appendChild(el("span", "mark", "underground"));
+      const t2 = el("span");
+      t2.innerHTML = "Parking needs <b>" + fmt(t.area) + " m\u00b2</b>, <b>" +
+        fmt(t.pctCover,1) + "%</b> of the <b>" + fmt(t.coverArea) +
+        " m\u00b2</b> allowed plot coverage \u2014 above the <b>" + fmt(t.ugPct) +
+        "%</b> trigger, so <b>underground parking is mandatory within the plot</b>.";
+      ug.appendChild(t2);
+      B.appendChild(ug);
+    }
 
     // how the share sits against the cap
     if(Number.isFinite(t.pctPlot) && Number.isFinite(t.limitPct)){
@@ -1441,7 +1527,7 @@ tbody tr:last-child td{border-bottom:0}
     ["plotSize","farManual","pcPct","glaPct"].forEach(id=>{
       document.getElementById(id).addEventListener("input", render);
     });
-    ["unitArea","bayArea","parkLimitPct"].forEach(id=>{
+    ["unitArea","bayArea","parkLimitPct","ugTriggerPct"].forEach(id=>{
       document.getElementById(id).addEventListener("input", ()=>{ renderSched(); render(); });
     });
     $("#itcLoc").addEventListener("input", ()=>{
@@ -1623,7 +1709,11 @@ tbody tr:last-child td{border-bottom:0}
       if(Array.isArray(saved.form.sched) && saved.form.sched.length){
         SCHED = [];
         saved.form.sched.forEach(r => addSchedRow(r.act, r.slots, r.itcOverride));
-        saved.form.sched.forEach((r,i)=>{ if(SCHED[i]) SCHED[i].qty = r.qty || ""; });
+        saved.form.sched.forEach((r,i)=>{
+          if(!SCHED[i]) return;
+          SCHED[i].qty = r.qty || "";
+          SCHED[i].unitArea = r.unitArea || "";
+        });
       }
       if(!LU.some(r=>String(r.id)===$("#dedCode").value) && $("#dedCode").value!=="__none")
         $("#dedCode").value = LU[0] ? String(LU[0].id) : "__none";

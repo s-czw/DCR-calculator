@@ -217,6 +217,7 @@ Worked example — 1,000 m&sup2; plot, code `NR` (FAR 1.05), ITC `112` Local Sho
 | Parking | (1,050 / 100) x 1.318 = 13.839 &rarr; **14 bays** |
 | Activities | 787.5 / 60 = 13.125 → **13 activities** |
 | Parking (13-activity example) | **26 bays** = 650 m² = 65% of plot → **over the 50% cap** |
+| Share of coverage | 650 / 630 = **103%** → **underground parking mandatory** (trigger 16%) |
 
 Steps are ordered by dependency rather than as drawn on the source whiteboard: GLA moves
 ahead of parking because one category (`111` Regional Shopping Centre) is charged
@@ -234,6 +235,10 @@ Each row is an activity plus the number of slots it occupies:
   `DED قائمة الانشطة`, deduplicated by `ACTIVITY_ID`).
 - **ITC category** — auto-mapped from the activity, overridable per row. The confidence tag
   says how far to trust the mapping.
+- **Unit area** — per row, blank inheriting the Fixed-values default. Each row is tagged
+  `inherited` or `entered` so a hand-set area is visible at a glance, and the footer counts how
+  many were entered. Because rows can differ, the footer also totals the floor area the schedule
+  consumes, which the slot count alone no longer tells you.
 - **Bays** — `slots × unit area × conversion × rate`, **rounded up per row**: each activity is a
   separate tenancy, so it takes whole bays. The raw figure is shown underneath. Rounding per row
   rather than once at the end costs a little more parking — 26 bays against 24 on the example.
@@ -259,6 +264,22 @@ re-lettered and do not follow ISIC sections. Coverage of the 3,892 activities:
 Validated against the worked example — flower shop, book shop, commercial bank and fast food
 restaurant all auto-map to the ITC categories whose rates the brief quotes (1.318, 1.318,
 4.992, 7.702). Any row can be reassigned by hand, which then shows as *set by hand*.
+
+### Underground parking
+
+Above a share of the **allowed plot coverage** (step 2), surface parking stops being viable and
+the panel states that underground parking is mandatory within the plot. The trigger is an input,
+default **16%**.
+
+That is a low bar in practice. On the worked example — 630 m² of allowed coverage — 16% is
+100.8 m², which at 25 m² a bay is **four bays**. Verified at the boundary: four bays (100 m²,
+15.9%) stays on the surface, five (125 m², 19.8%) triggers. So almost any multi-tenant scheme
+will require underground parking. That may well be the intent for dense plots, but it is worth
+confirming the rule means 16% *of coverage* rather than of plot area, and that it compares an
+**area** rather than a bay count.
+
+The requirement is styled apart from the parking-cap breach: exceeding the cap is an error,
+needing underground parking is a requirement the design can satisfy.
 
 ### The parking cap
 
