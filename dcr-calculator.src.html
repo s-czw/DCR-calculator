@@ -1628,9 +1628,14 @@ tbody tr:last-child td{border-bottom:0}
     const txt = el("span");
     if(!haveNeed){
       txt.textContent = "Add activities to the schedule to size the parking.";
-    } else if(p.isCR && p.basement > 0){
-      txt.innerHTML = "Community Retail is allowed <b>100%</b> plot coverage, so there is no open " +
-        "ground: all <b>" + fmt(p.basement) + "</b> spaces go to basement, needing <b>" +
+    } else if(p.open === 0 && p.basement > 0){
+      // Gated on there actually being no open ground, not on the designation: a
+      // CR plot whose coverage has been overridden below 100% does have open
+      // ground, and used to be told flatly that it did not.
+      txt.innerHTML = (p.isCR
+          ? "Community Retail is published at <b>100%</b> plot coverage, so there is no open ground: "
+          : "The footprint covers the whole plot, so there is no open ground: ") +
+        "all <b>" + fmt(p.basement) + "</b> spaces go to basement, needing <b>" +
         fmt(p.basementArea) + " m\u00b2</b> over <b>" + fmt(p.floors) + "</b> " +
         plural(p.floors,"floor","floors") + " at " + fmt(p.useP) + "% usable.";
     } else if(p.basement > 0){
