@@ -1575,17 +1575,28 @@ tbody tr:last-child td{border-bottom:0}
       haveNeed ? plural(need,"space","spaces") +
                  (c.o.spaces.overridden ? ", overridden" : ", from the schedule") : "no activities yet",
       "hi"));
-    grid.appendChild(cell("Total parking area",
+    grid.appendChild(cell("Total parking area required",
       Number.isFinite(p.needArea) ? fmt(p.needArea) : "\u2014",
       "m\u00b2 at " + fmt(p.per,1) + " m\u00b2 a space", ""));
-    grid.appendChild(cell("Open ground",
+    grid.appendChild(cell("Open ground area",
       Number.isFinite(p.open) ? fmt(p.open) : "\u2014",
-      Number.isFinite(p.openCap) ? "m\u00b2 \u2014 holds " + fmt(p.openCap) + " " +
-        plural(p.openCap,"space","spaces") : "m\u00b2 outside the footprint", ""));
+      "m\u00b2 outside the footprint", ""));
     grid.appendChild(cell("On ground",
       Number.isFinite(p.onGround) ? fmt(p.onGround) : "\u2014",
       Number.isFinite(p.groundArea) ? plural(p.onGround,"space","spaces") + ", " +
         fmt(p.groundArea) + " m\u00b2" : "", ""));
+    // What is left of the requirement once the open ground has absorbed what it can.
+    // Identical to In basement by construction -- needArea - groundArea is always
+    // basement * per -- but stated as a remaining *requirement* rather than as a
+    // placement, so the row reads requirement -> offset -> where it ends up.
+    grid.appendChild(cell("Offset spaces required",
+      Number.isFinite(p.basement) ? fmt(p.basement) : "\u2014",
+      Number.isFinite(p.onGround) ? plural(p.basement,"space","spaces") + ", less the " +
+        fmt(p.onGround) + " on ground" : "", ""));
+    grid.appendChild(cell("Offset parking area required",
+      Number.isFinite(p.basementArea) ? fmt(p.basementArea) : "\u2014",
+      Number.isFinite(p.groundArea) ? "m\u00b2, less the " + fmt(p.groundArea) +
+        " m\u00b2 on ground" : "m\u00b2", ""));
     grid.appendChild(cell("In basement",
       Number.isFinite(p.basement) ? fmt(p.basement) : "\u2014",
       Number.isFinite(p.basementArea) ? plural(p.basement,"space","spaces") + ", " +
@@ -2020,18 +2031,19 @@ tbody tr:last-child td{border-bottom:0}
         "Parking required     " + fmt(t.baysCeil) + " bays   (each activity rounded up)",
         "",
         "PARKING",
-        "  Spaces required    " + fmt(c.parking.need) +
+        "  Spaces required              " + fmt(c.parking.need) +
           (c.o.spaces.overridden ? "   [UPPC/ITC override, schedule gave " +
              fmt(c.o.spaces.original) + "]" : "   (from the schedule)"),
-        "  Area per space     " + fmt(c.parking.per,1) + " m2",
-        "  Total parking area " + fmt(c.parking.needArea) + " m2",
-        "  Open ground        " + fmt(c.parking.open) + " m2  holds " +
-          fmt(c.parking.openCap) + " spaces",
-        "  On ground          " + fmt(c.parking.onGround) + " spaces, " +
+        "  Area per space               " + fmt(c.parking.per,1) + " m2",
+        "  Total parking area required  " + fmt(c.parking.needArea) + " m2",
+        "  Open ground area             " + fmt(c.parking.open) + " m2",
+        "  On ground                    " + fmt(c.parking.onGround) + " spaces, " +
           fmt(c.parking.groundArea) + " m2",
-        "  In basement        " + fmt(c.parking.basement) + " spaces, " +
+        "  Offset spaces required       " + fmt(c.parking.basement) + " spaces",
+        "  Offset parking area required " + fmt(c.parking.basementArea) + " m2",
+        "  In basement                  " + fmt(c.parking.basement) + " spaces, " +
           fmt(c.parking.basementArea) + " m2",
-        "  Basement floors    " + fmt(c.parking.floors) + "   (" + fmt(c.parking.fArea) +
+        "  Basement floors              " + fmt(c.parking.floors) + "   (" + fmt(c.parking.fArea) +
           " m2 x " + fmt(c.parking.useP) + "% = " + fmt(c.parking.perFloor) + " m2 usable each)" +
           (c.parking.isCR ? "   [Community Retail: 100% coverage, no open ground]" : ""),
         "",

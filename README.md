@@ -442,13 +442,20 @@ it is not held to the coverage limit. That is why `parkFloorArea` originates fro
 and not from the coverage.
 
 ```
-total parking area = spaces x 32.5 m2
-open ground        = plot area - plot coverage
-spaces on ground   = min(required, floor(open ground / 32.5))
-basement spaces    = required - on ground
-basement area      = basement spaces x 32.5
-basement floors    = ceil(basement area / (basement floor area x 75%))
+total parking area required   = spaces x 32.5 m2
+open ground area              = plot area - plot coverage
+spaces on ground              = min(required, floor(open ground / 32.5))
+offset spaces required        = required - on ground
+offset parking area required  = total parking area - on-ground area
+basement floors               = ceil(offset area / (basement floor area x 75%))
 ```
+
+The panel reads as two rows of four: the requirement and what the open ground absorbs, then
+what is left of the requirement and where it goes. *Offset* is the residual after the ground
+has taken what it can, so **offset spaces** and **in basement** always carry the same number —
+one states it as a remaining requirement, the other as a placement. That is deliberate, not a
+duplicated calculation: `total area - on-ground area` is identically `basement spaces x 32.5`,
+because the on-ground count is itself a whole number of spaces.
 
 Both cases from the brief, reproduced exactly:
 
