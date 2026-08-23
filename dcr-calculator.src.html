@@ -588,15 +588,15 @@ tbody tr:last-child td{border-bottom:0}
               <div class="derived"><span>Space <b id="spaceShow">&#x2014;</b></span><span class="src" id="spaceSrc"></span></div>
             </div>
             <div class="field">
-              <label for="floorUsePct">Usable per parking floor</label>
+              <label for="floorUsePct">Usable per basement floor</label>
               <div class="ctl"><input id="floorUsePct" type="number" min="0" max="100" step="0.01"><span class="suffix">%</span></div>
               <div class="derived"><span>Usable <b id="floorUseShow">&#x2014;</b></span><span class="src" id="floorUseSrc"></span></div>
             </div>
             <div class="field">
-              <label for="parkFloorArea">Parking floor area</label>
+              <label for="parkFloorArea">Basement floor area</label>
               <div class="ctl"><input id="parkFloorArea" type="number" min="1" step="1"><span class="suffix">m&#x00B2;</span></div>
               <div class="derived"><span>Floor <b id="floorAreaShow">&#x2014;</b></span><span class="src" id="floorAreaSrc"></span></div>
-              <p class="hint">Defaults to the plot area. Sets how much a structured floor yields.</p>
+              <p class="hint">Defaults to the plot area, which a basement may use in full. Sets how much one basement floor yields.</p>
             </div>
             <div class="field">
               <label for="spacesOverride">Required spaces &#x2014; UPPC / ITC override</label>
@@ -917,7 +917,7 @@ tbody tr:last-child td{border-bottom:0}
      The input stays empty while the original applies, showing it as placeholder
      text, so an entered value is always visibly a deviation.                  */
   const SPACE_AREA   = 32.5;   // m2 per parking space
-  const FLOOR_USABLE = 75;     // % of a parking floor that is usable
+  const FLOOR_USABLE = 75;     // % of a basement floor that is usable
 
   const OV = [
     { id:"farManual",     key:"far",        label:"FAR",
@@ -930,9 +930,9 @@ tbody tr:last-child td{border-bottom:0}
       fmt:v=>fmt(v)+" m\u00b2",  show:"unitShow",      src:"unitSrc", base:"standard" },
     { id:"spaceArea",     key:"spaceArea",  label:"Area per parking space",
       fmt:v=>fmt(v,2)+" m\u00b2", show:"spaceShow",    src:"spaceSrc", base:"standard" },
-    { id:"floorUsePct",   key:"floorUse",   label:"Usable per parking floor",
+    { id:"floorUsePct",   key:"floorUse",   label:"Usable per basement floor",
       fmt:v=>fmt(v,2)+"%",      show:"floorUseShow",  src:"floorUseSrc", base:"standard" },
-    { id:"parkFloorArea", key:"floorArea",  label:"Parking floor area",
+    { id:"parkFloorArea", key:"floorArea",  label:"Basement floor area",
       fmt:v=>fmt(v)+" m\u00b2",  show:"floorAreaShow", src:"floorAreaSrc", base:"from the plot" },
     { id:"spacesOverride",key:"spaces",     label:"Required spaces",
       fmt:v=>fmt(v),            show:"spacesShow",    src:"spacesSrc", base:"from the schedule" },
@@ -1016,12 +1016,14 @@ tbody tr:last-child td{border-bottom:0}
              maxGFA, cover, gla, actRaw, act, sched, parking };
   }
 
-  /* ---------- parking: open area first, then structure ------------------
+  /* ---------- parking: open ground first, then basement -----------------
      A space needs its own area, so the open ground outside the footprint holds
-     only so many. Anything beyond that has to be built, and a parking floor is
-     only partly usable, which is what sets how many floors it takes.
+     only so many. The remainder goes to basement, where a floor is only partly
+     usable -- ramps, cores, plant -- which is what sets how many floors it takes.
+     A basement floor defaults to the whole plot, not the footprint: unlike a
+     storey above ground it is not held to the coverage limit.
      Community Retail is the case that forces this: the Code gives it 100% plot
-     coverage, so there is no open ground and every space is structured.      */
+     coverage, so there is no open ground and every space goes to basement.      */
   function parkingPlan(plot, cover, o, dRow){
     const per   = o.spaceArea.value;
     const need  = o.spaces.value;
@@ -1035,20 +1037,20 @@ tbody tr:last-child td{border-bottom:0}
     const openCap   = Number.isFinite(open) && per > 0 ? Math.floor(open/per) : NaN;
     const onGrade   = Number.isFinite(openCap) && Number.isFinite(need)
                     ? Math.min(need, openCap) : NaN;
-    const structured= Number.isFinite(onGrade) && Number.isFinite(need)
+    const basement= Number.isFinite(onGrade) && Number.isFinite(need)
                     ? Math.max(0, need - onGrade) : NaN;
     const gradeArea = Number.isFinite(onGrade) ? onGrade*per : NaN;
-    const structArea= Number.isFinite(structured) ? structured*per : NaN;
+    const basementArea= Number.isFinite(basement) ? basement*per : NaN;
 
     const perFloor  = Number.isFinite(fArea) && Number.isFinite(useP)
                     ? fArea*(useP/100) : NaN;
-    const floorsRaw = Number.isFinite(structArea) && perFloor > 0
-                    ? structArea/perFloor : NaN;
+    const floorsRaw = Number.isFinite(basementArea) && perFloor > 0
+                    ? basementArea/perFloor : NaN;
     const floors    = Number.isFinite(floorsRaw) ? Math.max(0, Math.ceil(floorsRaw - 1e-9)) : NaN;
 
-    return { per, need, open, needArea, openCap, onGrade, structured,
-             gradeArea, structArea, perFloor, floorsRaw, floors, isCR,
-             fits: Number.isFinite(structured) && structured === 0,
+    return { per, need, open, needArea, openCap, onGrade, basement,
+             gradeArea, basementArea, perFloor, floorsRaw, floors, isCR,
+             fits: Number.isFinite(basement) && basement === 0,
              fArea, useP };
   }
 
@@ -1584,14 +1586,14 @@ tbody tr:last-child td{border-bottom:0}
       Number.isFinite(p.onGrade) ? fmt(p.onGrade) : "\u2014",
       Number.isFinite(p.gradeArea) ? plural(p.onGrade,"space","spaces") + ", " +
         fmt(p.gradeArea) + " m\u00b2" : "", ""));
-    grid.appendChild(cell("In structure",
-      Number.isFinite(p.structured) ? fmt(p.structured) : "\u2014",
-      Number.isFinite(p.structArea) ? plural(p.structured,"space","spaces") + ", " +
-        fmt(p.structArea) + " m\u00b2" : "",
-      p.structured > 0 ? "ug" : ""));
-    grid.appendChild(cell("Parking floors",
+    grid.appendChild(cell("In basement",
+      Number.isFinite(p.basement) ? fmt(p.basement) : "\u2014",
+      Number.isFinite(p.basementArea) ? plural(p.basement,"space","spaces") + ", " +
+        fmt(p.basementArea) + " m\u00b2" : "",
+      p.basement > 0 ? "ug" : ""));
+    grid.appendChild(cell("Basement floors",
       Number.isFinite(p.floors) ? fmt(p.floors) : "\u2014",
-      Number.isFinite(p.perFloor) && p.structured > 0
+      Number.isFinite(p.perFloor) && p.basement > 0
         ? fmt(p.perFloor) + " m\u00b2 usable each" : "none needed",
       p.floors > 0 ? "ug" : ""));
     B.appendChild(grid);
@@ -1611,34 +1613,34 @@ tbody tr:last-child td{border-bottom:0}
         fmt(p.needArea) + " m\u00b2 of parking needed"));
       w.appendChild(line("open ground " + fmt(p.open) + " m\u00b2 \u00f7 " + fmt(p.per,1) +
         " = " + fmt(p.open/p.per,2) + " \u2192 " + fmt(p.openCap) + " on grade"));
-      if(p.structured > 0){
-        w.appendChild(line(fmt(need) + " \u2212 " + fmt(p.onGrade) + " = " + fmt(p.structured) +
-          " in structure \u00d7 " + fmt(p.per,1) + " = " + fmt(p.structArea) + " m\u00b2"));
-        w.appendChild(line(fmt(p.structArea) + " m\u00b2 \u00f7 (" + fmt(p.fArea) + " \u00d7 " +
+      if(p.basement > 0){
+        w.appendChild(line(fmt(need) + " \u2212 " + fmt(p.onGrade) + " = " + fmt(p.basement) +
+          " in basement \u00d7 " + fmt(p.per,1) + " = " + fmt(p.basementArea) + " m\u00b2"));
+        w.appendChild(line(fmt(p.basementArea) + " m\u00b2 \u00f7 (" + fmt(p.fArea) + " \u00d7 " +
           fmt(p.useP) + "%) = " + fmt(p.floorsRaw,2) + " \u2192 " + fmt(p.floors) + " " +
           plural(p.floors,"floor","floors")));
       }
       B.appendChild(w);
     }
 
-    const note = el("div", "pknote" + (p.structured > 0 ? " bad" : ""));
-    note.appendChild(el("span", "mark", p.structured > 0 ? "structure" : "ok"));
+    const note = el("div", "pknote" + (p.basement > 0 ? " bad" : ""));
+    note.appendChild(el("span", "mark", p.basement > 0 ? "basement" : "ok"));
     const txt = el("span");
     if(!haveNeed){
       txt.textContent = "Add activities to the schedule to size the parking.";
-    } else if(p.isCR && p.structured > 0){
+    } else if(p.isCR && p.basement > 0){
       txt.innerHTML = "Community Retail is allowed <b>100%</b> plot coverage, so there is no open " +
-        "ground: all <b>" + fmt(p.structured) + "</b> spaces are structured, needing <b>" +
-        fmt(p.structArea) + " m\u00b2</b> over <b>" + fmt(p.floors) + "</b> " +
+        "ground: all <b>" + fmt(p.basement) + "</b> spaces go to basement, needing <b>" +
+        fmt(p.basementArea) + " m\u00b2</b> over <b>" + fmt(p.floors) + "</b> " +
         plural(p.floors,"floor","floors") + " at " + fmt(p.useP) + "% usable.";
-    } else if(p.structured > 0){
+    } else if(p.basement > 0){
       txt.innerHTML = "The open ground takes <b>" + fmt(p.onGrade) + "</b> of <b>" + fmt(need) +
-        "</b> spaces. The remaining <b>" + fmt(p.structured) + "</b> need <b>" +
-        fmt(p.structArea) + " m\u00b2</b> of structured parking \u2014 <b>" + fmt(p.floors) +
+        "</b> spaces. The remaining <b>" + fmt(p.basement) + "</b> need <b>" +
+        fmt(p.basementArea) + " m\u00b2</b> of basement parking \u2014 <b>" + fmt(p.floors) +
         "</b> " + plural(p.floors,"floor","floors") + " at " + fmt(p.useP) + "% usable.";
     } else {
       txt.innerHTML = "All <b>" + fmt(need) + "</b> spaces fit on the open ground, with <b>" +
-        fmt(Math.max(0, p.open - p.needArea)) + " m\u00b2</b> to spare. No structured parking needed.";
+        fmt(Math.max(0, p.open - p.needArea)) + " m\u00b2</b> to spare. No basement parking needed.";
     }
     note.appendChild(txt);
     B.appendChild(note);
@@ -1647,10 +1649,10 @@ tbody tr:last-child td{border-bottom:0}
     if(chip){
       if(haveNeed){
         chip.textContent = fmt(need) + " " + plural(need,"space","spaces") +
-          (p.structured > 0 ? " \u00b7 " + fmt(p.floors) + " " +
+          (p.basement > 0 ? " \u00b7 " + fmt(p.floors) + " " +
              plural(p.floors,"floor","floors") : " \u00b7 on grade");
         chip.classList.add("on");
-        chip.classList.toggle("bad", p.structured > 0);
+        chip.classList.toggle("bad", p.basement > 0);
       } else {
         chip.textContent = "parking \u2014";
         chip.classList.remove("on","bad");
@@ -2022,9 +2024,9 @@ tbody tr:last-child td{border-bottom:0}
           fmt(c.parking.openCap) + " spaces",
         "  On grade           " + fmt(c.parking.onGrade) + " spaces, " +
           fmt(c.parking.gradeArea) + " m2",
-        "  In structure       " + fmt(c.parking.structured) + " spaces, " +
-          fmt(c.parking.structArea) + " m2",
-        "  Parking floors     " + fmt(c.parking.floors) + "   (" + fmt(c.parking.fArea) +
+        "  In basement        " + fmt(c.parking.basement) + " spaces, " +
+          fmt(c.parking.basementArea) + " m2",
+        "  Basement floors    " + fmt(c.parking.floors) + "   (" + fmt(c.parking.fArea) +
           " m2 x " + fmt(c.parking.useP) + "% = " + fmt(c.parking.perFloor) + " m2 usable each)" +
           (c.parking.isCR ? "   [Community Retail: 100% coverage, no open ground]" : ""),
         "",

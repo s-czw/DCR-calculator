@@ -121,14 +121,14 @@ does three things:
 3. clearing the field restores the original and the indicators disappear.
 
 Overridable: FAR, max plot coverage, GLA share, unit area per activity, area per parking space,
-usable share of a parking floor, parking floor area, and the required number of spaces — the last
+usable share of a basement floor, basement floor area, and the required number of spaces — the last
 for a UPPC or ITC reduction, defaulting to the count the activity schedule produces.
 
 Every overridable field shows its resolved value directly beneath itself, with where that value
 came from: `Coverage 90%  overridden`, `Space 32.5 m²  standard`, `Spaces 26  from the schedule`.
 The readout belongs to one field rather than trailing a group of them. The collapsible block
 holding the non-Code parameters is titled **Parameters**. The three percentage fields
-(coverage, GLA share, usable per parking floor) accept **0–100 with at most two decimals**:
+(coverage, GLA share, usable per basement floor) accept **0–100 with at most two decimals**:
 letters, signs and exponents are refused, a third decimal is truncated, and anything above 100
 or below 0 is clamped as you type.
 
@@ -242,7 +242,7 @@ alone:
 | --- | --- |
 | Open ground | plot area less the coverage — what is left outside the footprint |
 | Spaces on open ground | how many of those the open ground holds, at the area per space |
-| Usable per parking floor | what one structured floor yields, after the usable share |
+| Usable per basement floor | what one basement floor yields, after the usable share |
 | Spaces before L-3/L-4 | Max GFA x 2 / 100 — the demand ceiling the limitations set |
 
 The last one is worth the column because the cap is a ratio against GFA, so the ceiling is
@@ -356,7 +356,7 @@ Worked example — Warehousing `713` on a 1,000 m² plot at FAR 1.05 (GFA 1,050 
 4  Activities     = floor( GLA / unit area )         unit area an input, default 60 m2
 
    Spaces         = sum over the activity schedule   or a UPPC/ITC override
-   Parking        = 32.5 m2 each, open ground first then structure
+   Parking        = 32.5 m2 each, open ground first then basement
 ```
 
 Parking is no longer a derivation step. It depends on *which* activities occupy the plot,
@@ -376,7 +376,7 @@ Worked example — 1,000 m&sup2; plot, code `NR` (FAR 1.05), ITC `112` Local Sho
 | Activities | 787.5 / 60 = 13.125 → **13 activities** |
 | Parking (13-activity example) | **26 bays** = 26 &times; 32.5 = **845 m&sup2;** |
 | On open ground | 1,000 &minus; 600 = 400 m&sup2; holds &lfloor;400 / 32.5&rfloor; = **12 spaces** |
-| Structured | 26 &minus; 12 = **14 spaces** = 455 m&sup2;, over 750 m&sup2; usable &rarr; **1 floor** |
+| In basement | 26 &minus; 12 = **14 spaces** = 455 m&sup2;, over 750 m&sup2; usable &rarr; **1 floor** |
 | L-3 / L-4 | 26 bays is 2.48 per 100 m&sup2; GFA, over the cap of 2 &mdash; and the plot is under 1,600 m&sup2;, so **L-4 bars it** |
 
 Steps are ordered by dependency rather than as drawn on the source whiteboard: GLA moves
@@ -431,19 +431,23 @@ Validated against the worked example — flower shop, book shop, commercial bank
 restaurant all auto-map to the ITC categories whose rates the brief quotes (1.318, 1.318,
 4.992, 7.702). Any row can be reassigned by hand, which then shows as *set by hand*.
 
-### Parking: open ground first, then structure
+### Parking: open ground first, then basement
 
-A space needs its own area, so the ground left outside the footprint holds only so many.
-Anything beyond that has to be built, and a parking floor is only partly usable, which is what
-sets how many floors it takes.
+A space needs its own area, so the ground left outside the footprint holds only so many. The
+remainder goes to basement, where a floor is only partly usable — ramps, cores, plant — which is
+what sets how many floors it takes.
+
+A basement floor defaults to the **whole plot**, not the footprint: unlike a storey above ground
+it is not held to the coverage limit. That is why `parkFloorArea` originates from the plot area
+and not from the coverage.
 
 ```
 total parking area = spaces x 32.5 m2
 open ground        = plot area - plot coverage
 spaces on grade    = min(required, floor(open ground / 32.5))
-structured spaces  = required - on grade
-structured area    = structured spaces x 32.5
-parking floors     = ceil(structured area / (parking floor area x 75%))
+basement spaces    = required - on grade
+basement area      = basement spaces x 32.5
+basement floors    = ceil(basement area / (basement floor area x 75%))
 ```
 
 Both cases from the brief, reproduced exactly:
@@ -455,18 +459,19 @@ Both cases from the brief, reproduced exactly:
 | Plot / coverage | 1,000 m² / 60% | 1,000 m² / **100%** |
 | Open ground | 400 m² → holds 12 | **0 m² → holds 0** |
 | On grade | 12 | 0 |
-| Structured | 18 → 585 m² | 120 → 3,900 m² |
+| In basement | 18 → 585 m² | 120 → 3,900 m² |
 | Floors at 75% usable | 1 | **6** |
 
 **Community Retail forces the floors calculation, and it follows from the Code rather than a
 special rule:** `CR` is published at **100% plot coverage**, so there is no open ground and every
-space is structured. `3,900 / (1,000 x 0.75) = 5.2 -> 6 floors`.
+space goes to basement. `3,900 / (1,000 x 0.75) = 5.2 -> 6 floors`.
 
 The number of spaces required comes from the activity schedule, or from the *Required spaces*
 override where UPPC or ITC has granted a reduction.
 
-This replaced an earlier model that capped parking at 50% of plot area and called underground
-mandatory above 16% of coverage. Both were stand-ins with no source behind them. The area per
+This replaced an earlier model that capped parking at 50% of plot area and made basement parking
+mandatory above 16% of coverage. Those two *thresholds* were stand-ins with no source behind them
+— the basement itself was never in doubt, only the invented trigger for reaching it. The area per
 space (32.5 m²) and the 75% floor efficiency come from the standard, so the two assumptions
 flagged in earlier versions are now closed.
 
@@ -542,7 +547,7 @@ Closed since earlier versions:
 - **Plot coverage basis** — it is `plot area x coverage%`, the GFA allowed on the ground floor.
 - **Step 5** — a floored count, `floor(GLA / unit area)`, not an area.
 - **Area per parking space** — 32.5 m², from the standard, replacing an invented 25 m² bay.
-- **Where parking goes** — open ground first, then structure, replacing an invented 50% cap and
-  a 16%-of-coverage underground trigger.
+- **Where parking goes** — open ground first, then basement, replacing an invented 50% cap and
+  a 16%-of-coverage trigger for going below.
 - **Which parking figure governs** — the activity schedule; the whole-plot single-category basis
   was removed.

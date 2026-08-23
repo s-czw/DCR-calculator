@@ -16,7 +16,7 @@ Needs GDAL through pyogrio, plus openpyxl:
 Parking is deliberately not calculated per plot. The number of spaces required
 depends on which activities occupy the plot, which no geodatabase field carries.
 What the sheet gives instead is the envelope: how many spaces the open ground
-outside the footprint holds, how much one structured floor yields, and the
+outside the footprint holds, how much one basement floor yields, and the
 ceiling limitations L-3/L-4 put on demand.
 """
 from __future__ import annotations
@@ -68,7 +68,7 @@ COLUMNS = [
     ("Max activities",            13,  "#,##0"),
     ("Open ground (m2)",          17,  "#,##0.00"),
     ("Spaces on open ground",     21,  "#,##0"),
-    ("Usable per parking floor",  23,  "#,##0.00"),
+    ("Usable per basement floor", 25,  "#,##0.00"),
     ("Spaces before L-3/L-4",     21,  "#,##0.00"),
     ("Notes",                     46,  None),
 ]
@@ -193,7 +193,7 @@ def derive(fields, i, sched, args):
         check = ""
 
     # Parking capacity rather than a parking figure: how many spaces the open
-    # ground outside the footprint holds, and how much a structured floor gives.
+    # ground outside the footprint holds, and how much a basement floor gives.
     # The number of spaces *required* needs an activity schedule, which no
     # geodatabase field carries.
     open_area = max(0.0, area - cover) if (have and cover is not None) else None
@@ -202,7 +202,7 @@ def derive(fields, i, sched, args):
     per_floor = area * args.floor_use / 100.0 if have else None
     if code and code.upper() == "CR":
         notes.append("Community Retail: 100% coverage leaves no open ground, so all "
-                     "parking is structured")
+                     "parking goes to basement")
 
     # The cap is a ratio against GFA, so the ceiling in spaces is exact even
     # though the demand that would meet it is not knowable here.
@@ -290,7 +290,7 @@ def write_xlsx(rows, out, args, sched_meta, gdb, layer, missing, counts):
         ("Unit area per activity", f"{args.unit:g} m2"),
         ("Coverage fallback default", f"{args.coverage_default:g}%"),
         ("Area per parking space", f"{args.space:g} m2"),
-        ("Usable per parking floor", f"{args.floor_use:g}%"),
+        ("Usable per basement floor", f"{args.floor_use:g}%"),
         ("Parking demand cap (L-3/L-4)", f"{PARK_CAP:g} spaces per 100 m2 of GFA"),
         ("L-4 plot size threshold", f"{SMALL_PLOT:,.0f} m2"),
         ("", ""),
@@ -331,11 +331,11 @@ def write_xlsx(rows, out, args, sched_meta, gdb, layer, missing, counts):
         "",
         "  Open ground           = plot area - plot coverage",
         "  Spaces on open ground = floor(open ground / area per space)",
-        "  Usable per floor      = plot area x usable share of a parking floor",
+        "  Usable per basement floor = plot area x usable share  (a basement is not held to coverage)",
         "  Spaces before L-3/L-4 = Max GFA x 2 / 100",
         "",
-        "Spaces beyond what the open ground holds have to be structured, at the area per space,",
-        "and a structured floor yields only its usable share -- so floors = ceil(structured area /",
+        "Spaces beyond what the open ground holds go to basement, at the area per space, and a",
+        "basement floor yields only its usable share -- so floors = ceil(basement area /",
         "usable per floor). Community Retail is the case that forces this: the Code gives it 100%",
         "plot coverage, so there is no open ground at all.",
         "",
@@ -371,7 +371,7 @@ def main():
                     help="coverage %% where the Code publishes none")
     ap.add_argument("--space", type=float, default=32.5, help="area per parking space, m2")
     ap.add_argument("--floor-use", type=float, default=75.0,
-                    help="usable share of a parking floor, %%")
+                    help="usable share of a basement floor, %%")
     args = ap.parse_args()
 
     gdb = os.path.normpath(args.gdb)
