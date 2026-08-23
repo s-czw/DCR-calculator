@@ -107,6 +107,43 @@ downloads that artifact and ships it — for an internal box, that is an rsync o
             dist/ "${{ secrets.DEPLOY_TARGET_HOST }}"
 ```
 
+## Visual design
+
+One dark palette, from the project Figma, applied deliberately rather than derived:
+
+| Token | Value | Use |
+|---|---|---|
+| page | `#1C1C1C` | ground |
+| panel | `#242425` | surfaces |
+| white | `#FFFFFF` | headings, values, table text |
+| grey | `#7D7D81` | labels, hints, sub-lines, units |
+| blue | `#4786C9` | Max GFA and GLA figures, links, primary actions |
+| yellow | `#DC9530` | the activity count, and warnings |
+
+Type is **Manrope** throughout, with IBM Plex Mono kept for formula chips and small numeric
+annotations. There is no light variant: the page commits to this palette and paints every
+colour explicitly, so it renders the same whatever the viewer's theme.
+
+### Contrast, on the record
+
+Two of the four text colours do not meet WCAG AA for normal-size text on `#242425`:
+
+| Colour | Ratio | Status |
+|---|---|---|
+| `#FFFFFF` | 15.51 | passes |
+| `#DC9530` | 6.19 | passes |
+| `#4786C9` | 4.08 | large text only (AA needs 4.5 for normal, 3.0 for large) |
+| `#7D7D81` | 3.78 | large text only |
+
+That affects roughly 22 styles — labels, hints, sub-lines, table headers, chips, the status
+badges — plus white on the blue button fill at 3.80. The large figures pass, because at weight
+700 and 18.66 px or more they only need 3.0.
+
+**This is a deliberate design decision, not an oversight.** Do not "fix" it without checking
+first. If it is ever revisited, the minimum change that clears AA is `#7D7D81` -> `#8A8A8E`
+and `#4786C9` -> `#4F8ED1`, both visually near-identical, plus darkening the primary button's
+label or deepening its fill.
+
 ## Batch export from a geodatabase
 
 The page cannot read a file geodatabase — it is a directory of Esri binary tables, and parsing
