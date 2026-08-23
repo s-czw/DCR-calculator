@@ -13,10 +13,11 @@ Needs GDAL through pyogrio, plus openpyxl:
 
     pip install pyogrio openpyxl
 
-Parking is deliberately not calculated per plot. It depends on which activities
-occupy the plot, which no geodatabase field carries. What the sheet gives instead
-is the parking *budget*: how much surface parking the cap allows, and the point
-above which parking has to go underground.
+Parking is deliberately not calculated per plot. The number of spaces required
+depends on which activities occupy the plot, which no geodatabase field carries.
+What the sheet gives instead is the envelope: how many spaces the open ground
+outside the footprint holds, how much one structured floor yields, and the
+ceiling limitations L-3/L-4 put on demand.
 """
 from __future__ import annotations
 
@@ -29,6 +30,13 @@ from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(HERE, "itc_rates.db")
+
+# Limitations L-3 and L-4 of the Development Control Regulations cap parking
+# demand at 2 spaces per 100 sqm of GFA. Above the cap: L-3 makes the excess the
+# developer's responsibility on a plot of 1,600 sqm or more, and L-4 bars it
+# outright below that. Kept in step with PARK_CAP/SMALL_PLOT in the calculator.
+PARK_CAP = 2.0
+SMALL_PLOT = 1600.0
 
 # Fields read from the plot layer. Everything is optional except the area.
 AREA_FIELD = "PLOTCALCULATEDAREA"
@@ -61,6 +69,7 @@ COLUMNS = [
     ("Open ground (m2)",          17,  "#,##0.00"),
     ("Spaces on open ground",     21,  "#,##0"),
     ("Usable per parking floor",  23,  "#,##0.00"),
+    ("Spaces before L-3/L-4",     21,  "#,##0.00"),
     ("Notes",                     46,  None),
 ]
 
@@ -195,9 +204,18 @@ def derive(fields, i, sched, args):
         notes.append("Community Retail: 100% coverage leaves no open ground, so all "
                      "parking is structured")
 
-    if have and area < 1600:
-        notes.append("under 1,600 m2: limitation L-4 bars uses above "
-                     "2 bays per 100 m2 of GFA")
+    # The cap is a ratio against GFA, so the ceiling in spaces is exact even
+    # though the demand that would meet it is not knowable here.
+    cap_spaces = max_gfa * PARK_CAP / 100.0 if max_gfa is not None else None
+    if cap_spaces is not None:
+        if area < SMALL_PLOT:
+            notes.append(f"under {SMALL_PLOT:,.0f} m2: limitation L-4 bars any use "
+                         f"demanding more than {cap_spaces:,.2f} spaces "
+                         f"({PARK_CAP:g} per 100 m2 of GFA)")
+        else:
+            notes.append(f"L-3: demand over {cap_spaces:,.2f} spaces "
+                         f"({PARK_CAP:g} per 100 m2 of GFA) is permitted but becomes "
+                         f"the developer's responsibility, with no additional GFA")
 
     return [
         i + 1,
@@ -211,7 +229,7 @@ def derive(fields, i, sched, args):
         max_gfa, gdb_gfa, check,
         cov_pct / 100.0, cov_src, cover,
         gla, args.unit, acts,
-        open_area, open_spaces, per_floor,
+        open_area, open_spaces, per_floor, cap_spaces,
         "; ".join(notes),
     ]
 
@@ -273,6 +291,8 @@ def write_xlsx(rows, out, args, sched_meta, gdb, layer, missing, counts):
         ("Coverage fallback default", f"{args.coverage_default:g}%"),
         ("Area per parking space", f"{args.space:g} m2"),
         ("Usable per parking floor", f"{args.floor_use:g}%"),
+        ("Parking demand cap (L-3/L-4)", f"{PARK_CAP:g} spaces per 100 m2 of GFA"),
+        ("L-4 plot size threshold", f"{SMALL_PLOT:,.0f} m2"),
         ("", ""),
         ("Designation schedule", sched_meta.get("designation_file", "-")),
         ("Designations in schedule", sched_meta.get("designations", "-")),
@@ -312,11 +332,18 @@ def write_xlsx(rows, out, args, sched_meta, gdb, layer, missing, counts):
         "  Open ground           = plot area - plot coverage",
         "  Spaces on open ground = floor(open ground / area per space)",
         "  Usable per floor      = plot area x usable share of a parking floor",
+        "  Spaces before L-3/L-4 = Max GFA x 2 / 100",
         "",
         "Spaces beyond what the open ground holds have to be structured, at the area per space,",
         "and a structured floor yields only its usable share -- so floors = ceil(structured area /",
         "usable per floor). Community Retail is the case that forces this: the Code gives it 100%",
         "plot coverage, so there is no open ground at all.",
+        "",
+        "Limitations L-3 and L-4 cap parking demand at 2 spaces per 100 sqm of GFA. The ceiling",
+        "that puts on a plot is exact, so it is given as a column; whether a scheme reaches it is",
+        "not, because that needs the activity schedule. Below 1,600 sqm L-4 bars a use that",
+        "exceeds the ceiling; at or above, L-3 permits it but makes the excess the developer's",
+        "responsibility and grants no additional GFA.",
         "",
         "Unconfirmed with DMT at the time of writing:",
         "  - the GLA share (75% by default)",

@@ -192,15 +192,27 @@ Three sheets: **Plots** (a row per feature, filterable, frozen panes), **Paramet
 coefficient and source file used, so the output is self-documenting) and **Notes** (how each
 column was produced and what is still unconfirmed).
 
-Options: `--layer`, `--gla`, `--unit`, `--coverage-default`, `--bay`, `--cap`, `--ug`.
+Options: `--layer`, `--gla`, `--unit`, `--coverage-default`, `--space`, `--floor-use`.
 
 ### It does not compute parking per plot
 
 The ITC rate depends on which activities occupy the plot, and no geodatabase field carries
 that. Inventing a default activity mix would produce authoritative-looking numbers with no
-basis. Instead the sheet gives the parking **budget** — how much surface parking the cap
-allows, and the area above which parking must go underground — both derivable from the plot
-alone.
+basis. Instead the sheet gives the parking **envelope**, all of it derivable from the plot
+alone:
+
+| Column | |
+| --- | --- |
+| Open ground | plot area less the coverage — what is left outside the footprint |
+| Spaces on open ground | how many of those the open ground holds, at the area per space |
+| Usable per parking floor | what one structured floor yields, after the usable share |
+| Spaces before L-3/L-4 | Max GFA x 2 / 100 — the demand ceiling the limitations set |
+
+The last one is worth the column because the cap is a ratio against GFA, so the ceiling is
+exact even though the demand that would meet it is not knowable without the activity schedule.
+Below 1,600 m2 limitation L-4 bars a use that exceeds the ceiling; at or above it, L-3 permits
+the use but makes the excess the developer's responsibility and grants no additional GFA. Each
+row's note says which of the two applies to that plot.
 
 ### Validation against the sample geodatabase
 
@@ -325,8 +337,10 @@ Worked example — 1,000 m&sup2; plot, code `NR` (FAR 1.05), ITC `112` Local Sho
 | GLA | 787.5 m&sup2; |
 | Parking | (1,050 / 100) x 1.318 = 13.839 &rarr; **14 bays** |
 | Activities | 787.5 / 60 = 13.125 → **13 activities** |
-| Parking (13-activity example) | **26 bays** = 650 m² = 65% of plot → **over the 50% cap** |
-| Share of coverage | 650 / 630 = **103%** → **underground parking mandatory** (trigger 16%) |
+| Parking (13-activity example) | **26 bays** = 26 &times; 32.5 = **845 m&sup2;** |
+| On open ground | 1,000 &minus; 600 = 400 m&sup2; holds &lfloor;400 / 32.5&rfloor; = **12 spaces** |
+| Structured | 26 &minus; 12 = **14 spaces** = 455 m&sup2;, over 750 m&sup2; usable &rarr; **1 floor** |
+| L-3 / L-4 | 26 bays is 2.48 per 100 m&sup2; GFA, over the cap of 2 &mdash; and the plot is under 1,600 m&sup2;, so **L-4 bars it** |
 
 Steps are ordered by dependency rather than as drawn on the source whiteboard: GLA moves
 ahead of parking because one category (`111` Regional Shopping Centre) is charged
@@ -360,7 +374,9 @@ Each row is an activity plus the number of slots it occupies:
 - **ITC location** (Abu Dhabi/Al Ain × CBD/non-CBD) picks which variant of a class applies,
   falling back progressively when a class is not split that finely.
 
-The footer totals slots against the permitted count, and bays against the parking cap.
+The footer totals slots against the permitted count and flags an overrun. Bays are totalled but
+not capped there: whether the demand clears L-3/L-4 is a ratio against GFA, so it is raised as a
+flag rather than a column total.
 
 ### The DED → ITC crosswalk
 
