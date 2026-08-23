@@ -407,7 +407,12 @@ Each row is an activity plus the number of slots it occupies:
   separate tenancy, so it takes whole bays. The raw figure is shown underneath. Rounding per row
   rather than once at the end costs a little more parking — 26 bays against 24 on the example.
   The slots an activity holds are its share of GLA, and for GFA/GLA-charged categories that share
-  is the driver. Categories charged per seat, unit or student instead ask for a quantity.
+  is the driver. **73 of the 141 classes are not charged by area at all** — they are charged per
+  seat, unit, bedroom, student, bed, doctor, berth, taxi bay, invitee or fuelling position — and
+  those rows show a quantity box in the *Rate / units* column instead of a rate, with the per-unit
+  rate underneath it. The box is keyed on the class's `driver_kind`, so it stays visible and
+  editable once a count is entered; a row whose quantity is still blank raises the `QTY` flag and
+  contributes no parking rather than being silently charged by floor area.
 - **ITC location** (Abu Dhabi/Al Ain × CBD/non-CBD) picks which variant of a class applies,
   falling back progressively when a class is not split that finely.
 

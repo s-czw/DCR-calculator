@@ -630,7 +630,7 @@ tbody tr:last-child td{border-bottom:0}
           <table class="sched">
             <thead><tr>
               <th>Activity (DED)</th><th class="n">Slots</th><th class="n">Unit area</th>
-              <th>ITC category</th><th class="n">Rate</th><th class="n">Bays</th>
+              <th>ITC category</th><th class="n">Rate / units</th><th class="n">Bays</th>
               <th><span class="sr">Remove</span></th>
             </tr></thead>
             <tbody id="schedBody"></tbody>
@@ -1384,19 +1384,27 @@ tbody tr:last-child td{border-bottom:0}
 
       const p = rowParking(row, unit);
 
-      // rate, or a quantity box when the category is charged per unit
+      // A quantity box whenever the category is charged per unit, plus the rate
+      // beneath it. Keyed on driver_kind, NOT on needsQty: needsQty is only true
+      // while the box is empty, so gating on it meant the input vanished on the next
+      // full render once a count was entered -- leaving the figure that drives the
+      // row invisible and uneditable short of deleting the row.
       const td3 = el("td", "n");
-      if(p.needsQty){
+      if(p.code && p.code.driver_kind === "count"){
         const qi = el("input");
         qi.type = "number"; qi.min = "0"; qi.step = "1";
         qi.value = row.qty; qi.placeholder = "qty";
-        qi.title = "Charged per " + (p.code ? p.code.unit_label : "unit");
+        qi.title = "Charged per " + p.code.unit_label.toLowerCase() + ", not by area";
         digitsOnly(qi);
         qi.addEventListener("input", ()=>{
           row.qty = qi.value;
           paintRowDerived(tr, row); render();        // no rebuild: keeps focus
         });
         td3.appendChild(qi);
+        const cd = el("div");
+        cd.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.6rem; color:var(--ink-3)";
+        cd.textContent = fmt(p.rate,3) + " / " + p.code.unit_label.toLowerCase();
+        td3.appendChild(cd);
       } else {
         td3.appendChild(Object.assign(el("span","rate"),
           {textContent: Number.isFinite(p.rate) ? fmt(p.rate,3) : "\u2014"}));
