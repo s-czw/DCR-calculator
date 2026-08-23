@@ -425,7 +425,6 @@ tbody tr:last-child td{border-bottom:0}
     <div class="mast-meta">
       <span class="chip" id="chipCode">code &#x2014;</span>
       <span class="chip" id="chipPark">parking &#x2014;</span>
-      <span class="chip" id="chipDb">db &#x2014;</span>
       <span class="chip" id="chipOv" hidden>overrides &#x2014;</span>
     </div>
   </header>
@@ -2008,11 +2007,6 @@ tbody tr:last-child td{border-bottom:0}
       syncDed();
     }
 
-    $("#chipDb").textContent = (sqlLive ? "sqlite · " : "snapshot · ") + (META.codes||base().length) + " codes";
-    $("#chipDb").classList.add("on");
-    $("#chipDb").title = sqlLive
-      ? "Rates queried from an embedded SQLite database"
-      : "WebAssembly unavailable; using the build-time snapshot of the same database";
     $("#footRows").textContent = META.codes || String(base().length);
     if($("#footDesig")) $("#footDesig").textContent = META.designations || String(LU.length);
     const fs = $("#footSrc");
