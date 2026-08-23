@@ -1009,7 +1009,7 @@ tbody tr:last-child td{border-bottom:0}
     const actRaw = Number.isFinite(gla) && unit > 0 ? gla/unit : NaN;
     const act    = Number.isFinite(actRaw) ? Math.floor(actRaw) : NaN;
 
-    const sched  = schedTotals(act);
+    const sched  = schedTotals(act, maxGFA, gla);
     o.spaces     = pick("spaces", sched.baysCeil);
     const parking = parkingPlan(plot, cover, o, dRow);
 
@@ -1149,7 +1149,12 @@ tbody tr:last-child td{border-bottom:0}
              needsQty:false, eff:eff, unit:u, floor: slots * u.area };
   }
 
-  function schedTotals(allowed){
+  /* The slot count stops standing in for floor area as soon as unit areas vary:
+     six slots at a hand-entered 260 m2 can sit inside the permitted count and still
+     overrun the plot's GFA. So the floor area the schedule consumes is checked
+     against Max GFA in its own right. GLA is carried too -- it is the tighter bound,
+     since the tenancies are leasable area -- but only GFA is treated as a hard cap. */
+  function schedTotals(allowed, capGFA, capGLA){
     const unit = pick("unit", COEF.unitArea).value || 60;
     let slots = 0, bays = 0, raw = 0, incomplete = 0, floor = 0, manualUnits = 0;
     SCHED.forEach(r => {
@@ -1164,7 +1169,10 @@ tbody tr:last-child td{border-bottom:0}
     });
     return { slots:slots, allowed:allowed, bays:bays, baysCeil:bays, raw:raw,
              floor:floor, manualUnits:manualUnits,
+             capGFA:capGFA, capGLA:capGLA,
              overSlots: Number.isFinite(allowed) && slots > allowed,
+             overFloor: Number.isFinite(capGFA) && floor > capGFA + 1e-9,
+             overGLA:   Number.isFinite(capGLA) && floor > capGLA + 1e-9,
              incomplete:incomplete, rows:SCHED.length };
   }
   function addSchedRow(actId, slots, override){
@@ -1451,11 +1459,11 @@ tbody tr:last-child td{border-bottom:0}
       tr.appendChild(td); tb.appendChild(tr);
     }
 
-    renderSchedFoot(c.act);
+    renderSchedFoot(c.act, c.maxGFA, c.gla);
   }
 
-  function renderSchedFoot(allowed){
-    const t = schedTotals(allowed);
+  function renderSchedFoot(allowed, capGFA, capGLA){
+    const t = schedTotals(allowed, capGFA, capGLA);
     const F = $("#schedFoot");
     F.innerHTML = "";
     const m = (label, val, cls) => {
@@ -1478,7 +1486,13 @@ tbody tr:last-child td{border-bottom:0}
       fmt(Math.max(0, t.allowed - t.slots)) + " " +
       plural(t.allowed - t.slots, "slot", "slots"), "");
     // per-row unit areas mean the slot count no longer stands in for floor area
-    if(Number.isFinite(t.floor)) m("floor area", area(t.floor), "");
+    if(Number.isFinite(t.floor)){
+      m("floor area", Number.isFinite(t.capGFA)
+          ? fmt(t.floor) + " / " + fmt(t.capGFA) + " m\u00b2"
+          : area(t.floor),
+        t.overFloor ? "bad" : "");
+      if(t.overFloor) m("over GFA by", area(t.floor - t.capGFA), "bad");
+    }
     if(t.manualUnits) m("unit areas entered", fmt(t.manualUnits) + " of " + fmt(t.rows), "");
   }
 
@@ -1554,7 +1568,7 @@ tbody tr:last-child td{border-bottom:0}
       raw: Number.isFinite(c.actRaw) ? "= " + fmt(c.actRaw,3) + " \u2192 floor" : "",
       note: recalcNote(c.o, ["unit","glaPct","far"]) }));
 
-    renderSchedFoot(c.act);
+    renderSchedFoot(c.act, c.maxGFA, c.gla);
     renderPark(c);
     renderOverrides(c);
     renderFlags(c);
@@ -1798,6 +1812,25 @@ tbody tr:last-child td{border-bottom:0}
         "The schedule uses ", strong(fmt(t.slots) + " slots"), " but only ",
         strong(fmt(t.allowed) + " " + plural(t.allowed,"activity","activities")),
         " are permitted by step 4."
+      ]));
+    }
+    // A hand-entered unit area can put the schedule over the plot's GFA while the
+    // slot count still reads as within the permitted number, so this is checked in
+    // its own right rather than inferred from the slots.
+    if(t && t.overFloor){
+      F.appendChild(flag("crit","GFA",[
+        "The scheduled activities occupy ", strong(area(t.floor)),
+        " of floor area, over the ", strong(area(t.capGFA)),
+        " the FAR permits \u2014 over by ", strong(area(t.floor - t.capGFA)),
+        ". Reduce a unit area or drop an activity."
+      ]));
+    } else if(t && t.overGLA){
+      F.appendChild(flag("","GLA",[
+        "The scheduled activities occupy ", strong(area(t.floor)),
+        ", which fits the ", strong(area(t.capGFA)), " of GFA but exceeds the ",
+        strong(area(t.capGLA)), " of leasable area by ",
+        strong(area(t.floor - t.capGLA)),
+        ". Tenancies are let from GLA, so that is the binding limit in practice."
       ]));
     }
     if(t && t.incomplete){

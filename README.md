@@ -420,6 +420,23 @@ The footer totals slots against the permitted count and flags an overrun. Bays a
 not capped there: whether the demand clears L-3/L-4 is a ratio against GFA, so it is raised as a
 flag rather than a column total.
 
+### The floor area the schedule consumes
+
+The slot count stops standing in for floor area as soon as unit areas vary. Six slots at a
+hand-entered 260 m² can sit inside the permitted count and still overrun the plot, so the floor
+area is checked in its own right:
+
+| | |
+|---|---|
+| over **Max GFA** | a `GFA` **restriction** — the FAR does not permit the floor area, full stop |
+| over **GLA** but within GFA | a `GLA` note — it fits the building but not the leasable area |
+| within both | the footer shows `floor area x / y m²` with no flag |
+
+Both are needed because they answer different questions, and the slot counter answers neither: a
+schedule can read *spare 2 slots* while already exceeding the leasable area. GLA is the tighter
+bound — tenancies are let from leasable area, not gross — but only GFA is treated as a hard cap,
+since GLA is itself a 75% assumption rather than a published figure.
+
 ### The DED → ITC crosswalk
 
 `ITC_RULES` in `build_db.py` is a **heuristic mapping written for this tool, not a client
