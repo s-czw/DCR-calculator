@@ -612,7 +612,7 @@ tbody tr:last-child td{border-bottom:0}
       <h3>What the numbers mean</h3>
       <ul>
         <li><b>Max GFA</b> &#x2014; the total floor area the FAR permits on the plot.</li>
-        <li><b>Plot coverage</b> &#x2014; the ground footprint the code allows.</li>
+        <li><b>Plot coverage</b> &#x2014; the GFA the code allows on the ground floor: plot size &#x00D7; max plot coverage.</li>
         <li><b>GLA</b> &#x2014; leasable area, the share of GFA excluding cores, services and circulation.</li>
         <li><b>Parking</b> &#x2014; ITC bays: employee/resident + visitor + truck/bus, rounded up.</li>
         <li><b>Activities</b> &#x2014; tenancies the GLA supports at the minimum unit size, rounded down.</li>
@@ -836,7 +836,9 @@ tbody tr:last-child td{border-bottom:0}
 
 
     const maxGFA  = plot>0 && Number.isFinite(far) ? plot*far : NaN;
-    const cover   = Number.isFinite(maxGFA) && Number.isFinite(pcPct) ? maxGFA*(pcPct/100) : NaN;
+    // Plot coverage is the GFA allowed on the ground floor: a footprint ratio of
+    // the plot, not a share of the total GFA.
+    const cover   = plot > 0 && Number.isFinite(pcPct) ? plot*(pcPct/100) : NaN;
     const gla     = Number.isFinite(maxGFA) && Number.isFinite(glaPct) ? maxGFA*(glaPct/100) : NaN;
 
     // Max allowed activities = GLA / unit area, floored: a partial unit is no unit.
@@ -1259,7 +1261,7 @@ tbody tr:last-child td{border-bottom:0}
     const pcPct = num($("#pcPct").value.trim() === ""
       ? (dRow && Number.isFinite(num(dRow.coverage)) ? num(dRow.coverage)*100 : COEF.coverageDefault)
       : $("#pcPct").value);
-    const cover = Number.isFinite(maxGFA) && Number.isFinite(pcPct) ? maxGFA*(pcPct/100) : NaN;
+    const cover = plot > 0 && Number.isFinite(pcPct) ? plot*(pcPct/100) : NaN;
     const actRaw = Number.isFinite(gla) && unit > 0 ? gla/unit : NaN;
     return { act: Number.isFinite(actRaw) ? Math.floor(actRaw) : NaN, cover: cover };
   }
@@ -1296,9 +1298,9 @@ tbody tr:last-child td{border-bottom:0}
       value: Number.isFinite(c.maxGFA)?fmt(c.maxGFA):"—", unit:"m²" }));
 
     L.appendChild(stepRow({ n:2, title:"Plot coverage", abbr:"PC",
-      sub:"Allowed ground footprint, " + fmt(c.pcPct) + "% of " +
-          "Max GFA" + (c.pcAuto?" · from designation":" · overridden"),
-      formula: (Number.isFinite(c.maxGFA)?fmt(c.maxGFA):"GFA") + " m² × " + fmt(c.pcPct/100,2),
+      sub:"GFA allowed on the ground floor, " + fmt(c.pcPct) + "% of the plot" +
+          (c.pcAuto?" · from designation":" · overridden"),
+      formula: P + " m² × " + fmt(c.pcPct/100,4),
       value: Number.isFinite(c.cover)?fmt(c.cover):"—", unit:"m²" }));
 
     L.appendChild(stepRow({ n:3, cls:"key", title:"Gross leasable area", abbr:"GLA",
@@ -1687,7 +1689,8 @@ tbody tr:last-child td{border-bottom:0}
         "ITC location         " + state.itcLoc + "   basis " + state.basis,
         "",
         "1  Max GFA           " + area(c.maxGFA) + "   = " + fmt(c.plot) + " x " + fmt(c.far,3),
-        "2  Plot coverage     " + area(c.cover) + "   = " + fmt(c.maxGFA) + " x " + fmt(c.pcPct/100,4),
+        "2  Plot coverage     " + area(c.cover) + "   = " + fmt(c.plot) + " x " + fmt(c.pcPct/100,4) +
+          "   (ground-floor GFA)",
         "3  GLA               " + area(c.gla) + "   = " + fmt(c.maxGFA) + " x " + fmt(c.glaPct/100,2),
         "4  Max activities    " + fmt(c.act) + "   = " + fmt(c.gla) + " / " + fmt(c.unit) +
           " = " + fmt(c.actRaw,3) + " -> floor",

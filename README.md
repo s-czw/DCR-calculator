@@ -194,7 +194,7 @@ Worked example — Warehousing `713` on a 1,000 m² plot at FAR 1.05 (GFA 1,050 
 
 ```
 1  Max GFA        = plot size x FAR                  FAR from the designation
-2  Plot coverage  = Max GFA x coverage%              always against Max GFA
+2  Plot coverage  = plot size x coverage%            GFA allowed on the ground floor
 3  GLA            = Max GFA x GLA%                   GLA% an input, default 75%
 4  Activities     = floor( GLA / unit area )         unit area an input, default 60 m2
 
@@ -212,7 +212,7 @@ Worked example — 1,000 m&sup2; plot, code `NR` (FAR 1.05), ITC `112` Local Sho
 | Step | Result |
 |---|---|
 | Max GFA | 1,050 m&sup2; |
-| Plot coverage | 630 m&sup2; |
+| Plot coverage | 1,000 x 0.6 = **600 m&sup2;** |
 | GLA | 787.5 m&sup2; |
 | Parking | (1,050 / 100) x 1.318 = 13.839 &rarr; **14 bays** |
 | Activities | 787.5 / 60 = 13.125 → **13 activities** |
@@ -275,9 +275,8 @@ Above a share of the **allowed plot coverage** (step 2), surface parking stops b
 the panel states that underground parking is mandatory within the plot. The trigger is an input,
 default **16%**.
 
-That is a low bar in practice. On the worked example — 630 m² of allowed coverage — 16% is
-100.8 m², which at 25 m² a bay is **four bays**. Verified at the boundary: four bays (100 m²,
-15.9%) stays on the surface, five (125 m², 19.8%) triggers. So almost any multi-tenant scheme
+That is a low bar in practice. On the worked example — 600 m² of allowed coverage — 16% is
+96 m², which at 25 m² a bay is **under four bays**. So almost any multi-tenant scheme
 will require underground parking. That may well be the intent for dense plots, but it is worth
 confirming the rule means 16% *of coverage* rather than of plot area, and that it compares an
 **area** rather than a bay count.
@@ -344,11 +343,11 @@ Confirmed from source:
 
 Still needs sign-off:
 
-1. **Plot coverage is taken as coverage% of Max GFA**, not of plot area — as drawn on the
-   whiteboard. The toggle offering the plot-area basis was removed on request, so this is now
-   the only basis. The issued report prints `MAX. PLOT COVERAGE   60%` as a bare percentage
-   with no area, consistent with coverage being a footprint ratio of *plot area* and
-   suggesting the whiteboard's reading is wrong. Still worth confirming against the Code.
+1. ~~**Plot coverage basis.**~~ **Resolved 2026-08-22:** plot coverage is the GFA allowed on
+   the ground floor, `plot size x max plot coverage%`. The whiteboard's `Max GFA x coverage%` was
+   wrong, which the issued report had hinted at by printing `MAX. PLOT COVERAGE 60%` as a bare
+   percentage with no area. On the worked example this moves coverage from 630 m² to 600 m², and
+   the footprint/plot ratio from 63% to exactly 60%.
 2. **The handwritten Arabic note** reading roughly "take 50% of the PCT" now has a likely
    referent: limitation **L-2** of the issued report requires "a minimum of 50% of the
    plot's total GFA … allocated to the specified uses and … not less than 50% of the total
