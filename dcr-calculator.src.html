@@ -986,6 +986,56 @@ tbody tr:last-child td{border-bottom:0}
                  unitArea: "", unitManual: false, qty: "", search: "" });
   }
 
+  /* Whole integers only. These are counts and areas, so a decimal point, sign
+     or exponent has no meaning here; type=number alone still lets several
+     browsers through. */
+  function digitsOnly(input){
+    const ok = new Set(["Backspace","Delete","Tab","Enter","Escape","Home","End",
+                        "ArrowLeft","ArrowRight","ArrowUp","ArrowDown"]);
+    input.setAttribute("inputmode", "numeric");
+    input.addEventListener("keydown", e=>{
+      if(e.ctrlKey || e.metaKey || e.altKey || ok.has(e.key)) return;
+      if(e.key.length === 1 && !/[0-9]/.test(e.key)) e.preventDefault();
+    });
+    input.addEventListener("paste", e=>{
+      const t = (e.clipboardData || window.clipboardData).getData("text") || "";
+      const clean = t.replace(/[^0-9]/g, "");
+      e.preventDefault();
+      if(clean) document.execCommand("insertText", false, clean);
+    });
+    // backstop for anything that still slips in (drag-and-drop, IME)
+    input.addEventListener("input", ()=>{
+      const clean = input.value.replace(/[^0-9]/g, "");
+      if(clean !== input.value) input.value = clean;
+    });
+    return input;
+  }
+
+  /* Repaint one row's derived cells without rebuilding the row, so the field
+     being typed into keeps focus. Cell order: activity, slots, unit area,
+     ITC category, rate/qty, bays, remove. */
+  function paintRowDerived(tr, row){
+    const unit = num($("#unitArea").value) || 60;
+    const u = rowUnit(row, unit);
+    const p = rowParking(row, unit);
+
+    const uf = tr.cells[2].querySelector(".uflag");
+    if(uf){
+      uf.className = "uflag " + (u.manual ? "uflag-manual" : "uflag-auto");
+      uf.textContent = u.manual ? "entered" : "inherited";
+    }
+    const bays = tr.cells[5];
+    bays.innerHTML = "";
+    bays.appendChild(Object.assign(el("span"),
+      {textContent: Number.isFinite(p.bays) ? fmt(p.bays,0) : "\u2014"}));
+    if(Number.isFinite(p.raw) && Math.abs(p.raw - p.bays) > 1e-9){
+      const rw = el("div");
+      rw.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.6rem; color:var(--ink-3)";
+      rw.textContent = "raw " + fmt(p.raw,3);
+      bays.appendChild(rw);
+    }
+  }
+
   function renderSched(){
     const c = calcLite();
     const tb = $("#schedBody");
@@ -1043,7 +1093,11 @@ tbody tr:last-child td{border-bottom:0}
       const td1 = el("td", "n");
       const sl = el("input");
       sl.type = "number"; sl.min = "0"; sl.step = "1"; sl.value = row.slots;
-      sl.addEventListener("input", ()=>{ row.slots = sl.value; renderSched(); render(); });
+      digitsOnly(sl);
+      sl.addEventListener("input", ()=>{
+        row.slots = sl.value;
+        paintRowDerived(tr, row); render();          // no rebuild: keeps focus
+      });
       td1.appendChild(sl);
       tr.appendChild(td1);
 
@@ -1058,6 +1112,7 @@ tbody tr:last-child td{border-bottom:0}
       ui.title = u.manual
         ? "Entered for this activity \u2014 clear the field to go back to the fixed value"
         : "Following the fixed value of " + fmt(gu) + " m\u00b2";
+      digitsOnly(ui);
       ui.addEventListener("input", ()=>{
         if(ui.value.trim() === ""){          // cleared: follow the fixed value again
           row.unitManual = false;
@@ -1066,7 +1121,7 @@ tbody tr:last-child td{border-bottom:0}
           row.unitManual = true;
           row.unitArea = ui.value;
         }
-        renderSched(); render();
+        paintRowDerived(tr, row); render();          // no rebuild: keeps focus
       });
       tdU.appendChild(ui);
       tdU.appendChild(el("div", "uflag " + (u.manual ? "uflag-manual" : "uflag-auto"),
@@ -1109,7 +1164,11 @@ tbody tr:last-child td{border-bottom:0}
         qi.type = "number"; qi.min = "0"; qi.step = "1";
         qi.value = row.qty; qi.placeholder = "qty";
         qi.title = "Charged per " + (p.code ? p.code.unit_label : "unit");
-        qi.addEventListener("input", ()=>{ row.qty = qi.value; renderSched(); render(); });
+        digitsOnly(qi);
+        qi.addEventListener("input", ()=>{
+          row.qty = qi.value;
+          paintRowDerived(tr, row); render();        // no rebuild: keeps focus
+        });
         td3.appendChild(qi);
       } else {
         td3.appendChild(Object.assign(el("span","rate"),

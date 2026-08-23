@@ -236,7 +236,9 @@ Each row is an activity plus the number of slots it occupies:
 - **ITC category** — auto-mapped from the activity, overridable per row. The confidence tag
   says how far to trust the mapping.
 - **Unit area** — per row. The field always shows the effective figure, so the spinner nudges it
-  from there (60 → 61) rather than jumping to the input's minimum. A row follows the Fixed-values
+  from there (60 → 61) rather than jumping to the input's minimum. Slots, unit area and quantity
+  accept whole numbers only, and editing one repaints just that row's derived cells rather than
+  rebuilding the table, so the field keeps focus while you type. A row follows the Fixed-values
   default until you change it, and clearing the field hands it back. Each row is tagged
   `inherited` or `entered` so a hand-set area is visible at a glance, and the footer counts how
   many were entered. Because rows can differ, the footer also totals the floor area the schedule
