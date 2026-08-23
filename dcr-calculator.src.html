@@ -1614,12 +1614,12 @@ tbody tr:last-child td{border-bottom:0}
       Number.isFinite(p.basementArea) ? fmt(p.basementArea) : "\u2014",
       !Number.isFinite(p.groundArea) || noGround ? "m\u00b2" :
         "m\u00b2, less the " + fmt(p.groundArea) + " m\u00b2 on ground", ""));
-    grid.appendChild(cell("In basement",
+    grid.appendChild(cell("In basement/podium parking",
       Number.isFinite(p.basement) ? fmt(p.basement) : "\u2014",
       Number.isFinite(p.basementArea) ? plural(p.basement,"space","spaces") + ", " +
         fmt(p.basementArea) + " m\u00b2" : "",
       p.basement > 0 ? "ug" : ""));
-    grid.appendChild(cell("Basement floors",
+    grid.appendChild(cell("Basement/podium parking floors",
       Number.isFinite(p.floors) ? fmt(p.floors) : "\u2014",
       Number.isFinite(p.perFloor) && p.basement > 0
         ? fmt(p.perFloor) + " m\u00b2 usable each" : "none needed",
@@ -2055,19 +2055,19 @@ tbody tr:last-child td{border-bottom:0}
         "Parking required     " + fmt(t.baysCeil) + " bays   (each activity rounded up)",
         "",
         "PARKING",
-        "  Spaces required              " + fmt(c.parking.need) +
+        "  Spaces required                 " + fmt(c.parking.need) +
           (c.o.spaces.overridden ? "   [UPPC/ITC override, schedule gave " +
              fmt(c.o.spaces.original) + "]" : "   (from the schedule)"),
-        "  Area per space               " + fmt(c.parking.per,1) + " m2",
-        "  Total parking area required  " + fmt(c.parking.needArea) + " m2",
-        "  Open ground area             " + fmt(c.parking.open) + " m2",
-        "  On ground                    " + fmt(c.parking.onGround) + " spaces, " +
+        "  Area per space                  " + fmt(c.parking.per,1) + " m2",
+        "  Total parking area required     " + fmt(c.parking.needArea) + " m2",
+        "  Open ground area                " + fmt(c.parking.open) + " m2",
+        "  On ground                       " + fmt(c.parking.onGround) + " spaces, " +
           fmt(c.parking.groundArea) + " m2",
-        "  Offset spaces required       " + fmt(c.parking.basement) + " spaces",
-        "  Offset parking area required " + fmt(c.parking.basementArea) + " m2",
-        "  In basement                  " + fmt(c.parking.basement) + " spaces, " +
+        "  Offset spaces required          " + fmt(c.parking.basement) + " spaces",
+        "  Offset parking area required    " + fmt(c.parking.basementArea) + " m2",
+        "  In basement/podium parking      " + fmt(c.parking.basement) + " spaces, " +
           fmt(c.parking.basementArea) + " m2",
-        "  Basement floors              " + fmt(c.parking.floors) + "   (" + fmt(c.parking.fArea) +
+        "  Basement/podium parking floors  " + fmt(c.parking.floors) + "   (" + fmt(c.parking.fArea) +
           " m2 x " + fmt(c.parking.useP) + "% = " + fmt(c.parking.perFloor) + " m2 usable each)" +
           (c.parking.isCR ? "   [Community Retail: 100% coverage, no open ground]" : ""),
         "",
