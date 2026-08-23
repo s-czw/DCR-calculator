@@ -698,7 +698,8 @@ tbody tr:last-child td{border-bottom:0}
                           || (a.id||0)-(b.id||0);
 
   function fmt(n, dp){
-    if(!Number.isFinite(n)) return "—";
+    if(!Number.isFinite(n)) return "\u2014";
+    if(n === 0) n = 0;                       // collapse -0, which prints as "-0"
     if(dp==null) dp = Math.abs(n % 1) < 1e-9 ? 0 : 2;
     return n.toLocaleString("en-US",{ minimumFractionDigits:0, maximumFractionDigits:dp });
   }
@@ -979,7 +980,7 @@ tbody tr:last-child td{border-bottom:0}
                     ? fArea*(useP/100) : NaN;
     const floorsRaw = Number.isFinite(structArea) && perFloor > 0
                     ? structArea/perFloor : NaN;
-    const floors    = Number.isFinite(floorsRaw) ? Math.ceil(floorsRaw - 1e-9) : NaN;
+    const floors    = Number.isFinite(floorsRaw) ? Math.max(0, Math.ceil(floorsRaw - 1e-9)) : NaN;
 
     return { per, need, open, needArea, openCap, onGrade, structured,
              gradeArea, structArea, perFloor, floorsRaw, floors, isCR,
