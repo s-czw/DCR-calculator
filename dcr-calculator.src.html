@@ -508,7 +508,7 @@ tbody tr:last-child td{border-bottom:0}
         <div class="rule"></div>
 
         <details class="coef" open>
-          <summary>Override values</summary>
+          <summary>Parameters</summary>
           <div>
             <p class="hint">Every field here already has a value from the Code or the standard.
               Leave one blank and that value is used; type in it to override, and the change is
@@ -516,23 +516,28 @@ tbody tr:last-child td{border-bottom:0}
             <div class="field">
               <label for="unitArea">Unit area per activity</label>
               <div class="ctl"><input id="unitArea" type="number" min="1" step="1"><span class="suffix">m&#x00B2;</span></div>
+              <div class="derived"><span>Unit <b id="unitShow">&#x2014;</b></span><span class="src" id="unitSrc"></span></div>
             </div>
             <div class="field">
               <label for="spaceArea">Area per parking space</label>
               <div class="ctl"><input id="spaceArea" type="number" min="1" step="0.5"><span class="suffix">m&#x00B2;</span></div>
+              <div class="derived"><span>Space <b id="spaceShow">&#x2014;</b></span><span class="src" id="spaceSrc"></span></div>
             </div>
             <div class="field">
               <label for="floorUsePct">Usable per parking floor</label>
               <div class="ctl"><input id="floorUsePct" type="number" min="0" max="100" step="0.01"><span class="suffix">%</span></div>
+              <div class="derived"><span>Usable <b id="floorUseShow">&#x2014;</b></span><span class="src" id="floorUseSrc"></span></div>
             </div>
             <div class="field">
               <label for="parkFloorArea">Parking floor area</label>
               <div class="ctl"><input id="parkFloorArea" type="number" min="1" step="1"><span class="suffix">m&#x00B2;</span></div>
+              <div class="derived"><span>Floor <b id="floorAreaShow">&#x2014;</b></span><span class="src" id="floorAreaSrc"></span></div>
               <p class="hint">Defaults to the plot area. Sets how much a structured floor yields.</p>
             </div>
             <div class="field">
               <label for="spacesOverride">Required spaces &#x2014; UPPC / ITC override</label>
               <div class="ctl"><input id="spacesOverride" type="number" min="0" step="1"><span class="suffix">spaces</span></div>
+              <div class="derived"><span>Spaces <b id="spacesShow">&#x2014;</b></span><span class="src" id="spacesSrc"></span></div>
               <p class="hint">Blank uses the count from the activity schedule. Set this when UPPC
                 or ITC has granted a reduction.</p>
             </div>
@@ -851,21 +856,21 @@ tbody tr:last-child td{border-bottom:0}
 
   const OV = [
     { id:"farManual",     key:"far",        label:"FAR",
-      fmt:v=>fmt(v,3) },
+      fmt:v=>fmt(v,3),          show:"farShow",       src:"farSrc" },
     { id:"pcPct",         key:"pcPct",      label:"Max plot coverage",
-      fmt:v=>fmt(v,2)+"%" },
+      fmt:v=>fmt(v,2)+"%",      show:"pcShow",        src:"pcSrc" },
     { id:"glaPct",        key:"glaPct",     label:"GLA share",
-      fmt:v=>fmt(v)+"%" },
+      fmt:v=>fmt(v,2)+"%",      show:"glaShow",       src:"glaSrc",  base:"default" },
     { id:"unitArea",      key:"unit",       label:"Unit area per activity",
-      fmt:v=>fmt(v)+" m\u00b2" },
+      fmt:v=>fmt(v)+" m\u00b2",  show:"unitShow",      src:"unitSrc", base:"standard" },
     { id:"spaceArea",     key:"spaceArea",  label:"Area per parking space",
-      fmt:v=>fmt(v,1)+" m\u00b2" },
+      fmt:v=>fmt(v,2)+" m\u00b2", show:"spaceShow",    src:"spaceSrc", base:"standard" },
     { id:"floorUsePct",   key:"floorUse",   label:"Usable per parking floor",
-      fmt:v=>fmt(v)+"%" },
+      fmt:v=>fmt(v,2)+"%",      show:"floorUseShow",  src:"floorUseSrc", base:"standard" },
     { id:"parkFloorArea", key:"floorArea",  label:"Parking floor area",
-      fmt:v=>fmt(v)+" m\u00b2" },
+      fmt:v=>fmt(v)+" m\u00b2",  show:"floorAreaShow", src:"floorAreaSrc", base:"from the plot" },
     { id:"spacesOverride",key:"spaces",     label:"Required spaces",
-      fmt:v=>fmt(v)+" spaces" },
+      fmt:v=>fmt(v),            show:"spacesShow",    src:"spacesSrc", base:"from the schedule" },
   ];
   const OVBY = {};
   OV.forEach(o => { OVBY[o.key] = o; });
@@ -1728,19 +1733,32 @@ tbody tr:last-child td{border-bottom:0}
                        " · FAR " + fmt(c.far,3) + " · PC " + fmt(c.pcPct,0) + "%";
       cc.classList.add("on");
     } else { cc.textContent = "code —"; cc.classList.remove("on"); }
-    $("#farShow").textContent = Number.isFinite(c.far) ? fmt(c.far,3) : "—";
-    $("#farSrc").textContent  = c.o.far.overridden ? "overridden"
-                              : (c.dRow ? (c.dRow.source==="code"?"from the Code":"added here") : "no designation");
-    if($("#glaShow")){
-      $("#glaShow").textContent = fmt(c.glaPct,2) + "%";
-      $("#glaSrc").textContent  = c.o.glaPct.overridden ? "overridden" : "default";
-    }
-    if($("#pcShow")){
-      $("#pcShow").textContent = fmt(c.pcPct,2) + "%";
-      $("#pcSrc").textContent  = !c.o.pcPct.overridden
-        ? (c.dRow && Number.isFinite(num(c.dRow.coverage)) ? "from the Code" : "fallback default")
-        : "overridden";
-    }
+    paintReadouts(c);
+  }
+
+  /* Every overridable field reports its resolved value underneath itself, and
+     says where that value came from. */
+  function paintReadouts(c){
+    OV.forEach(d => {
+      const show = d.show && document.getElementById(d.show);
+      const src  = d.src  && document.getElementById(d.src);
+      if(!show) return;
+      const st = c.o[d.key];
+      show.textContent = st && st.value != null && Number.isFinite(st.value)
+        ? d.fmt(st.value) : "\u2014";
+      if(!src) return;
+      if(!st){ src.textContent = ""; return; }
+      if(st.overridden){ src.textContent = "overridden"; return; }
+      if(d.key === "far"){
+        src.textContent = c.dRow
+          ? (c.dRow.source === "code" ? "from the Code" : "added here") : "no designation";
+      } else if(d.key === "pcPct"){
+        src.textContent = c.dRow && Number.isFinite(num(c.dRow.coverage))
+          ? "from the Code" : "fallback default";
+      } else {
+        src.textContent = d.base || "";
+      }
+    });
   }
 
 
@@ -2007,6 +2025,22 @@ tbody tr:last-child td{border-bottom:0}
       if(!LU.some(r=>String(r.id)===$("#dedCode").value) && $("#dedCode").value!=="__none")
         $("#dedCode").value = LU[0] ? String(LU[0].id) : "__none";
     }
+    /* A restored value equal to its original is not an override: earlier builds
+       pre-filled some of these fields and the value was persisted. Normalise once
+       at boot rather than per render, so typing a value that happens to match the
+       original is not fought. */
+    (function normaliseOverrides(){
+      const o = calc().o;
+      OV.forEach(d => {
+        const el = document.getElementById(d.id);
+        if(!el || el.value.trim() === "") return;
+        const st = o[d.key];
+        if(st && st.original != null && Math.abs(num(el.value) - st.original) < 1e-9){
+          el.value = "";
+        }
+      });
+    })();
+
     $("#itcLoc").value = state.itcLoc;
     if(!SCHED.length) addSchedRow(null, 1, null);
     wire();
