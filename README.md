@@ -372,7 +372,7 @@ Worked example — 1,000 m&sup2; plot, code `NR` (FAR 1.05), ITC `112` Local Sho
 | Max GFA | 1,050 m&sup2; |
 | Plot coverage | 1,000 x 0.6 = **600 m&sup2;** |
 | GLA | 787.5 m&sup2; |
-| Parking | (1,050 / 100) x 1.318 = 13.839 &rarr; **14 bays** |
+| Parking | (1,050 / 100) x 1.318 = 13.839 &rarr; **14 bays** (one ceiling, on the total) |
 | Activities | 787.5 / 60 = 13.125 → **13 activities** |
 | Parking (13-activity example) | **26 bays** = 26 &times; 32.5 = **845 m&sup2;** |
 | On open ground | 1,000 &minus; 600 = 400 m&sup2; holds &lfloor;400 / 32.5&rfloor; = **12 spaces** |
@@ -403,9 +403,11 @@ Each row is an activity plus the number of slots it occupies:
   `inherited` or `entered` so a hand-set area is visible at a glance, and the footer counts how
   many were entered. Because rows can differ, the footer also totals the floor area the schedule
   consumes, which the slot count alone no longer tells you.
-- **Bays** — `slots × unit area × conversion × rate`, **rounded up per row**: each activity is a
-  separate tenancy, so it takes whole bays. The raw figure is shown underneath. Rounding per row
-  rather than once at the end costs a little more parking — 26 bays against 24 on the example.
+- **Bays** — `slots × unit area × conversion × rate`, carried **unrounded per row**. The ceiling
+  is applied **once, to the total**. Rounding each row up first charges for part spaces the scheme
+  never needs: `2.372 + 5.536 + 5.99` is `13.898 → 14` spaces, but per-row ceilings make it
+  `3 + 6 + 6 = 15`. The error compounds with the number of rows, so a long schedule drifts further
+  from the true figure.
   The slots an activity holds are its share of GLA, and for GFA/GLA-charged categories that share
   is the driver. **73 of the 141 classes are not charged by area at all** — they are charged per
   seat, unit, bedroom, student, bed, doctor, berth, taxi bay, invitee or fuelling position — and

@@ -701,7 +701,8 @@ tbody tr:last-child td{border-bottom:0}
         <li><b>Max GFA</b> &#x2014; the total floor area the FAR permits on the plot.</li>
         <li><b>Plot coverage</b> &#x2014; the GFA the code allows on the ground floor: plot size &#x00D7; max plot coverage.</li>
         <li><b>GLA</b> &#x2014; leasable area, the share of GFA excluding cores, services and circulation.</li>
-        <li><b>Parking</b> &#x2014; ITC bays: employee/resident + visitor + truck/bus, rounded up.</li>
+        <li><b>Parking</b> &#x2014; ITC bays: employee/resident + visitor + truck/bus. Each activity
+          contributes its exact figure; the total is rounded up once.</li>
         <li><b>Activities</b> &#x2014; tenancies the GLA supports at the minimum unit size, rounded down.</li>
       </ul>
     </div>
@@ -1144,8 +1145,11 @@ tbody tr:last-child td{border-bottom:0}
       driver = slots * u.area;                  // floor area this activity holds
     }
     const raw = driver * code.conversion * rate;
-    // Each activity is a separate tenancy, so its bays round up on their own.
-    return { code:code, rate:rate, raw:raw, bays: Math.max(0, Math.ceil(raw - 1e-9)),
+    // No rounding here. Rounding every row up and then adding charges for part
+    // spaces the scheme never needs: 2.372 + 5.536 + 5.99 is 13.898 spaces, but
+    // per-row ceilings turn that into 3 + 6 + 6 = 15. The ceiling is applied once,
+    // to the total, in schedTotals.
+    return { code:code, rate:rate, raw:raw, bays:raw,
              needsQty:false, eff:eff, unit:u, floor: slots * u.area };
   }
 
@@ -1156,7 +1160,7 @@ tbody tr:last-child td{border-bottom:0}
      since the tenancies are leasable area -- but only GFA is treated as a hard cap. */
   function schedTotals(allowed, capGFA, capGLA){
     const unit = pick("unit", COEF.unitArea).value || 60;
-    let slots = 0, bays = 0, raw = 0, incomplete = 0, floor = 0, manualUnits = 0;
+    let slots = 0, raw = 0, incomplete = 0, floor = 0, manualUnits = 0;
     SCHED.forEach(r => {
       const sl = Math.max(0, num(r.slots) || 0);
       slots += sl;
@@ -1164,10 +1168,12 @@ tbody tr:last-child td{border-bottom:0}
       if(u.manual) manualUnits++;
       floor += sl * u.area;
       const p = rowParking(r, unit);
-      if(Number.isFinite(p.bays)){ bays += p.bays; raw += p.raw; }
+      if(Number.isFinite(p.raw)){ raw += p.raw; }
       else if(r.act || r.itcOverride) incomplete++;
     });
-    return { slots:slots, allowed:allowed, bays:bays, baysCeil:bays, raw:raw,
+    // One ceiling, on the total: a part space still has to be built as a whole one.
+    const baysCeil = Math.max(0, Math.ceil(raw - 1e-9));
+    return { slots:slots, allowed:allowed, bays:baysCeil, baysCeil:baysCeil, raw:raw,
              floor:floor, manualUnits:manualUnits,
              capGFA:capGFA, capGLA:capGLA,
              overSlots: Number.isFinite(allowed) && slots > allowed,
@@ -1264,13 +1270,7 @@ tbody tr:last-child td{border-bottom:0}
     const bays = tr.cells[5];
     bays.innerHTML = "";
     bays.appendChild(Object.assign(el("span"),
-      {textContent: Number.isFinite(p.bays) ? fmt(p.bays,0) : "\u2014"}));
-    if(Number.isFinite(p.raw) && Math.abs(p.raw - p.bays) > 1e-9){
-      const rw = el("div");
-      rw.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.6rem; color:var(--ink-3)";
-      rw.textContent = "raw " + fmt(p.raw,3);
-      bays.appendChild(rw);
-    }
+      {textContent: Number.isFinite(p.raw) ? fmt(p.raw,3) : "\u2014"}));
   }
 
   function renderSched(){
@@ -1429,13 +1429,7 @@ tbody tr:last-child td{border-bottom:0}
 
       const td4 = el("td", "n");
       td4.appendChild(Object.assign(el("span"),
-        {textContent: Number.isFinite(p.bays) ? fmt(p.bays,0) : "\u2014"}));
-      if(Number.isFinite(p.raw) && Math.abs(p.raw - p.bays) > 1e-9){
-        const rw = el("div");
-        rw.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.6rem; color:var(--ink-3)";
-        rw.textContent = "raw " + fmt(p.raw,3);
-        td4.appendChild(rw);
-      }
+        {textContent: Number.isFinite(p.raw) ? fmt(p.raw,3) : "\u2014"}));
       tr.appendChild(td4);
 
       const td5 = el("td", "n");
@@ -2081,11 +2075,12 @@ tbody tr:last-child td{border-bottom:0}
           " x" + String(r.slots).padStart(3) +
           "  " + (p.code ? p.code.code : "-").padEnd(16) +
           "  rate " + (Number.isFinite(p.rate) ? fmt(p.rate,3) : "-").padStart(7) +
-          "  " + (Number.isFinite(p.bays) ? fmt(p.bays,0) + " bays" : "needs qty"));
+          "  " + (Number.isFinite(p.raw) ? fmt(p.raw,3) + " bays" : "needs qty"));
       });
       lines.push("",
         "Slots used           " + fmt(t.slots) + " of " + fmt(t.allowed),
-        "Parking required     " + fmt(t.baysCeil) + " bays   (each activity rounded up)",
+        "Parking required     " + fmt(t.baysCeil) + " bays   (sum of " + fmt(t.raw,3) +
+          ", rounded up once)",
         "",
         "PARKING",
         "  Spaces required                 " + fmt(c.parking.need) +
