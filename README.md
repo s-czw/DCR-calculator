@@ -123,6 +123,12 @@ Overridable: FAR, max plot coverage, GLA share, unit area per activity, area per
 usable share of a parking floor, parking floor area, and the required number of spaces — the last
 for a UPPC or ITC reduction, defaulting to the count the activity schedule produces.
 
+Each field shows its resolved value directly beneath it — `Coverage 90%  overridden` — so the
+readout belongs to one field rather than trailing a group of them. The three percentage fields
+(coverage, GLA share, usable per parking floor) accept **0–100 with at most two decimals**:
+letters, signs and exponents are refused, a third decimal is truncated, and anything above 100
+or below 0 is clamped as you type.
+
 The point is that an entered value always reads as a deviation, so a figure derived from Code
 values never looks like one derived from a hand-entered assumption.
 

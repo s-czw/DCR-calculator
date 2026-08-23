@@ -439,36 +439,36 @@ tbody tr:last-child td{border-bottom:0}
         <div class="field">
           <label for="dedCode">Land use / designation</label>
           <div class="ctl"><select id="dedCode"></select></div>
-          <div class="derived"><span>FAR <b id="farShow">&#x2014;</b></span><span class="src" id="farSrc"></span></div>
         </div>
 
         <div class="field">
           <label for="farManual">FAR override</label>
           <div class="ctl">
-            <input id="farManual" type="number" min="0" step="0.01" placeholder="from designation" inputmode="decimal">
+            <input id="farManual" type="number" min="0" step="0.01" inputmode="decimal">
             <span class="suffix">ratio</span>
           </div>
+          <div class="derived"><span>FAR <b id="farShow">&#x2014;</b></span><span class="src" id="farSrc"></span></div>
         </div>
 
         <div class="field">
           <label for="pcPct">Max plot coverage</label>
           <div class="ctl">
-            <input id="pcPct" type="number" min="0" max="100" step="0.5" inputmode="decimal">
+            <input id="pcPct" type="number" min="0" max="100" step="0.01" inputmode="decimal">
             <span class="suffix">%</span>
           </div>
+          <div class="derived"><span>Coverage <b id="pcShow">&#x2014;</b></span><span class="src" id="pcSrc"></span></div>
         </div>
+
         <div class="field">
           <label for="glaPct">GLA share</label>
           <div class="ctl">
-            <input id="glaPct" type="number" min="0" max="100" step="1" inputmode="decimal">
+            <input id="glaPct" type="number" min="0" max="100" step="0.01" inputmode="decimal">
             <span class="suffix">%</span>
           </div>
+          <div class="derived"><span>GLA <b id="glaShow">&#x2014;</b></span><span class="src" id="glaSrc"></span></div>
         </div>
-        <div class="derived">
-          <span>Coverage <b id="pcShow">&#x2014;</b></span><span class="src" id="pcSrc"></span>
-        </div>
-        <p class="hint">Coverage drives both the footprint (step 2) and the max allowed
-          activities (step 5). Blank the field to return to the designation's published value.</p>
+        <p class="hint">Coverage sets the ground-floor footprint (step 2) and, with it,
+          the open ground left for parking. Leave a field blank to use the published value.</p>
 
         <div class="rule"></div>
 
@@ -523,7 +523,7 @@ tbody tr:last-child td{border-bottom:0}
             </div>
             <div class="field">
               <label for="floorUsePct">Usable per parking floor</label>
-              <div class="ctl"><input id="floorUsePct" type="number" min="1" max="100" step="1"><span class="suffix">%</span></div>
+              <div class="ctl"><input id="floorUsePct" type="number" min="0" max="100" step="0.01"><span class="suffix">%</span></div>
             </div>
             <div class="field">
               <label for="parkFloorArea">Parking floor area</label>
@@ -983,7 +983,7 @@ tbody tr:last-child td{border-bottom:0}
   }
 
   /* ==================== ACTIVITY SCHEDULE ==============================
-     The permitted activity count from step 5 is filled with DED activities.
+     The permitted activity count from step 4 is filled with DED activities.
      Each activity carries an ITC category (auto-mapped, overridable), and its
      parking is charged against the floor area its slots occupy.              */
   let SCHED = [];
@@ -1120,6 +1120,48 @@ tbody tr:last-child td{border-bottom:0}
     input.addEventListener("input", ()=>{
       const clean = input.value.replace(/[^0-9]/g, "");
       if(clean !== input.value) input.value = clean;
+    });
+    return input;
+  }
+
+  /* Percentages here are 0-100 with at most two decimals. type=number alone
+     accepts exponents, signs and unlimited precision, and does not clamp until
+     the form is submitted - which never happens here. */
+  function pctField(input){
+    const ok = new Set(["Backspace","Delete","Tab","Enter","Escape","Home","End",
+                        "ArrowLeft","ArrowRight","ArrowUp","ArrowDown"]);
+    input.setAttribute("inputmode","decimal");
+    input.addEventListener("keydown", e=>{
+      if(e.ctrlKey || e.metaKey || e.altKey || ok.has(e.key)) return;
+      if(e.key.length !== 1) return;
+      if(e.key === "." && input.value.indexOf(".") === -1) return;   // one point only
+      if(!/[0-9]/.test(e.key)) e.preventDefault();
+    });
+    const clean = ()=>{
+      let v = input.value;
+      if(v === "") return;
+      v = v.replace(/[^0-9.]/g, "");                 // digits and points only
+      const bits = v.split(".");
+      v = bits.shift() + (bits.length ? "." + bits.join("").slice(0,2) : "");
+      const f = parseFloat(v);
+      if(Number.isFinite(f)){
+        if(f > 100) v = "100";
+        if(f < 0) v = "0";
+      }
+      if(v !== input.value) input.value = v;
+    };
+    input.addEventListener("input", clean);
+    input.addEventListener("blur", ()=>{
+      clean();
+      // 2 dp on the way out, without leaving a trailing point
+      if(input.value.endsWith(".")) input.value = input.value.slice(0, -1);
+    });
+    input.addEventListener("paste", e=>{
+      const t = (e.clipboardData || window.clipboardData).getData("text") || "";
+      const m = t.replace(/[^0-9.]/g, "");
+      e.preventDefault();
+      if(m) document.execCommand("insertText", false, m);
+      setTimeout(clean, 0);
     });
     return input;
   }
@@ -1643,7 +1685,7 @@ tbody tr:last-child td{border-bottom:0}
       F.appendChild(flag("crit","slots",[
         "The schedule uses ", strong(fmt(t.slots) + " slots"), " but only ",
         strong(fmt(t.allowed) + " " + plural(t.allowed,"activity","activities")),
-        " are permitted by step 5."
+        " are permitted by step 4."
       ]));
     }
     if(t && t.incomplete){
@@ -1689,6 +1731,10 @@ tbody tr:last-child td{border-bottom:0}
     $("#farShow").textContent = Number.isFinite(c.far) ? fmt(c.far,3) : "—";
     $("#farSrc").textContent  = c.o.far.overridden ? "overridden"
                               : (c.dRow ? (c.dRow.source==="code"?"from the Code":"added here") : "no designation");
+    if($("#glaShow")){
+      $("#glaShow").textContent = fmt(c.glaPct,2) + "%";
+      $("#glaSrc").textContent  = c.o.glaPct.overridden ? "overridden" : "default";
+    }
     if($("#pcShow")){
       $("#pcShow").textContent = fmt(c.pcPct,2) + "%";
       $("#pcSrc").textContent  = !c.o.pcPct.overridden
@@ -1748,6 +1794,10 @@ tbody tr:last-child td{border-bottom:0}
     });
     ["unitArea","spaceArea","floorUsePct","parkFloorArea","spacesOverride"].forEach(id=>{
       document.getElementById(id).addEventListener("input", ()=>{ renderSched(); render(); });
+    });
+    ["pcPct","glaPct","floorUsePct"].forEach(id=>{
+      const e = document.getElementById(id);
+      if(e) pctField(e);
     });
     $("#itcLoc").addEventListener("input", ()=>{
       state.itcLoc = $("#itcLoc").value;
