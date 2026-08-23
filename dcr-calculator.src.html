@@ -70,6 +70,20 @@ h1 em{font-style:normal; color:var(--accent)}
   text-transform:uppercase; color:var(--ink-3); font-weight:500}
 .panel-bd{padding:20px; display:flex; flex-direction:column; gap:18px}
 
+/* A panel that folds: the header doubles as the disclosure control. */
+.panel.fold>summary{cursor:pointer; list-style:none}
+.panel.fold>summary::-webkit-details-marker{display:none}
+.panel.fold>summary::after{
+  content:"+"; margin-left:10px; color:var(--ink-3); font-size:1rem; line-height:1;
+  font-family:Manrope,sans-serif;
+}
+.panel.fold[open]>summary::after{content:"\2013"}
+.panel.fold:not([open])>summary{border-bottom:0}
+.panel.fold>summary:hover h2{color:var(--accent)}
+/* The UA rule that hides a closed details' children is a UA rule, so an author
+   display on a child (.plan is display:grid) wins and the panel stays open. */
+.panel.fold:not([open])>*:not(summary){display:none !important}
+
 /* ---------- fields ---------- */
 .field{display:flex; flex-direction:column; gap:6px}
 label,.lbl{
@@ -588,8 +602,8 @@ tbody tr:last-child td{border-bottom:0}
         <div id="parkBody"></div>
       </section>
 
-      <section class="panel">
-        <div class="panel-hd"><h2>Plot &amp; footprint</h2><span class="tag">indicative</span></div>
+      <details class="panel fold">
+        <summary class="panel-hd"><h2>Plot &amp; footprint</h2><span class="tag">indicative &#x00B7; click to show</span></summary>
         <div class="plan">
           <svg id="planSvg" viewBox="0 0 240 264" role="img" aria-labelledby="planTitle">
             <title id="planTitle">Plot boundary with the allowed building footprint shown to scale</title>
@@ -616,7 +630,7 @@ tbody tr:last-child td{border-bottom:0}
             <div class="readout"><span class="k">Open plot area</span><span class="v" id="roOpen">&#x2014;</span></div>
           </div>
         </div>
-      </section>
+      </details>
 
       <div class="btnrow">
         <button type="button" class="btn primary" id="copySummary">Copy summary</button>

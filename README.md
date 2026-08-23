@@ -417,6 +417,15 @@ space (32.5 m²) and the 75% floor efficiency come from the standard, so the two
 flagged in earlier versions are now closed.
 
 
+## Folded by default
+
+**Plot & footprint** starts collapsed — it is a sanity check on the geometry rather than an
+output, so it sits behind its own header until clicked. Note the CSS trap if you add another
+folding panel: the rule that hides a closed `<details>`' children is a *user-agent* rule, so any
+author `display` on a child (here `.plan { display: grid }`) wins and the panel stays visibly
+open. `.panel.fold:not([open]) > *:not(summary){display:none !important}` is what actually closes
+it.
+
 ## Removed from the page
 
 Taken out on request: the **ITC rate conversion matrix** browser, the editable **Land use
