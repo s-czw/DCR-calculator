@@ -803,7 +803,8 @@ tbody tr:last-child td{border-bottom:0}
     const o = { basis:state.basis, itcLoc:state.itcLoc,
                 sched: SCHED.map(r=>({ act: r.act ? r.act.activity_id : null,
                                        slots: r.slots, itcOverride: r.itcOverride,
-                                       unitArea: r.unitArea, qty: r.qty })) };
+                                       unitArea: r.unitArea, unitManual: r.unitManual,
+                                       qty: r.qty })) };
     ["plotSize","dedCode","farManual","pcPct","glaPct",
      "unitArea","bayArea","parkLimitPct","ugTriggerPct"]
       .forEach(id => { const nd = document.getElementById(id); if(nd) o[id] = nd.value; });
@@ -909,11 +910,14 @@ tbody tr:last-child td{border-bottom:0}
   /* Per-row parking. The slots an activity holds are its share of GLA, and for
      the GFA/GLA-charged categories that share is the driver. Categories charged
      per seat, unit, student and so on need a count instead, so the row asks. */
-  /* A row may carry its own unit area; blank inherits the fixed value. */
+  /* A row either carries its own unit area or follows the fixed value. Tracked
+     with a flag rather than inferred from a blank field, so the input can always
+     show the effective number - a blank number input steps from its min, which
+     made the spinner jump to 1 instead of nudging 60 to 61. */
   function rowUnit(row, unit){
+    if(!row.unitManual) return { area:unit, manual:false };
     const own = num(row.unitArea);
-    return (row.unitArea !== "" && row.unitArea != null && own > 0)
-      ? { area:own, manual:true } : { area:unit, manual:false };
+    return { area: own > 0 ? own : unit, manual:true };
   }
 
   function rowParking(row, unit){
@@ -979,7 +983,7 @@ tbody tr:last-child td{border-bottom:0}
   function addSchedRow(actId, slots, override){
     SCHED.push({ id: ++schedSeq, act: actId ? activityById(actId) : null,
                  slots: slots == null ? 1 : slots, itcOverride: override || null,
-                 unitArea: "", qty: "", search: "" });
+                 unitArea: "", unitManual: false, qty: "", search: "" });
   }
 
   function renderSched(){
@@ -1043,16 +1047,27 @@ tbody tr:last-child td{border-bottom:0}
       td1.appendChild(sl);
       tr.appendChild(td1);
 
-      // unit area: blank inherits the fixed value, a number overrides it
+      // unit area: always shows the effective figure, so the spinner nudges it
+      // from there. Clearing the field hands the row back to the fixed value.
       const gu = num($("#unitArea").value) || 60;
       const u = rowUnit(row, gu);
       const tdU = el("td", "n");
       const ui = el("input");
       ui.type = "number"; ui.min = "1"; ui.step = "1";
-      ui.value = row.unitArea == null ? "" : row.unitArea;
-      ui.placeholder = fmt(gu);
-      ui.title = u.manual ? "Entered for this activity" : "Inherited from Fixed values";
-      ui.addEventListener("input", ()=>{ row.unitArea = ui.value; renderSched(); render(); });
+      ui.value = u.area;
+      ui.title = u.manual
+        ? "Entered for this activity \u2014 clear the field to go back to the fixed value"
+        : "Following the fixed value of " + fmt(gu) + " m\u00b2";
+      ui.addEventListener("input", ()=>{
+        if(ui.value.trim() === ""){          // cleared: follow the fixed value again
+          row.unitManual = false;
+          row.unitArea = "";
+        } else {
+          row.unitManual = true;
+          row.unitArea = ui.value;
+        }
+        renderSched(); render();
+      });
       tdU.appendChild(ui);
       tdU.appendChild(el("div", "uflag " + (u.manual ? "uflag-manual" : "uflag-auto"),
                          u.manual ? "entered" : "inherited"));
@@ -1713,6 +1728,7 @@ tbody tr:last-child td{border-bottom:0}
           if(!SCHED[i]) return;
           SCHED[i].qty = r.qty || "";
           SCHED[i].unitArea = r.unitArea || "";
+          SCHED[i].unitManual = !!r.unitManual;
         });
       }
       if(!LU.some(r=>String(r.id)===$("#dedCode").value) && $("#dedCode").value!=="__none")

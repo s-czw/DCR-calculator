@@ -235,7 +235,9 @@ Each row is an activity plus the number of slots it occupies:
   `DED قائمة الانشطة`, deduplicated by `ACTIVITY_ID`).
 - **ITC category** — auto-mapped from the activity, overridable per row. The confidence tag
   says how far to trust the mapping.
-- **Unit area** — per row, blank inheriting the Fixed-values default. Each row is tagged
+- **Unit area** — per row. The field always shows the effective figure, so the spinner nudges it
+  from there (60 → 61) rather than jumping to the input's minimum. A row follows the Fixed-values
+  default until you change it, and clearing the field hands it back. Each row is tagged
   `inherited` or `entered` so a hand-set area is visible at a glance, and the footer counts how
   many were entered. Because rows can differ, the footer also totals the floor area the schedule
   consumes, which the slot count alone no longer tells you.
