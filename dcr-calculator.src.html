@@ -446,6 +446,8 @@ tbody tr:last-child td{border-bottom:0}
   background:var(--accent-soft); color:var(--accent-ink)}
 .pknote.bad .mark{background:var(--crit); color:var(--surface)}
 .park .pv.ug{color:var(--brass)}
+/* An absence, not a measurement: the dash is muted so it does not read as data. */
+.park .pv.none{color:var(--ink-3); font-weight:500}
 .ugnote{
   display:flex; gap:10px; align-items:flex-start; padding:13px 16px; font-size:.81rem;
   background:var(--brass-soft); color:var(--brass); border-top:1px solid var(--line);
@@ -1586,25 +1588,32 @@ tbody tr:last-child td{border-bottom:0}
     grid.appendChild(cell("Total parking area required",
       Number.isFinite(p.needArea) ? fmt(p.needArea) : "\u2014",
       "m\u00b2 at " + fmt(p.per,1) + " m\u00b2 a space", ""));
+    // At full plot coverage there is no ground to speak of, so a bare 0 reads as a
+    // measurement when it is really an absence: show a muted dash instead, and drop
+    // the "less the 0 on ground" qualifiers, which then carry no information.
+    const noGround = p.open === 0;
     grid.appendChild(cell("Open ground area",
-      Number.isFinite(p.open) ? fmt(p.open) : "\u2014",
-      "m\u00b2 outside the footprint", ""));
+      !Number.isFinite(p.open) ? "\u2014" : noGround ? "\u2014" : fmt(p.open),
+      noGround ? "none outside the footprint" : "m\u00b2 outside the footprint",
+      noGround ? "none" : ""));
     grid.appendChild(cell("On ground",
-      Number.isFinite(p.onGround) ? fmt(p.onGround) : "\u2014",
-      Number.isFinite(p.groundArea) ? plural(p.onGround,"space","spaces") + ", " +
-        fmt(p.groundArea) + " m\u00b2" : "", ""));
+      !Number.isFinite(p.onGround) ? "\u2014" : noGround ? "\u2014" : fmt(p.onGround),
+      noGround ? "no ground to park on" :
+        Number.isFinite(p.groundArea) ? plural(p.onGround,"space","spaces") + ", " +
+          fmt(p.groundArea) + " m\u00b2" : "",
+      noGround ? "none" : ""));
     // What is left of the requirement once the open ground has absorbed what it can.
     // Identical to In basement by construction -- needArea - groundArea is always
     // basement * per -- but stated as a remaining *requirement* rather than as a
     // placement, so the row reads requirement -> offset -> where it ends up.
     grid.appendChild(cell("Offset spaces required",
       Number.isFinite(p.basement) ? fmt(p.basement) : "\u2014",
-      Number.isFinite(p.onGround) ? plural(p.basement,"space","spaces") + ", less the " +
-        fmt(p.onGround) + " on ground" : "", ""));
+      !Number.isFinite(p.onGround) ? "" : noGround ? plural(p.basement,"space","spaces") :
+        plural(p.basement,"space","spaces") + ", less the " + fmt(p.onGround) + " on ground", ""));
     grid.appendChild(cell("Offset parking area required",
       Number.isFinite(p.basementArea) ? fmt(p.basementArea) : "\u2014",
-      Number.isFinite(p.groundArea) ? "m\u00b2, less the " + fmt(p.groundArea) +
-        " m\u00b2 on ground" : "m\u00b2", ""));
+      !Number.isFinite(p.groundArea) || noGround ? "m\u00b2" :
+        "m\u00b2, less the " + fmt(p.groundArea) + " m\u00b2 on ground", ""));
     grid.appendChild(cell("In basement",
       Number.isFinite(p.basement) ? fmt(p.basement) : "\u2014",
       Number.isFinite(p.basementArea) ? plural(p.basement,"space","spaces") + ", " +
@@ -1630,11 +1639,18 @@ tbody tr:last-child td{border-bottom:0}
       };
       w.appendChild(line(fmt(need) + " \u00d7 " + fmt(p.per,1) + " = " +
         fmt(p.needArea) + " m\u00b2 of parking needed"));
-      w.appendChild(line("open ground " + fmt(p.open) + " m\u00b2 \u00f7 " + fmt(p.per,1) +
-        " = " + fmt(p.open/p.per,2) + " \u2192 " + fmt(p.openCap) + " on ground"));
+      if(p.open > 0){
+        w.appendChild(line("open ground " + fmt(p.open) + " m\u00b2 \u00f7 " + fmt(p.per,1) +
+          " = " + fmt(p.open/p.per,2) + " \u2192 " + fmt(p.openCap) + " on ground"));
+      } else {
+        w.appendChild(line("no open ground: plot coverage takes the whole plot"));
+      }
       if(p.basement > 0){
-        w.appendChild(line(fmt(need) + " \u2212 " + fmt(p.onGround) + " = " + fmt(p.basement) +
-          " in basement \u00d7 " + fmt(p.per,1) + " = " + fmt(p.basementArea) + " m\u00b2"));
+        w.appendChild(line(p.open > 0
+          ? fmt(need) + " \u2212 " + fmt(p.onGround) + " = " + fmt(p.basement) +
+            " in basement \u00d7 " + fmt(p.per,1) + " = " + fmt(p.basementArea) + " m\u00b2"
+          : fmt(p.basement) + " in basement \u00d7 " + fmt(p.per,1) + " = " +
+            fmt(p.basementArea) + " m\u00b2"));
         w.appendChild(line(fmt(p.basementArea) + " m\u00b2 \u00f7 (" + fmt(p.fArea) + " \u00d7 " +
           fmt(p.useP) + "%) = " + fmt(p.floorsRaw,2) + " \u2192 " + fmt(p.floors) + " " +
           plural(p.floors,"floor","floors")));
