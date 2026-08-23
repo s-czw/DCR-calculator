@@ -58,10 +58,9 @@ COLUMNS = [
     ("GLA (m2)",                  13,  "#,##0.00"),
     ("Unit area (m2)",            13,  "#,##0"),
     ("Max activities",            13,  "#,##0"),
-    ("Surface parking cap (m2)",  22,  "#,##0.00"),
-    ("Surface parking cap (bays)",24,  "#,##0"),
-    ("Underground above (m2)",    20,  "#,##0.00"),
-    ("Underground above (bays)",  22,  "#,##0"),
+    ("Open ground (m2)",          17,  "#,##0.00"),
+    ("Spaces on open ground",     21,  "#,##0"),
+    ("Usable per parking floor",  23,  "#,##0.00"),
     ("Notes",                     46,  None),
 ]
 
@@ -184,11 +183,17 @@ def derive(fields, i, sched, args):
     else:
         check = ""
 
-    # Parking budget rather than a parking figure: the schedule is per-plot input
-    cap_area = area * args.cap / 100.0 if have else None
-    cap_bays = math.floor(cap_area / args.bay) if (cap_area is not None and args.bay > 0) else None
-    ug_area = cover * args.ug / 100.0 if cover is not None else None
-    ug_bays = math.floor(ug_area / args.bay) if (ug_area is not None and args.bay > 0) else None
+    # Parking capacity rather than a parking figure: how many spaces the open
+    # ground outside the footprint holds, and how much a structured floor gives.
+    # The number of spaces *required* needs an activity schedule, which no
+    # geodatabase field carries.
+    open_area = max(0.0, area - cover) if (have and cover is not None) else None
+    open_spaces = math.floor(open_area / args.space) \
+        if (open_area is not None and args.space > 0) else None
+    per_floor = area * args.floor_use / 100.0 if have else None
+    if code and code.upper() == "CR":
+        notes.append("Community Retail: 100% coverage leaves no open ground, so all "
+                     "parking is structured")
 
     if have and area < 1600:
         notes.append("under 1,600 m2: limitation L-4 bars uses above "
@@ -206,7 +211,7 @@ def derive(fields, i, sched, args):
         max_gfa, gdb_gfa, check,
         cov_pct / 100.0, cov_src, cover,
         gla, args.unit, acts,
-        cap_area, cap_bays, ug_area, ug_bays,
+        open_area, open_spaces, per_floor,
         "; ".join(notes),
     ]
 
@@ -266,9 +271,8 @@ def write_xlsx(rows, out, args, sched_meta, gdb, layer, missing, counts):
         ("GLA share of Max GFA", f"{args.gla:g}%"),
         ("Unit area per activity", f"{args.unit:g} m2"),
         ("Coverage fallback default", f"{args.coverage_default:g}%"),
-        ("Area per parking bay", f"{args.bay:g} m2  (assumption, not from a source)"),
-        ("Surface parking cap", f"{args.cap:g}% of plot area"),
-        ("Underground parking trigger", f"{args.ug:g}% of allowed plot coverage"),
+        ("Area per parking space", f"{args.space:g} m2"),
+        ("Usable per parking floor", f"{args.floor_use:g}%"),
         ("", ""),
         ("Designation schedule", sched_meta.get("designation_file", "-")),
         ("Designations in schedule", sched_meta.get("designations", "-")),
@@ -301,15 +305,20 @@ def write_xlsx(rows, out, args, sched_meta, gdb, layer, missing, counts):
         "Where the Code publishes none it falls back to the default on the Parameters sheet, and",
         "the row says so.",
         "",
-        "Parking is NOT calculated per plot. The ITC rate depends on which activities occupy the",
-        "plot, and no geodatabase field carries that. The two parking columns give the budget",
-        "instead: how much surface parking the cap allows, and the area above which parking must",
-        "go underground. Both convert bays to area at the bay-area assumption, which is not from",
-        "any source document -- see Parameters.",
+        "Parking is NOT calculated per plot. The number of spaces required depends on which",
+        "activities occupy the plot, and no geodatabase field carries that. The parking columns",
+        "give capacity instead:",
+        "",
+        "  Open ground           = plot area - plot coverage",
+        "  Spaces on open ground = floor(open ground / area per space)",
+        "  Usable per floor      = plot area x usable share of a parking floor",
+        "",
+        "Spaces beyond what the open ground holds have to be structured, at the area per space,",
+        "and a structured floor yields only its usable share -- so floors = ceil(structured area /",
+        "usable per floor). Community Retail is the case that forces this: the Code gives it 100%",
+        "plot coverage, so there is no open ground at all.",
         "",
         "Unconfirmed with DMT at the time of writing:",
-        "  - the area per parking bay (25 m2 by default)",
-        "  - the underground trigger as a share of coverage (16% by default)",
         "  - the GLA share (75% by default)",
         "Treat the derived figures as working numbers, not cleared outputs.",
     ]:
@@ -333,10 +342,9 @@ def main():
     ap.add_argument("--unit", type=float, default=60.0, help="unit area per activity, m2")
     ap.add_argument("--coverage-default", type=float, default=None,
                     help="coverage %% where the Code publishes none")
-    ap.add_argument("--bay", type=float, default=25.0, help="area per parking bay, m2")
-    ap.add_argument("--cap", type=float, default=50.0, help="surface parking cap, %% of plot")
-    ap.add_argument("--ug", type=float, default=16.0,
-                    help="underground trigger, %% of allowed plot coverage")
+    ap.add_argument("--space", type=float, default=32.5, help="area per parking space, m2")
+    ap.add_argument("--floor-use", type=float, default=75.0,
+                    help="usable share of a parking floor, %%")
     args = ap.parse_args()
 
     gdb = os.path.normpath(args.gdb)

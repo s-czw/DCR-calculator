@@ -81,6 +81,7 @@ label,.lbl{
   border-radius:7px; overflow:hidden;
 }
 .ctl:focus-within{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+.ctl input::placeholder{font-size:.82em; opacity:.75}
 .ctl input,.ctl select{
   flex:1 1 auto; min-width:0; width:100%; background:transparent; border:0; color:var(--ink);
   font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.95rem; font-variant-numeric:tabular-nums;
@@ -180,6 +181,29 @@ details.coef>div{padding-top:14px; display:flex; flex-direction:column; gap:14px
 .step:nth-child(even){background:var(--surface-2)}
 .step.key .step-val .num{color:var(--accent)}
 .step.count .step-val .num{color:var(--brass)}
+/* which override produced a figure, said on the figure itself */
+.recalc{
+  grid-column:2 / -1; margin-top:8px; font-family:"IBM Plex Mono",monospace;
+  font-size:.68rem; color:var(--brass); background:var(--brass-soft);
+  border-radius:5px; padding:5px 9px; line-height:1.45;
+}
+
+/* the overrides in force, above the columns */
+#ovStrip{
+  display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; margin-top:18px;
+  padding:12px 16px; border:1px solid var(--brass); border-radius:var(--r);
+  background:var(--brass-soft);
+}
+#ovStrip .ovhead{
+  font-family:Manrope,sans-serif; font-size:.66rem; letter-spacing:.1em; font-weight:600;
+  text-transform:uppercase; color:var(--brass);
+}
+#ovStrip .ovtag{
+  font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--ink);
+  background:var(--surface); border:1px solid var(--line); border-radius:5px; padding:4px 9px;
+}
+#ovStrip .ovtag b{color:var(--brass); font-weight:600; margin-right:5px}
+#ovStrip .btn{margin-left:auto; border-color:var(--brass); color:var(--brass)}
 @media (max-width:620px){
   .step{grid-template-columns:26px minmax(0,1fr); gap:0 10px}
   .step-val{grid-column:2; text-align:left; padding:8px 0 0}
@@ -388,9 +412,12 @@ tbody tr:last-child td{border-bottom:0}
       <span class="chip" id="chipCode">code &#x2014;</span>
       <span class="chip" id="chipPark">parking &#x2014;</span>
       <span class="chip" id="chipDb">db &#x2014;</span>
+      <span class="chip" id="chipOv" hidden>overrides &#x2014;</span>
     </div>
   </header>
 
+
+  <div id="ovStrip" hidden></div>
 
   <div class="cols">
 
@@ -423,20 +450,18 @@ tbody tr:last-child td{border-bottom:0}
           </div>
         </div>
 
-        <div class="grid2">
-          <div class="field">
-            <label for="pcPct">Max plot coverage</label>
-            <div class="ctl">
-              <input id="pcPct" type="number" min="0" max="100" step="0.5" placeholder="auto" inputmode="decimal">
-              <span class="suffix">%</span>
-            </div>
+        <div class="field">
+          <label for="pcPct">Max plot coverage</label>
+          <div class="ctl">
+            <input id="pcPct" type="number" min="0" max="100" step="0.5" inputmode="decimal">
+            <span class="suffix">%</span>
           </div>
-          <div class="field">
-            <label for="glaPct">GLA</label>
-            <div class="ctl">
-              <input id="glaPct" type="number" min="0" max="100" step="1" value="75" inputmode="decimal">
-              <span class="suffix">%</span>
-            </div>
+        </div>
+        <div class="field">
+          <label for="glaPct">GLA share</label>
+          <div class="ctl">
+            <input id="glaPct" type="number" min="0" max="100" step="1" inputmode="decimal">
+            <span class="suffix">%</span>
           </div>
         </div>
         <div class="derived">
@@ -483,33 +508,35 @@ tbody tr:last-child td{border-bottom:0}
         <div class="rule"></div>
 
         <details class="coef" open>
-          <summary>Fixed values</summary>
+          <summary>Override values</summary>
           <div>
+            <p class="hint">Every field here already has a value from the Code or the standard.
+              Leave one blank and that value is used; type in it to override, and the change is
+              reported on the figures it affects.</p>
             <div class="field">
               <label for="unitArea">Unit area per activity</label>
-              <div class="ctl"><input id="unitArea" type="number" min="1" step="1" value="60"><span class="suffix">m&#x00B2;</span></div>
-              <p class="hint">Divides GLA to give the activity count in step 5.</p>
-            </div>
-            <div class="grid2">
-              <div class="field">
-                <label for="bayArea">Bay area</label>
-                <div class="ctl"><input id="bayArea" type="number" min="1" step="1" value="25"><span class="suffix">m&#x00B2;</span></div>
-              </div>
-              <div class="field">
-                <label for="parkLimitPct">Parking area cap</label>
-                <div class="ctl"><input id="parkLimitPct" type="number" min="1" max="100" step="1" value="50"><span class="suffix">% plot</span></div>
-              </div>
+              <div class="ctl"><input id="unitArea" type="number" min="1" step="1"><span class="suffix">m&#x00B2;</span></div>
             </div>
             <div class="field">
-              <label for="ugTriggerPct">Underground parking trigger</label>
-              <div class="ctl"><input id="ugTriggerPct" type="number" min="1" max="100" step="1" value="16"><span class="suffix">% coverage</span></div>
-              <p class="hint">Above this share of the <b>allowed plot coverage</b>, parking must go
-                underground.</p>
+              <label for="spaceArea">Area per parking space</label>
+              <div class="ctl"><input id="spaceArea" type="number" min="1" step="0.5"><span class="suffix">m&#x00B2;</span></div>
             </div>
-            <p class="hint">Bay area is an <b>assumption</b>: the cap is a share of plot area, but
-              ITC rates give a bay count, so a bay needs an area before the two can be compared.
-              25 m&#x00B2; is a typical bay-plus-aisle allowance &#x2014; confirm it.</p>
-            <div class="btnrow"><button type="button" class="btn mini" id="resetCoef">Reset fixed values</button></div>
+            <div class="field">
+              <label for="floorUsePct">Usable per parking floor</label>
+              <div class="ctl"><input id="floorUsePct" type="number" min="1" max="100" step="1"><span class="suffix">%</span></div>
+            </div>
+            <div class="field">
+              <label for="parkFloorArea">Parking floor area</label>
+              <div class="ctl"><input id="parkFloorArea" type="number" min="1" step="1"><span class="suffix">m&#x00B2;</span></div>
+              <p class="hint">Defaults to the plot area. Sets how much a structured floor yields.</p>
+            </div>
+            <div class="field">
+              <label for="spacesOverride">Required spaces &#x2014; UPPC / ITC override</label>
+              <div class="ctl"><input id="spacesOverride" type="number" min="0" step="1"><span class="suffix">spaces</span></div>
+              <p class="hint">Blank uses the count from the activity schedule. Set this when UPPC
+                or ITC has granted a reduction.</p>
+            </div>
+            <div class="btnrow"><button type="button" class="btn mini" id="resetCoef">Clear all overrides</button></div>
           </div>
         </details>
 
@@ -649,7 +676,7 @@ tbody tr:last-child td{border-bottom:0}
     return t > 0 ? { wd:WEEK.weekday/t, we:WEEK.weekend/t } : { wd:1, we:0 };
   }
   const KEY = "dcr.calc.v2";
-  const COEF = { glaPct:75, coverageDefault:60 };
+  const COEF = { glaPct:75, coverageDefault:60, unitArea:60 };
 
   /* SQLite drives the page. If the host blocks WebAssembly we fall back to the
      build-time snapshot of the same database so the calculator still works. */
@@ -700,6 +727,7 @@ tbody tr:last-child td{border-bottom:0}
     q("SELECT key, value FROM meta").forEach(r=> META[r.key] = r.value);
     q("SELECT key, value FROM coefficient").forEach(r=>{
       if(r.key==="gla_pct")              COEF.glaPct          = r.value;
+      if(r.key==="unit_area_sqm")        COEF.unitArea        = r.value;
       if(r.key==="coverage_pct_default") COEF.coverageDefault = r.value;
     });
   }
@@ -712,6 +740,7 @@ tbody tr:last-child td{border-bottom:0}
     META = Object.assign({}, SNAPSHOT.meta);
     const c = SNAPSHOT.coefficient;
     if(c.gla_pct!=null)              COEF.glaPct          = c.gla_pct;
+    if(c.unit_area_sqm!=null)        COEF.unitArea        = c.unit_area_sqm;
     if(c.coverage_pct_default!=null) COEF.coverageDefault = c.coverage_pct_default;
   }
 
@@ -733,9 +762,9 @@ tbody tr:last-child td{border-bottom:0}
   const luRow = () => LU.find(r=>String(r.id)===$("#dedCode").value) || null;
 
   /* Coverage comes from the designation unless the user types over it. */
-  function coveragePct(){
-    const ov = $("#pcPct").value.trim();
-    if(ov !== ""){ const v = num(ov); if(Number.isFinite(v)) return v; }
+  /* The coverage the Code publishes for the selected designation, or the
+     fallback where it publishes none. Overrides are applied on top by pick(). */
+  function codeCoveragePct(){
     const r = luRow();
     if(r && Number.isFinite(num(r.coverage))) return num(r.coverage) * 100;
     return COEF.coverageDefault;
@@ -795,7 +824,7 @@ tbody tr:last-child td{border-bottom:0}
                                        unitArea: r.unitArea, unitManual: r.unitManual,
                                        qty: r.qty })) };
     ["plotSize","dedCode","farManual","pcPct","glaPct",
-     "unitArea","bayArea","parkLimitPct","ugTriggerPct"]
+     "unitArea","spaceArea","floorUsePct","parkFloorArea","spacesOverride"]
       .forEach(id => { const nd = document.getElementById(id); if(nd) o[id] = nd.value; });
     return o;
   }
@@ -813,31 +842,144 @@ tbody tr:last-child td{border-bottom:0}
   /* The headline rate is read back out of SQLite when it is available, so the
      query shown under the rate panel is the one that produced the number. */
 
+  /* ==================== OVERRIDES =====================================
+     Every one of these has an original from the Code, the standard or the plot.
+     The input stays empty while the original applies, showing it as placeholder
+     text, so an entered value is always visibly a deviation.                  */
+  const SPACE_AREA   = 32.5;   // m2 per parking space
+  const FLOOR_USABLE = 75;     // % of a parking floor that is usable
+
+  const OV = [
+    { id:"farManual",     key:"far",        label:"FAR",
+      fmt:v=>fmt(v,3) },
+    { id:"pcPct",         key:"pcPct",      label:"Max plot coverage",
+      fmt:v=>fmt(v,2)+"%" },
+    { id:"glaPct",        key:"glaPct",     label:"GLA share",
+      fmt:v=>fmt(v)+"%" },
+    { id:"unitArea",      key:"unit",       label:"Unit area per activity",
+      fmt:v=>fmt(v)+" m\u00b2" },
+    { id:"spaceArea",     key:"spaceArea",  label:"Area per parking space",
+      fmt:v=>fmt(v,1)+" m\u00b2" },
+    { id:"floorUsePct",   key:"floorUse",   label:"Usable per parking floor",
+      fmt:v=>fmt(v)+"%" },
+    { id:"parkFloorArea", key:"floorArea",  label:"Parking floor area",
+      fmt:v=>fmt(v)+" m\u00b2" },
+    { id:"spacesOverride",key:"spaces",     label:"Required spaces",
+      fmt:v=>fmt(v)+" spaces" },
+  ];
+  const OVBY = {};
+  OV.forEach(o => { OVBY[o.key] = o; });
+
+  /* Resolve one field: the typed value if there is one, the original otherwise. */
+  function pick(key, original){
+    const o = OVBY[key];
+    const el = document.getElementById(o.id);
+    const raw = el ? el.value.trim() : "";
+    if(raw === "" || !Number.isFinite(num(raw))){
+      return { value: original, original: original, overridden: false, def: o };
+    }
+    const v = num(raw);
+    return { value: v, original: original,
+             overridden: original == null || Math.abs(v - original) > 1e-9, def: o };
+  }
+
+  /* Show each original as placeholder text, so the field reads as a deviation
+     only when something is actually typed in it. */
+  function paintPlaceholders(o){
+    OV.forEach(d => {
+      const el = document.getElementById(d.id);
+      if(!el) return;
+      const orig = o[d.key] != null ? o[d.key].original : null;
+      el.placeholder = orig == null ? "\u2014" : "Original value: " + d.fmt(orig);
+    });
+  }
+
+  const activeOverrides = o => OV.map(d => o[d.key])
+    .filter(x => x && x.overridden)
+    .map(x => ({ label:x.def.label, from:x.original, to:x.value, fmt:x.def.fmt }));
+
+  /* A short "recalculated using..." line for whichever overrides fed a figure. */
+  function recalcNote(o, keys){
+    const hit = keys.map(k => o[k]).filter(x => x && x.overridden);
+    if(!hit.length) return "";
+    return "Recalculated using " + hit.map(x =>
+      x.def.label + " = " + x.def.fmt(x.value) +
+      (x.original == null ? "" : " (original " + x.def.fmt(x.original) + ")")).join(", ");
+  }
+
   /* ---------- calculation ---------------------------------------------- */
   function calc(){
-    const plot   = num($("#plotSize").value);
-    const dRow   = luRow();
-    const farOv  = $("#farManual").value.trim()==="" ? NaN : num($("#farManual").value);
-    const far    = Number.isFinite(farOv) ? farOv : (dRow ? num(dRow.far) : NaN);
-    const pcPct  = coveragePct();
-    const pcAuto = $("#pcPct").value.trim() === "";
-    const glaPct = num($("#glaPct").value);
+    const plot = num($("#plotSize").value);
+    const dRow = luRow();
 
+    // Each of these resolves to its original unless the field carries a value
+    const o = {};
+    o.far      = pick("far",      dRow ? num(dRow.far) : null);
+    o.pcPct    = pick("pcPct",    codeCoveragePct());
+    o.glaPct   = pick("glaPct",   COEF.glaPct);
+    o.unit     = pick("unit",     COEF.unitArea);
+    o.spaceArea= pick("spaceArea",SPACE_AREA);
+    o.floorUse = pick("floorUse", FLOOR_USABLE);
+    o.floorArea= pick("floorArea", plot > 0 ? plot : null);
 
-    const maxGFA  = plot>0 && Number.isFinite(far) ? plot*far : NaN;
+    const far    = o.far.value;
+    const pcPct  = o.pcPct.value;
+    const glaPct = o.glaPct.value;
+    const unit   = o.unit.value;
+
+    const maxGFA = plot > 0 && Number.isFinite(far) ? plot*far : NaN;
     // Plot coverage is the GFA allowed on the ground floor: a footprint ratio of
     // the plot, not a share of the total GFA.
-    const cover   = plot > 0 && Number.isFinite(pcPct) ? plot*(pcPct/100) : NaN;
-    const gla     = Number.isFinite(maxGFA) && Number.isFinite(glaPct) ? maxGFA*(glaPct/100) : NaN;
+    const cover  = plot > 0 && Number.isFinite(pcPct) ? plot*(pcPct/100) : NaN;
+    const gla    = Number.isFinite(maxGFA) && Number.isFinite(glaPct) ? maxGFA*(glaPct/100) : NaN;
 
     // Max allowed activities = GLA / unit area, floored: a partial unit is no unit.
-    const unit    = num($("#unitArea").value);
-    const actRaw  = Number.isFinite(gla) && unit > 0 ? gla/unit : NaN;
-    const act     = Number.isFinite(actRaw) ? Math.floor(actRaw) : NaN;
-    const sched   = schedTotals(act, cover);
+    const actRaw = Number.isFinite(gla) && unit > 0 ? gla/unit : NaN;
+    const act    = Number.isFinite(actRaw) ? Math.floor(actRaw) : NaN;
 
-    return { plot, dRow, far, farOv, pcPct, pcAuto, glaPct, unit,
-             maxGFA, cover, gla, actRaw, act, sched };
+    const sched  = schedTotals(act);
+    o.spaces     = pick("spaces", sched.baysCeil);
+    const parking = parkingPlan(plot, cover, o, dRow);
+
+    paintPlaceholders(o);
+    return { plot, dRow, far, pcPct, glaPct, unit, o,
+             maxGFA, cover, gla, actRaw, act, sched, parking };
+  }
+
+  /* ---------- parking: open area first, then structure ------------------
+     A space needs its own area, so the open ground outside the footprint holds
+     only so many. Anything beyond that has to be built, and a parking floor is
+     only partly usable, which is what sets how many floors it takes.
+     Community Retail is the case that forces this: the Code gives it 100% plot
+     coverage, so there is no open ground and every space is structured.      */
+  function parkingPlan(plot, cover, o, dRow){
+    const per   = o.spaceArea.value;
+    const need  = o.spaces.value;
+    const useP  = o.floorUse.value;
+    const fArea = o.floorArea.value;
+    const isCR  = !!(dRow && String(dRow.designation).trim().toUpperCase() === "CR");
+
+    const open      = Number.isFinite(plot) && Number.isFinite(cover)
+                    ? Math.max(0, plot - cover) : NaN;
+    const needArea  = Number.isFinite(need) && per > 0 ? need*per : NaN;
+    const openCap   = Number.isFinite(open) && per > 0 ? Math.floor(open/per) : NaN;
+    const onGrade   = Number.isFinite(openCap) && Number.isFinite(need)
+                    ? Math.min(need, openCap) : NaN;
+    const structured= Number.isFinite(onGrade) && Number.isFinite(need)
+                    ? Math.max(0, need - onGrade) : NaN;
+    const gradeArea = Number.isFinite(onGrade) ? onGrade*per : NaN;
+    const structArea= Number.isFinite(structured) ? structured*per : NaN;
+
+    const perFloor  = Number.isFinite(fArea) && Number.isFinite(useP)
+                    ? fArea*(useP/100) : NaN;
+    const floorsRaw = Number.isFinite(structArea) && perFloor > 0
+                    ? structArea/perFloor : NaN;
+    const floors    = Number.isFinite(floorsRaw) ? Math.ceil(floorsRaw - 1e-9) : NaN;
+
+    return { per, need, open, needArea, openCap, onGrade, structured,
+             gradeArea, structArea, perFloor, floorsRaw, floors, isCR,
+             fits: Number.isFinite(structured) && structured === 0,
+             fArea, useP };
   }
 
   /* ==================== ACTIVITY SCHEDULE ==============================
@@ -933,8 +1075,8 @@ tbody tr:last-child td{border-bottom:0}
              needsQty:false, eff:eff, unit:u, floor: slots * u.area };
   }
 
-  function schedTotals(allowed, coverArea){
-    const unit = num($("#unitArea").value) || 60;
+  function schedTotals(allowed){
+    const unit = pick("unit", COEF.unitArea).value || 60;
     let slots = 0, bays = 0, raw = 0, incomplete = 0, floor = 0, manualUnits = 0;
     SCHED.forEach(r => {
       const sl = Math.max(0, num(r.slots) || 0);
@@ -946,31 +1088,11 @@ tbody tr:last-child td{border-bottom:0}
       if(Number.isFinite(p.bays)){ bays += p.bays; raw += p.raw; }
       else if(r.act || r.itcOverride) incomplete++;
     });
-    const bayArea = num($("#bayArea").value);
-    const limitPct = num($("#parkLimitPct").value);
-    const plot = num($("#plotSize").value);
-    const baysCeil = bays;                       // already whole: each row rounded up
-    const area = Number.isFinite(bayArea) ? baysCeil * bayArea : NaN;
-    const cap = Number.isFinite(plot) && Number.isFinite(limitPct) ? plot * (limitPct/100) : NaN;
-    const pctPlot = Number.isFinite(area) && plot > 0 ? area/plot*100 : NaN;
-
-    /* Above a share of the allowed plot coverage, surface parking is not an
-       option and the parking has to go underground. */
-    const ugPct = num($("#ugTriggerPct").value);
-    const ugLimit = Number.isFinite(coverArea) && Number.isFinite(ugPct)
-                  ? coverArea * (ugPct/100) : NaN;
-    const pctCover = Number.isFinite(area) && coverArea > 0 ? area/coverArea*100 : NaN;
-
-    return { slots:slots, allowed:allowed, bays:bays, baysCeil:baysCeil, raw:raw,
-             area:area, cap:cap, limitPct:limitPct, bayArea:bayArea,
-             plot:plot, pctPlot:pctPlot, floor:floor, manualUnits:manualUnits,
-             coverArea:coverArea, ugPct:ugPct, ugLimit:ugLimit, pctCover:pctCover,
-             underground: Number.isFinite(area) && Number.isFinite(ugLimit) && area > ugLimit,
-             over: Number.isFinite(area) && Number.isFinite(cap) && area > cap,
+    return { slots:slots, allowed:allowed, bays:bays, baysCeil:bays, raw:raw,
+             floor:floor, manualUnits:manualUnits,
              overSlots: Number.isFinite(allowed) && slots > allowed,
              incomplete:incomplete, rows:SCHED.length };
   }
-
   function addSchedRow(actId, slots, override){
     SCHED.push({ id: ++schedSeq, act: actId ? activityById(actId) : null,
                  slots: slots == null ? 1 : slots, itcOverride: override || null,
@@ -1006,7 +1128,7 @@ tbody tr:last-child td{border-bottom:0}
      being typed into keeps focus. Cell order: activity, slots, unit area,
      ITC category, rate/qty, bays, remove. */
   function paintRowDerived(tr, row){
-    const unit = num($("#unitArea").value) || 60;
+    const unit = pick("unit", COEF.unitArea).value || 60;
     const u = rowUnit(row, unit);
     const p = rowParking(row, unit);
 
@@ -1031,7 +1153,7 @@ tbody tr:last-child td{border-bottom:0}
     const c = calcLite();
     const tb = $("#schedBody");
     tb.innerHTML = "";
-    const unit = num($("#unitArea").value) || 60;
+    const unit = pick("unit", COEF.unitArea).value || 60;
 
     SCHED.forEach(row => {
       const tr = el("tr");
@@ -1094,7 +1216,7 @@ tbody tr:last-child td{border-bottom:0}
 
       // unit area: always shows the effective figure, so the spinner nudges it
       // from there. Clearing the field hands the row back to the fixed value.
-      const gu = num($("#unitArea").value) || 60;
+      const gu = pick("unit", COEF.unitArea).value || 60;
       const u = rowUnit(row, gu);
       const tdU = el("td", "n");
       const ui = el("input");
@@ -1205,11 +1327,11 @@ tbody tr:last-child td{border-bottom:0}
       tr.appendChild(td); tb.appendChild(tr);
     }
 
-    renderSchedFoot(c.act, c.cover);
+    renderSchedFoot(c.act);
   }
 
-  function renderSchedFoot(allowed, coverArea){
-    const t = schedTotals(allowed, coverArea);
+  function renderSchedFoot(allowed){
+    const t = schedTotals(allowed);
     const F = $("#schedFoot");
     F.innerHTML = "";
     const m = (label, val, cls) => {
@@ -1238,21 +1360,17 @@ tbody tr:last-child td{border-bottom:0}
 
   /* calc() needs schedule totals and the schedule needs the activity count, so
      this computes just the count, without touching the schedule. */
+  /* renderSched needs the activity count without touching the schedule. */
   function calcLite(){
     const plot = num($("#plotSize").value);
     const dRow = luRow();
-    const farOv = $("#farManual").value.trim() === "" ? NaN : num($("#farManual").value);
-    const far = Number.isFinite(farOv) ? farOv : (dRow ? num(dRow.far) : NaN);
-    const glaPct = num($("#glaPct").value);
-    const unit = num($("#unitArea").value);
+    const far  = pick("far", dRow ? num(dRow.far) : null).value;
+    const glaPct = pick("glaPct", COEF.glaPct).value;
+    const unit = pick("unit", COEF.unitArea).value;
     const maxGFA = plot > 0 && Number.isFinite(far) ? plot*far : NaN;
     const gla = Number.isFinite(maxGFA) && Number.isFinite(glaPct) ? maxGFA*(glaPct/100) : NaN;
-    const pcPct = num($("#pcPct").value.trim() === ""
-      ? (dRow && Number.isFinite(num(dRow.coverage)) ? num(dRow.coverage)*100 : COEF.coverageDefault)
-      : $("#pcPct").value);
-    const cover = plot > 0 && Number.isFinite(pcPct) ? plot*(pcPct/100) : NaN;
     const actRaw = Number.isFinite(gla) && unit > 0 ? gla/unit : NaN;
-    return { act: Number.isFinite(actRaw) ? Math.floor(actRaw) : NaN, cover: cover };
+    return { act: Number.isFinite(actRaw) ? Math.floor(actRaw) : NaN };
   }
 
   /* ---------- ladder ---------------------------------------------------- */
@@ -1272,6 +1390,10 @@ tbody tr:last-child td{border-bottom:0}
     val.appendChild(el("span","unit",o.unit));
     if(o.raw) val.appendChild(el("span","raw",o.raw));
     row.appendChild(val);
+    if(o.note){
+      const nn = el("div","recalc",o.note);
+      row.appendChild(nn);
+    }
     return row;
   }
 
@@ -1284,28 +1406,33 @@ tbody tr:last-child td{border-bottom:0}
     L.appendChild(stepRow({ n:1, cls:"key", title:"Max GFA", abbr:"GFA",
       sub:"Plot size × floor area ratio",
       formula: P + " m² × " + (Number.isFinite(c.far)?fmt(c.far,3):"FAR"),
-      value: Number.isFinite(c.maxGFA)?fmt(c.maxGFA):"—", unit:"m²" }));
+      value: Number.isFinite(c.maxGFA)?fmt(c.maxGFA):"\u2014", unit:"m\u00b2",
+      note: recalcNote(c.o, ["far"]) }));
 
     L.appendChild(stepRow({ n:2, title:"Plot coverage", abbr:"PC",
       sub:"GFA allowed on the ground floor, " + fmt(c.pcPct) + "% of the plot" +
-          (c.pcAuto?" · from designation":" · overridden"),
+          (c.o.pcPct.overridden ? " \u00b7 overridden" : " \u00b7 from designation"),
       formula: P + " m² × " + fmt(c.pcPct/100,4),
-      value: Number.isFinite(c.cover)?fmt(c.cover):"—", unit:"m²" }));
+      value: Number.isFinite(c.cover)?fmt(c.cover):"\u2014", unit:"m\u00b2",
+      note: recalcNote(c.o, ["pcPct"]) }));
 
     L.appendChild(stepRow({ n:3, cls:"key", title:"Gross leasable area", abbr:"GLA",
       sub: fmt(c.glaPct) + "% of Max GFA",
-      formula: G + " m² × " + fmt(c.glaPct/100,2),
-      value: Number.isFinite(c.gla)?fmt(c.gla):"—", unit:"m²" }));
+      formula: G + " m\u00b2 \u00d7 " + fmt(c.glaPct/100,2),
+      value: Number.isFinite(c.gla)?fmt(c.gla):"\u2014", unit:"m\u00b2",
+      note: recalcNote(c.o, ["glaPct","far"]) }));
 
     L.appendChild(stepRow({ n:4, cls:"count", title:"Max allowed activities", abbr:"ACT",
       sub: "GLA divided by a " + fmt(c.unit) + " m² unit, rounded down",
       formula: (Number.isFinite(c.gla)?fmt(c.gla):"GLA") + " ÷ " + fmt(c.unit),
       value: Number.isFinite(c.act)?fmt(c.act):"—",
       unit: plural(c.act,"activity","activities"),
-      raw: Number.isFinite(c.actRaw) ? "= " + fmt(c.actRaw,3) + " → floor" : "" }));
+      raw: Number.isFinite(c.actRaw) ? "= " + fmt(c.actRaw,3) + " \u2192 floor" : "",
+      note: recalcNote(c.o, ["unit","glaPct","far"]) }));
 
-    renderSchedFoot(c.act, c.cover);
+    renderSchedFoot(c.act);
     renderPark(c);
+    renderOverrides(c);
     renderFlags(c);
     renderPlan(c);
     renderChips(c);
@@ -1316,8 +1443,10 @@ tbody tr:last-child td{border-bottom:0}
   function renderPark(c){
     const B = $("#parkBody");
     B.innerHTML = "";
-    const t = c.sched;
-    const grid = el("div", "park" + (t.over ? " over" : ""));
+    const p = c.parking, t = c.sched;
+    const need = p.need;
+    const haveNeed = Number.isFinite(need) && t.rows > 0;
+    const grid = el("div", "park");
 
     const cell = (label, value, sub, cls) => {
       const d = el("div");
@@ -1327,94 +1456,127 @@ tbody tr:last-child td{border-bottom:0}
       return d;
     };
 
-    const haveBays = Number.isFinite(t.baysCeil) && t.rows > 0;
-    grid.appendChild(cell("Parking required",
-      haveBays ? fmt(t.baysCeil) : "\u2014",
-      haveBays ? plural(t.baysCeil, "bay", "bays") + ", each activity rounded up" : "no activities yet",
+    grid.appendChild(cell("Spaces required",
+      haveNeed ? fmt(need) : "\u2014",
+      haveNeed ? plural(need,"space","spaces") +
+                 (c.o.spaces.overridden ? ", overridden" : ", from the schedule") : "no activities yet",
       "hi"));
-    grid.appendChild(cell("Parking area",
-      Number.isFinite(t.area) ? fmt(t.area) : "\u2014",
-      Number.isFinite(t.bayArea) ? "m\u00b2 at " + fmt(t.bayArea) + " m\u00b2 a bay" : "m\u00b2",
-      t.over ? "bad" : ""));
-    grid.appendChild(cell("Share of plot",
-      Number.isFinite(t.pctPlot) ? fmt(t.pctPlot,1) + "%" : "\u2014",
-      Number.isFinite(t.plot) && t.plot > 0 ? "of " + area(t.plot) : "set a plot size",
-      t.over ? "bad" : ""));
-    grid.appendChild(cell("Cap",
-      Number.isFinite(t.limitPct) ? fmt(t.limitPct) + "%" : "\u2014",
-      Number.isFinite(t.cap) ? area(t.cap) : "",
-      ""));
-    grid.appendChild(cell("Share of coverage",
-      Number.isFinite(t.pctCover) ? fmt(t.pctCover,1) + "%" : "\u2014",
-      Number.isFinite(t.ugPct) ? "underground above " + fmt(t.ugPct) + "%" : "",
-      t.underground ? "ug" : ""));
+    grid.appendChild(cell("Total parking area",
+      Number.isFinite(p.needArea) ? fmt(p.needArea) : "\u2014",
+      "m\u00b2 at " + fmt(p.per,1) + " m\u00b2 a space", ""));
+    grid.appendChild(cell("Open ground",
+      Number.isFinite(p.open) ? fmt(p.open) : "\u2014",
+      Number.isFinite(p.openCap) ? "m\u00b2 \u2014 holds " + fmt(p.openCap) + " " +
+        plural(p.openCap,"space","spaces") : "m\u00b2 outside the footprint", ""));
+    grid.appendChild(cell("On grade",
+      Number.isFinite(p.onGrade) ? fmt(p.onGrade) : "\u2014",
+      Number.isFinite(p.gradeArea) ? plural(p.onGrade,"space","spaces") + ", " +
+        fmt(p.gradeArea) + " m\u00b2" : "", ""));
+    grid.appendChild(cell("In structure",
+      Number.isFinite(p.structured) ? fmt(p.structured) : "\u2014",
+      Number.isFinite(p.structArea) ? plural(p.structured,"space","spaces") + ", " +
+        fmt(p.structArea) + " m\u00b2" : "",
+      p.structured > 0 ? "ug" : ""));
+    grid.appendChild(cell("Parking floors",
+      Number.isFinite(p.floors) ? fmt(p.floors) : "\u2014",
+      Number.isFinite(p.perFloor) && p.structured > 0
+        ? fmt(p.perFloor) + " m\u00b2 usable each" : "none needed",
+      p.floors > 0 ? "ug" : ""));
     B.appendChild(grid);
 
-    // underground parking is a requirement, not a failure: style it apart
-    if(t.underground){
-      const ug = el("div", "ugnote");
-      ug.appendChild(el("span", "mark", "underground"));
-      const t2 = el("span");
-      t2.innerHTML = "Parking needs <b>" + fmt(t.area) + " m\u00b2</b>, <b>" +
-        fmt(t.pctCover,1) + "%</b> of the <b>" + fmt(t.coverArea) +
-        " m\u00b2</b> allowed plot coverage \u2014 above the <b>" + fmt(t.ugPct) +
-        "%</b> trigger, so <b>underground parking is mandatory within the plot</b>.";
-      ug.appendChild(t2);
-      B.appendChild(ug);
+    // how the split was reached
+    if(haveNeed && Number.isFinite(p.open)){
+      const w = el("div");
+      w.style.cssText = "padding:14px 20px 2px";
+      const line = (txt) => {
+        const d = el("div");
+        d.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.72rem; " +
+                          "color:var(--ink-2); line-height:1.85";
+        d.textContent = txt;
+        return d;
+      };
+      w.appendChild(line(fmt(need) + " \u00d7 " + fmt(p.per,1) + " = " +
+        fmt(p.needArea) + " m\u00b2 of parking needed"));
+      w.appendChild(line("open ground " + fmt(p.open) + " m\u00b2 \u00f7 " + fmt(p.per,1) +
+        " = " + fmt(p.open/p.per,2) + " \u2192 " + fmt(p.openCap) + " on grade"));
+      if(p.structured > 0){
+        w.appendChild(line(fmt(need) + " \u2212 " + fmt(p.onGrade) + " = " + fmt(p.structured) +
+          " in structure \u00d7 " + fmt(p.per,1) + " = " + fmt(p.structArea) + " m\u00b2"));
+        w.appendChild(line(fmt(p.structArea) + " m\u00b2 \u00f7 (" + fmt(p.fArea) + " \u00d7 " +
+          fmt(p.useP) + "%) = " + fmt(p.floorsRaw,2) + " \u2192 " + fmt(p.floors) + " " +
+          plural(p.floors,"floor","floors")));
+      }
+      B.appendChild(w);
     }
 
-    // how the share sits against the cap
-    if(Number.isFinite(t.pctPlot) && Number.isFinite(t.limitPct)){
-      const wrap = el("div");
-      wrap.style.cssText = "padding:14px 16px 4px";
-      const bar = el("div", "pkbar");
-      const fill = el("i");
-      const scale = Math.max(t.limitPct * 1.6, t.pctPlot * 1.05, 1);
-      fill.style.width = Math.min(100, t.pctPlot / scale * 100).toFixed(1) + "%";
-      if(t.over) fill.className = "bad";
-      bar.appendChild(fill);
-      const mark = el("u");
-      mark.style.left = Math.min(100, t.limitPct / scale * 100).toFixed(1) + "%";
-      mark.title = "cap: " + fmt(t.limitPct) + "%";
-      bar.appendChild(mark);
-      wrap.appendChild(bar);
-      const lg = el("div");
-      lg.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.63rem; color:var(--ink-3); margin-top:5px";
-      lg.textContent = "0%   \u2502 marker = " + fmt(t.limitPct) + "% cap   \u2502   " + fmt(scale,0) + "%";
-      wrap.appendChild(lg);
-      B.appendChild(wrap);
-    }
-
-    const note = el("div", "pknote" + (t.over ? " bad" : ""));
-    note.appendChild(el("span", "mark" + "", t.over ? "over" : "ok"));
+    const note = el("div", "pknote" + (p.structured > 0 ? " bad" : ""));
+    note.appendChild(el("span", "mark", p.structured > 0 ? "structure" : "ok"));
     const txt = el("span");
-    if(!t.rows || !haveBays){
-      txt.textContent = "Add activities to the schedule to get a parking requirement.";
-    } else if(t.over){
-      txt.innerHTML = "The selected activities need <b>" + fmt(t.area) + " m\u00b2</b> of parking, " +
-        "<b>" + fmt(t.pctPlot,1) + "%</b> of the plot \u2014 over the <b>" + fmt(t.limitPct) +
-        "%</b> cap of <b>" + fmt(t.cap) + " m\u00b2</b>. Drop the parking-heavy activities, " +
-        "enlarge the plot, or revisit the bay-area assumption.";
+    if(!haveNeed){
+      txt.textContent = "Add activities to the schedule to size the parking.";
+    } else if(p.isCR && p.structured > 0){
+      txt.innerHTML = "Community Retail is allowed <b>100%</b> plot coverage, so there is no open " +
+        "ground: all <b>" + fmt(p.structured) + "</b> spaces are structured, needing <b>" +
+        fmt(p.structArea) + " m\u00b2</b> over <b>" + fmt(p.floors) + "</b> " +
+        plural(p.floors,"floor","floors") + " at " + fmt(p.useP) + "% usable.";
+    } else if(p.structured > 0){
+      txt.innerHTML = "The open ground takes <b>" + fmt(p.onGrade) + "</b> of <b>" + fmt(need) +
+        "</b> spaces. The remaining <b>" + fmt(p.structured) + "</b> need <b>" +
+        fmt(p.structArea) + " m\u00b2</b> of structured parking \u2014 <b>" + fmt(p.floors) +
+        "</b> " + plural(p.floors,"floor","floors") + " at " + fmt(p.useP) + "% usable.";
     } else {
-      txt.innerHTML = "Parking fits: <b>" + fmt(t.pctPlot,1) + "%</b> of the plot against a <b>" +
-        fmt(t.limitPct) + "%</b> cap, <b>" + fmt(Math.max(0, t.cap - t.area)) +
-        " m\u00b2</b> to spare.";
+      txt.innerHTML = "All <b>" + fmt(need) + "</b> spaces fit on the open ground, with <b>" +
+        fmt(Math.max(0, p.open - p.needArea)) + " m\u00b2</b> to spare. No structured parking needed.";
     }
     note.appendChild(txt);
     B.appendChild(note);
 
-    // masthead chip
     const chip = $("#chipPark");
     if(chip){
-      if(haveBays){
-        chip.textContent = fmt(t.baysCeil) + " " + plural(t.baysCeil,"bay","bays") + " \u00b7 " +
-                           fmt(t.pctPlot,1) + "% of plot";
+      if(haveNeed){
+        chip.textContent = fmt(need) + " " + plural(need,"space","spaces") +
+          (p.structured > 0 ? " \u00b7 " + fmt(p.floors) + " " +
+             plural(p.floors,"floor","floors") : " \u00b7 on grade");
         chip.classList.add("on");
-        chip.classList.toggle("bad", !!t.over);
+        chip.classList.toggle("bad", p.structured > 0);
       } else {
         chip.textContent = "parking \u2014";
         chip.classList.remove("on","bad");
       }
+    }
+  }
+
+  /* ---------- overrides in force ---------------------------------------- */
+  function renderOverrides(c){
+    const list = activeOverrides(c.o);
+    const strip = $("#ovStrip"), chip = $("#chipOv");
+    strip.innerHTML = "";
+    if(!list.length){
+      strip.hidden = true;
+      if(chip) chip.hidden = true;
+      return;
+    }
+    strip.hidden = false;
+    const head = el("span","ovhead", list.length === 1 ? "1 override" : list.length + " overrides");
+    strip.appendChild(head);
+    list.forEach(x => {
+      const t = el("span","ovtag");
+      t.appendChild(Object.assign(el("b"), {textContent:x.label}));
+      t.appendChild(document.createTextNode(" " +
+        (x.from == null ? "\u2014" : x.fmt(x.from)) + " \u2192 " + x.fmt(x.to)));
+      strip.appendChild(t);
+    });
+    const clear = el("button","btn mini","Clear");
+    clear.type = "button";
+    clear.addEventListener("click", ()=>{
+      OV.forEach(d => { const e = document.getElementById(d.id); if(e) e.value = ""; });
+      renderSched(); render();
+    });
+    strip.appendChild(clear);
+    if(chip){
+      chip.hidden = false;
+      chip.textContent = list.length + (list.length === 1 ? " override" : " overrides");
+      chip.classList.add("on");
     }
   }
 
@@ -1442,7 +1604,7 @@ tbody tr:last-child td{border-bottom:0}
         F.appendChild(flag("crit","input",["No FAR available — pick a designation or type an override."]));
       }
     }
-    if(c.dRow && !Number.isFinite(num(c.dRow.coverage)) && c.pcAuto){
+    if(c.dRow && !Number.isFinite(num(c.dRow.coverage)) && !c.o.pcPct.overridden){
       F.appendChild(flag("","n/p",[
         "No Maximum Plot Coverage published for ", strong(c.dRow.designation),
         " either, so steps 2 and 5 fall back to ", strong(fmt(COEF.coverageDefault,0)+"%"), "."
@@ -1484,14 +1646,6 @@ tbody tr:last-child td{border-bottom:0}
         " are permitted by step 5."
       ]));
     }
-    if(t && t.over){
-      F.appendChild(flag("crit","parking",[
-        "The chosen activities need ", strong(fmt(t.baysCeil) + " " + plural(t.baysCeil,"bay","bays")),
-        " \u2248 ", strong(area(t.area)), " of parking at ", fmt(t.bayArea), " m\u00b2 a bay, over the ",
-        fmt(t.limitPct), "% cap of ", strong(area(t.cap)), ". Reduce the parking-heavy activities, ",
-        "enlarge the plot, or revisit the bay-area assumption."
-      ]));
-    }
     if(t && t.incomplete){
       F.appendChild(flag("","qty",[
         strong(String(t.incomplete)),
@@ -1500,7 +1654,7 @@ tbody tr:last-child td{border-bottom:0}
         "their parking can be counted."
       ]));
     }
-    if(Number.isFinite(c.farOv))
+    if(c.o.far.overridden)
       F.appendChild(flag("info","manual",["Using a typed FAR instead of the land-use table."]));
     if(!F.children.length)
       F.appendChild(flag("info","ok",["All five figures derive from the selected code and ITC category."]));
@@ -1528,16 +1682,16 @@ tbody tr:last-child td{border-bottom:0}
   function renderChips(c){
     const cc = $("#chipCode");
     if(Number.isFinite(c.far)){
-      cc.textContent = (c.dRow && !Number.isFinite(c.farOv) ? c.dRow.designation : "manual") +
+      cc.textContent = (c.dRow ? c.dRow.designation : "manual") +
                        " · FAR " + fmt(c.far,3) + " · PC " + fmt(c.pcPct,0) + "%";
       cc.classList.add("on");
     } else { cc.textContent = "code —"; cc.classList.remove("on"); }
     $("#farShow").textContent = Number.isFinite(c.far) ? fmt(c.far,3) : "—";
-    $("#farSrc").textContent  = Number.isFinite(c.farOv) ? "overridden"
+    $("#farSrc").textContent  = c.o.far.overridden ? "overridden"
                               : (c.dRow ? (c.dRow.source==="code"?"from the Code":"added here") : "no designation");
     if($("#pcShow")){
       $("#pcShow").textContent = fmt(c.pcPct,2) + "%";
-      $("#pcSrc").textContent  = c.pcAuto
+      $("#pcSrc").textContent  = !c.o.pcPct.overridden
         ? (c.dRow && Number.isFinite(num(c.dRow.coverage)) ? "from the Code" : "fallback default")
         : "overridden";
     }
@@ -1592,7 +1746,7 @@ tbody tr:last-child td{border-bottom:0}
     ["plotSize","farManual","pcPct","glaPct"].forEach(id=>{
       document.getElementById(id).addEventListener("input", render);
     });
-    ["unitArea","bayArea","parkLimitPct","ugTriggerPct"].forEach(id=>{
+    ["unitArea","spaceArea","floorUsePct","parkFloorArea","spacesOverride"].forEach(id=>{
       document.getElementById(id).addEventListener("input", ()=>{ renderSched(); render(); });
     });
     $("#itcLoc").addEventListener("input", ()=>{
@@ -1661,9 +1815,8 @@ tbody tr:last-child td{border-bottom:0}
     paintBasis();
 
     $("#resetCoef").addEventListener("click", ()=>{
-      $("#pcPct").value = "";                 // back to the designation's value
-      $("#glaPct").value = COEF.glaPct;
-      render();
+      OV.forEach(d => { const e = document.getElementById(d.id); if(e) e.value = ""; });
+      renderSched(); render();
     });
 
     $("#copySummary").addEventListener("click", ()=>{
@@ -1673,8 +1826,11 @@ tbody tr:last-child td{border-bottom:0}
         "",
         "Plot size            " + area(c.plot),
         "Designation          " + (c.dRow ? c.dRow.designation + " (" + c.dRow.name + ")" : "manual"),
-        "FAR                  " + fmt(c.far,3) + (Number.isFinite(c.farOv) ? "  [override]" : ""),
-        "Max plot coverage    " + fmt(c.pcPct,2) + "%" + (c.pcAuto ? "" : "  [override]"),
+        "FAR                  " + fmt(c.far,3) +
+          (c.o.far.overridden ? "  [override, original " +
+             (c.o.far.original == null ? "none" : fmt(c.o.far.original,3)) + "]" : ""),
+        "Max plot coverage    " + fmt(c.pcPct,2) + "%" +
+          (c.o.pcPct.overridden ? "  [override, original " + fmt(c.o.pcPct.original,2) + "%]" : ""),
         "ITC location         " + state.itcLoc + "   basis " + state.basis,
         "",
         "1  Max GFA           " + area(c.maxGFA) + "   = " + fmt(c.plot) + " x " + fmt(c.far,3),
@@ -1686,7 +1842,7 @@ tbody tr:last-child td{border-bottom:0}
         "",
         "ACTIVITY SCHEDULE",
       ];
-      const unit = num($("#unitArea").value) || 60;
+      const unit = pick("unit", COEF.unitArea).value || 60;
       SCHED.forEach((r,i)=>{
         const p = rowParking(r, unit);
         lines.push("  " + String(i+1).padStart(2) + ". " +
@@ -1699,14 +1855,31 @@ tbody tr:last-child td{border-bottom:0}
       lines.push("",
         "Slots used           " + fmt(t.slots) + " of " + fmt(t.allowed),
         "Parking required     " + fmt(t.baysCeil) + " bays   (each activity rounded up)",
-        "Parking area         " + (Number.isFinite(t.area) ? fmt(t.area) + " m2" : "-") +
-          "   at " + fmt(t.bayArea) + " m2 a bay",
-        "Share of plot        " + (Number.isFinite(t.pctPlot) ? fmt(t.pctPlot,1) + "%" : "-") +
-          "   cap " + fmt(t.limitPct) + "% = " + (Number.isFinite(t.cap) ? fmt(t.cap) + " m2" : "-"),
-        "Verdict              " + (t.over ? "OVER THE CAP" : "within the cap"),
         "",
+        "PARKING",
+        "  Spaces required    " + fmt(c.parking.need) +
+          (c.o.spaces.overridden ? "   [UPPC/ITC override, schedule gave " +
+             fmt(c.o.spaces.original) + "]" : "   (from the schedule)"),
+        "  Area per space     " + fmt(c.parking.per,1) + " m2",
+        "  Total parking area " + fmt(c.parking.needArea) + " m2",
+        "  Open ground        " + fmt(c.parking.open) + " m2  holds " +
+          fmt(c.parking.openCap) + " spaces",
+        "  On grade           " + fmt(c.parking.onGrade) + " spaces, " +
+          fmt(c.parking.gradeArea) + " m2",
+        "  In structure       " + fmt(c.parking.structured) + " spaces, " +
+          fmt(c.parking.structArea) + " m2",
+        "  Parking floors     " + fmt(c.parking.floors) + "   (" + fmt(c.parking.fArea) +
+          " m2 x " + fmt(c.parking.useP) + "% = " + fmt(c.parking.perFloor) + " m2 usable each)" +
+          (c.parking.isCR ? "   [Community Retail: 100% coverage, no open ground]" : ""),
+        "",
+        "OVERRIDES");
+      const ovs = activeOverrides(c.o);
+      if(!ovs.length) lines.push("  none - every value is the published original");
+      else ovs.forEach(x => lines.push("  " + x.label.padEnd(26) +
+        (x.from == null ? "-" : x.fmt(x.from)) + "  ->  " + x.fmt(x.to)));
+      lines.push("",
         "Rates: " + (META.source_file || "ITC matrix") + ". Designations: " +
-          (META.designation_file || "-") + ". Activities: " + (META.activity_file || "-") + ".");
+        (META.designation_file || "-") + ". Activities: " + (META.activity_file || "-") + ".");
       copy(lines.join("\n")).then(ok=>{
         const m = $("#copyMsg");
         m.textContent = ok ? "Summary copied." : "Copy blocked by the browser.";
@@ -1761,7 +1934,6 @@ tbody tr:last-child td{border-bottom:0}
     if($("#footDesig")) $("#footDesig").textContent = META.designations || String(LU.length);
     const fs = $("#footSrc");
     if(fs && META.source_file) fs.textContent = META.source_file;
-    $("#glaPct").value = COEF.glaPct;
 
     fillDedSelect();
 

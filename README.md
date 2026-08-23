@@ -107,6 +107,26 @@ downloads that artifact and ships it — for an internal box, that is an rsync o
             dist/ "${{ secrets.DEPLOY_TARGET_HOST }}"
 ```
 
+## Override values
+
+No field is pre-filled from a table. The original shows as placeholder text instead —
+`Original value: 75%` — and the calculation uses it while the field is empty. Typing in a field
+does three things:
+
+1. an amber strip above the columns lists what changed, `GLA share 75% → 80%`, with a masthead
+   chip counting them and a Clear button;
+2. every figure that depended on it gains a line naming the override,
+   `Recalculated using GLA share = 80% (original 75%)`;
+3. clearing the field restores the original and the indicators disappear.
+
+Overridable: FAR, max plot coverage, GLA share, unit area per activity, area per parking space,
+usable share of a parking floor, parking floor area, and the required number of spaces — the last
+for a UPPC or ITC reduction, defaulting to the count the activity schedule produces.
+
+The point is that an entered value always reads as a deviation, so a figure derived from Code
+values never looks like one derived from a hand-entered assumption.
+
+
 ## Visual design
 
 One dark palette, from the project Figma, applied deliberately rather than derived:
@@ -277,7 +297,8 @@ Worked example — Warehousing `713` on a 1,000 m² plot at FAR 1.05 (GFA 1,050 
 3  GLA            = Max GFA x GLA%                   GLA% an input, default 75%
 4  Activities     = floor( GLA / unit area )         unit area an input, default 60 m2
 
-   Parking        = sum over the activity schedule   see below
+   Spaces         = sum over the activity schedule   or a UPPC/ITC override
+   Parking        = 32.5 m2 each, open ground first then structure
 ```
 
 Parking is no longer a derivation step. It depends on *which* activities occupy the plot,
@@ -348,36 +369,45 @@ Validated against the worked example — flower shop, book shop, commercial bank
 restaurant all auto-map to the ITC categories whose rates the brief quotes (1.318, 1.318,
 4.992, 7.702). Any row can be reassigned by hand, which then shows as *set by hand*.
 
-### Underground parking
+### Parking: open ground first, then structure
 
-Above a share of the **allowed plot coverage** (step 2), surface parking stops being viable and
-the panel states that underground parking is mandatory within the plot. The trigger is an input,
-default **16%**.
+A space needs its own area, so the ground left outside the footprint holds only so many.
+Anything beyond that has to be built, and a parking floor is only partly usable, which is what
+sets how many floors it takes.
 
-That is a low bar in practice. On the worked example — 600 m² of allowed coverage — 16% is
-96 m², which at 25 m² a bay is **under four bays**. So almost any multi-tenant scheme
-will require underground parking. That may well be the intent for dense plots, but it is worth
-confirming the rule means 16% *of coverage* rather than of plot area, and that it compares an
-**area** rather than a bay count.
+```
+total parking area = spaces x 32.5 m2
+open ground        = plot area - plot coverage
+spaces on grade    = min(required, floor(open ground / 32.5))
+structured spaces  = required - on grade
+structured area    = structured spaces x 32.5
+parking floors     = ceil(structured area / (parking floor area x 75%))
+```
 
-The requirement is styled apart from the parking-cap breach: exceeding the cap is an error,
-needing underground parking is a requirement the design can satisfy.
+Both cases from the brief, reproduced exactly:
 
-### The parking cap
+| | general plot | Community Retail |
+|---|---|---|
+| Spaces required | 30 | 120 |
+| Total parking area | 975 m² | 3,900 m² |
+| Plot / coverage | 1,000 m² / 60% | 1,000 m² / **100%** |
+| Open ground | 400 m² → holds 12 | **0 m² → holds 0** |
+| On grade | 12 | 0 |
+| Structured | 18 → 585 m² | 120 → 3,900 m² |
+| Floors at 75% usable | 1 | **6** |
 
-The rule is *"if the chosen activities need more than 50% of the plot as parking, error"*. ITC
-rates give a **bay count**, and the cap is an **area**, so converting between them needs an area
-per bay. That figure is not in any source, so it is an input: **25 m² by default**, a typical
-bay-plus-aisle allowance. **Confirm it** — the example lands at 600 m² against a 500 m² cap, so
-the verdict flips somewhere near 21 m² a bay.
+**Community Retail forces the floors calculation, and it follows from the Code rather than a
+special rule:** `CR` is published at **100% plot coverage**, so there is no open ground and every
+space is structured. `3,900 / (1,000 x 0.75) = 5.2 -> 6 floors`.
 
-The **Parking requirement** panel below the schedule reports bays, the area they need, that area
-as a share of the plot, and the cap — turning red when the cap is breached. The masthead chip
-carries the same figure.
+The number of spaces required comes from the activity schedule, or from the *Required spaces*
+override where UPPC or ITC has granted a reduction.
 
-The earlier whole-plot basis (one ITC category applied to total GFA) has been removed, along with
-the ITC category picker and the ITC rate card, so there is now a single parking figure rather than
-two that disagreed.
+This replaced an earlier model that capped parking at 50% of plot area and called underground
+mandatory above 16% of coverage. Both were stand-ins with no source behind them. The area per
+space (32.5 m²) and the 75% floor efficiency come from the standard, so the two assumptions
+flagged in earlier versions are now closed.
+
 
 ## Removed from the page
 
@@ -422,38 +452,26 @@ Confirmed from source:
 
 Still needs sign-off:
 
-1. ~~**Plot coverage basis.**~~ **Resolved 2026-08-22:** plot coverage is the GFA allowed on
-   the ground floor, `plot size x max plot coverage%`. The whiteboard's `Max GFA x coverage%` was
-   wrong, which the issued report had hinted at by printing `MAX. PLOT COVERAGE 60%` as a bare
-   percentage with no area. On the worked example this moves coverage from 630 m² to 600 m², and
-   the footprint/plot ratio from 63% to exactly 60%.
-2. **The handwritten Arabic note** reading roughly "take 50% of the PCT" now has a likely
-   referent: limitation **L-2** of the issued report requires "a minimum of 50% of the
-   plot's total GFA … allocated to the specified uses and … not less than 50% of the total
-   leasable floor area." The calculator points at L-2 and shows both 50% figures, but still
-   treats it as an advisory, not a rule.
-3. **The GLA 75% share** is not a Code citation — it is the worked example's value and may
-   vary by scheme. It is an input, seeded from the `coefficient` table.
-4. **Parking bay area (25 m²).** Introduced here so a bay count can be compared with an area
-   cap; not from any source. The example's pass/fail flips near 21 m² a bay.
-5. **The DED → ITC crosswalk** is heuristic — 4% high confidence, 26% low. Review low-confidence
-   rows.
-6. **Which parking figure governs** — the whole-plot ITC category or the activity schedule.
-7. ~~**Step 5's unit change.**~~ Resolved: reverted to the whiteboard's count, `floor(GLA / 60)`.
-   Superseded note: `GLA × coverage%` returned an area, where the whiteboard
-   returned a tenancy count. See *The calculation* above.
+1. **An issued DCR report gave `AVG. REQUIRED PARKING = 0`** for a small commercial plot, where
+   the ITC rate for that land use implies 3 spaces. Not a rounding artefact. The most important
+   one — it decides whether that report field can be trusted at all.
+2. **The Arabic note on the whiteboard** ("50% of the PCT") most likely points at limitation
+   **L-2** of the issued report: at least 50% of GFA to the specified uses, and not less than
+   50% of leasable area. Surfaced as an advisory, not applied as a rule.
+3. **The GLA 75% share** is not a Code citation — it is the worked example's value and may vary
+   by scheme. Overridable, and seeded from the `coefficient` table.
+4. **The DED → ITC crosswalk** is heuristic: 162 high, 2,722 medium, 1,008 low confidence across
+   3,892 activities. Review the low-confidence rows.
 5. **15 designations publish no FAR** and 12 no coverage; the Code governs them by note
    reference. Those note definitions live on the district pages of the Code PDF and were not
-   extracted, so those designations cannot be calculated without an override.
+   extracted, so those designations need an override to calculate.
 
-Form state persists to `localStorage`. Both reference tables are read-only in the page —
-edit `Designation_Index.xlsx` or the ITC sheet and re-run the build to change them.
+Closed since earlier versions:
 
-## Removed from the page
-
-Three panels were taken out on request: the **ITC rate conversion matrix** browser, the
-editable **Land use designations** table, and the **Query the database** console. The data
-they exposed is untouched in `itc_rates.db`; only the in-page UI for browsing, editing and
-querying it is gone. The consequence worth knowing: there is no longer a way to add a
-designation or import a FAR schedule from the page, so corrections have to go through
-`build_db.py`. The SQL readout under the ITC rate card was dropped at the same time.
+- **Plot coverage basis** — it is `plot area x coverage%`, the GFA allowed on the ground floor.
+- **Step 5** — a floored count, `floor(GLA / unit area)`, not an area.
+- **Area per parking space** — 32.5 m², from the standard, replacing an invented 25 m² bay.
+- **Where parking goes** — open ground first, then structure, replacing an invented 50% cap and
+  a 16%-of-coverage underground trigger.
+- **Which parking figure governs** — the activity schedule; the whole-plot single-category basis
+  was removed.
