@@ -13,6 +13,7 @@ ITC rate matrix are both embedded as a SQLite database and queried live in the p
 | `itc_rates.db` | SQLite: 282 ITC rate rows (141 codes × 2 periods), 59 land-use designations, the week weighting and coefficients. |
 | `build_db.py` | ITC sheet + `Designation_Index.xlsx` &rarr; `itc_rates.db` |
 | `embed_db.py` | `dcr-calculator.src.html` + db + sql.js &rarr; `dcr-calculator.html` |
+| `gdb_export.py` | Runs the derivation over a file geodatabase's plot layer, to Excel. |
 | `verify_build.py` | Post-build checks: placeholders substituted, output pure ASCII, no plot data. |
 | `vendor/sql-wasm.{js,wasm}` | sql.js 1.13.0 — SQLite compiled to WebAssembly. See `vendor/README.md`. |
 | `.github/workflows/build.yml` | CI: build, verify, then deploy to whichever target `DEPLOY_TARGET` selects. |
@@ -105,6 +106,47 @@ downloads that artifact and ships it — for an internal box, that is an rsync o
           rsync -az --delete -e "ssh -i key -o StrictHostKeyChecking=accept-new" \
             dist/ "${{ secrets.DEPLOY_TARGET_HOST }}"
 ```
+
+## Batch export from a geodatabase
+
+The page cannot read a file geodatabase — it is a directory of Esri binary tables, and parsing
+it needs GDAL. So batch work is a companion script rather than a page feature:
+
+```bash
+pip install pyogrio openpyxl          # GDAL ships inside the pyogrio wheel
+python3 gdb_export.py DMT_Plot_Entrance.gdb -o plots.xlsx
+```
+
+Plot areas come from `UDM_Plot.PLOTCALCULATEDAREA`. **FAR** comes from the layer's own
+`DevCode_FAR` where it has one and from the designation schedule otherwise, with a column
+recording which. **Max plot coverage** is not a geodatabase field, so it always comes from the
+schedule, or the fallback default where the Code publishes none — again recorded per row.
+
+Three sheets: **Plots** (a row per feature, filterable, frozen panes), **Parameters** (every
+coefficient and source file used, so the output is self-documenting) and **Notes** (how each
+column was produced and what is still unconfirmed).
+
+Options: `--layer`, `--gla`, `--unit`, `--coverage-default`, `--bay`, `--cap`, `--ug`.
+
+### It does not compute parking per plot
+
+The ITC rate depends on which activities occupy the plot, and no geodatabase field carries
+that. Inventing a default activity mix would produce authoritative-looking numbers with no
+basis. Instead the sheet gives the parking **budget** — how much surface parking the cap
+allows, and the area above which parking must go underground — both derivable from the plot
+alone.
+
+### Validation against the sample geodatabase
+
+`DMT_Plot_Entrance.gdb` carries a `DevCode_MaxGFA` field, which is an independent check on
+step 1. Across its 66 plots: **57 have a usable FAR and all 57 agree exactly** with
+`plot area x FAR`; the other 9 publish `N/A` in both sources and correctly derive no GFA.
+One plot has a genuine `FAR = 0` (no buildable area) which is treated as a real value rather
+than missing data, and its computed GFA of 0 matches the field.
+
+Four designations in the geodatabase are absent from the Code schedule — `MU-13`,
+`PLANNED DEVELOPMENT`, `RE-10`, `RE-7` — so those rows fall back to the default coverage and
+say so. `PLANNED DEVELOPMENT` still gets its FAR, because the geodatabase supplies it directly.
 
 ## Schema
 
