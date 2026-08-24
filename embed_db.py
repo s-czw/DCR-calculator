@@ -78,6 +78,9 @@ def snapshot(db_path):
         "land_use": [dict(r) for r in con.execute(
             "SELECT id, category, designation, name, far, coverage, remarks, source "
             "FROM land_use ORDER BY id")],
+        "plot": [dict(r) for r in con.execute(
+            "SELECT id, plot_number, sector_plot_id, district, primary_use, "
+            "devcode, devcode_cat, area FROM plot ORDER BY sector_plot_id")],
         "weighting": [dict(r) for r in
                       con.execute("SELECT period, days, share FROM weighting")],
         # 3,900-odd rows; the picker searches these when SQLite is unavailable

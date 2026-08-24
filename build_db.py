@@ -26,6 +26,7 @@ SRC = os.environ.get("DCR_SOURCE_DIR") or os.path.join(HERE, "sources")
 DEFAULT_XLS = os.path.join(SRC, "ITC_Trip & Parking Calculation Sheet_V1.xls")
 DEFAULT_DESIG = os.path.join(SRC, "Designation_Index.xlsx")
 DEFAULT_DED = os.path.join(SRC, "DED \u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0627\u0646\u0634\u0637\u0629 (2026 \u064a\u0648\u0644\u064a\u0648).xlsx")
+DEFAULT_PLOTS = os.path.join(SRC, "DCR_plots.xlsx")
 
 # A standard week: five weekdays, two weekend days.
 WEEK = {"weekday": 5.0, "weekend": 2.0}
@@ -137,6 +138,22 @@ CREATE TABLE ded_activity (
 );
 CREATE INDEX idx_act_div  ON ded_activity (division);
 CREATE INDEX idx_act_itc  ON ded_activity (itc_class);
+
+-- The plot register: the plots a user can pick instead of typing an area.
+-- sector_plot_id is the address the saved-configuration JSON is keyed by, so it
+-- is UNIQUE and NOT NULL -- two plots sharing one would silently overwrite each
+-- other on save.
+CREATE TABLE plot (
+    id            INTEGER PRIMARY KEY,
+    plot_number   TEXT,
+    sector_plot_id TEXT NOT NULL UNIQUE,
+    district      TEXT,
+    primary_use   TEXT,
+    devcode       TEXT,
+    devcode_cat   TEXT,
+    area          REAL
+);
+CREATE INDEX idx_plot_sector ON plot (sector_plot_id);
 
 CREATE TABLE coefficient (key TEXT PRIMARY KEY, value REAL NOT NULL, note TEXT);
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -388,6 +405,66 @@ def parse(grid):
     return out
 
 
+def load_plots(path):
+    """The plot register: one row per plot, keyed by its sector/plot address."""
+    from openpyxl import load_workbook
+    ws = load_workbook(path, data_only=True).worksheets[0]
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return []
+    # Match columns by header text rather than position: the register is
+    # hand-maintained and a reissue that adds a column should not silently shift
+    # the area into the DevCode field.
+    head = [norm(h).lower() if h is not None else "" for h in rows[0]]
+    def col(*names):
+        for want in names:
+            for i, h in enumerate(head):
+                if h == want:
+                    return i
+        for want in names:
+            for i, h in enumerate(head):
+                if want in h:
+                    return i
+        return None
+    ix = {
+        "plot_number":    col("plot number"),
+        "sector_plot_id": col("sector / plot id", "sector/plot id", "sector"),
+        "district":       col("district"),
+        "primary_use":    col("primary use"),
+        "devcode":        col("devcode"),
+        "devcode_cat":    col("devcode category"),
+        "area":           col("plot area (m2)", "plot area"),
+    }
+    for key in ("sector_plot_id", "area"):
+        if ix[key] is None:
+            sys.exit(f"{os.path.basename(path)}: no column found for {key}; "
+                     f"headers were {head}")
+    # "DevCode" is a prefix of "DevCode category", so a substring match could pick
+    # the wrong one. Reject that rather than mis-file every row.
+    if ix["devcode"] is not None and ix["devcode"] == ix["devcode_cat"]:
+        ix["devcode_cat"] = None
+
+    out, seen = [], {}
+    for r in rows[1:]:
+        def cell(key):
+            i = ix[key]
+            return norm(r[i]) if i is not None and i < len(r) else None
+        sector = cell("sector_plot_id")
+        if not sector:
+            continue
+        area = numeric(r[ix["area"]]) if ix["area"] < len(r) else None
+        if sector in seen:
+            sys.exit(f"{os.path.basename(path)}: sector/plot id {sector!r} appears "
+                     f"twice (rows {seen[sector]} and {len(out) + 2}). It is the key "
+                     f"saved configurations are stored under, so it must be unique.")
+        seen[sector] = len(out) + 2
+        out.append(dict(plot_number=cell("plot_number"), sector_plot_id=sector,
+                        district=cell("district"), primary_use=cell("primary_use"),
+                        devcode=cell("devcode"), devcode_cat=cell("devcode_cat"),
+                        area=area))
+    return out
+
+
 def main():
     xls = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_XLS
     if not os.path.exists(xls):
@@ -428,6 +505,8 @@ def main():
     lu = load_designations(desig) if os.path.exists(desig) else []
 
     ded = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_DED
+    plots_src = sys.argv[4] if len(sys.argv) > 4 else DEFAULT_PLOTS
+    plots = load_plots(plots_src) if os.path.exists(plots_src) else []
     acts = load_activities(ded) if os.path.exists(ded) else []
     con.executemany(
         "INSERT INTO ded_activity (activity_id, name, section, division, isic_class, "
@@ -447,6 +526,10 @@ def main():
     con.executemany(
         "INSERT INTO land_use (category, designation, name, far, coverage, remarks, source) "
         "VALUES (:category,:designation,:name,:far,:coverage,:remarks,'code')", lu)
+    con.executemany(
+        "INSERT INTO plot (plot_number, sector_plot_id, district, primary_use, "
+        "devcode, devcode_cat, area) VALUES (:plot_number,:sector_plot_id,:district,"
+        ":primary_use,:devcode,:devcode_cat,:area)", plots)
     con.executemany("INSERT INTO coefficient (key, value, note) VALUES (?,?,?)", [
         ("gla_pct", 75, "GLA = Max GFA x this %. User-editable; not a Code citation."),
         ("coverage_pct_default", 60,
@@ -462,6 +545,8 @@ def main():
         ("designations", str(len(lu))),
         ("activity_file", os.path.basename(ded) if acts else "(none)"),
         ("activities", str(len(acts))),
+        ("plot_file", os.path.basename(plots_src) if plots else "(none)"),
+        ("plots", str(len(plots))),
         ("built", date.today().isoformat()),
     ])
     con.commit()

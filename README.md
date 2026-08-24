@@ -210,6 +210,44 @@ rather than specified: its active option is `--ink` on the accent tint (11.77:1 
 light) rather than the accent blue, which would have been 3.09:1 in dark. The inactive option
 stays on `--ink-3`, matching the chips beside it.
 
+## The plot register, and saving a configuration
+
+`plot` in the database holds the 66 plots from `DCR_plots.xlsx`, keyed by **sector/plot ID**
+(`19_1_106_118_A`). The Inputs panel leads with a **Plot** picker: choosing a plot fills the area
+from the register, and typing an area by hand returns the picker to *Manual entry* — a figure is
+never left filed against a plot it does not belong to.
+
+Picking a plot deliberately does **not** change the designation. The register carries a DevCode,
+but FAR and coverage follow the land-use selection, and moving that silently would change the
+derivation behind you. The DevCode is shown in each option so it can be matched by hand.
+
+### Save
+
+**Save** writes one JSON document keyed by sector/plot address, so re-saving a plot replaces its
+entry rather than appending a second one:
+
+```json
+{
+  "19_1_106_118_A": {
+    "savedAt": "...", "plot": { … register record … },
+    "inputs": { "plotArea": 401.72, "designation": "NR", "raw": { … every field … } },
+    "overrides": [ … ], "derived": { … }, "activities": [ … ], "parking": { … }
+  }
+}
+```
+
+`inputs.raw` is every form field verbatim, so an entry is enough to reconstruct the exact state,
+while the sibling blocks are readable without knowing the field ids. `activities` records each
+row's ITC code, rate, what it is charged per, its quantity where charged per unit, and its
+unrounded bay contribution.
+
+Saving needs a plot: with *Manual entry* selected there is no address to key on, and Save says so
+rather than inventing one. Where the browser supports the File System Access API the same file is
+rewritten in place — and its existing contents are merged first, so entries saved on an earlier
+visit survive. Otherwise it downloads `DCR_<plot id>.json`. The accumulated document is also held
+in `localStorage`, so a failed or cancelled write never loses the entry. Note the artifact preview
+sandbox blocks downloads; use the deployed page or a local server to get the file.
+
 ## Batch export from a geodatabase
 
 The page cannot read a file geodatabase — it is a directory of Esri binary tables, and parsing

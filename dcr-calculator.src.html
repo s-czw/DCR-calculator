@@ -493,6 +493,17 @@ tbody tr:last-child td{border-bottom:0}
       <div class="panel-bd">
 
         <div class="field">
+          <label for="plotPick">Plot</label>
+          <div class="ctl">
+            <select id="plotPick"></select>
+          </div>
+          <div class="derived"><span class="src" id="plotPickSrc"></span></div>
+          <p class="hint">Pick a plot to take its area from the register, or leave this on
+            <em>Manual entry</em> and type an area below. Typing an area by hand returns this
+            to manual, so a figure is never filed against the wrong plot.</p>
+        </div>
+
+        <div class="field">
           <label for="plotSize">Plot size</label>
           <div class="ctl">
             <input id="plotSize" type="number" min="0" step="1" value="1000" inputmode="decimal">
@@ -685,7 +696,8 @@ tbody tr:last-child td{border-bottom:0}
       </details>
 
       <div class="btnrow">
-        <button type="button" class="btn primary" id="copySummary">Copy summary</button>
+        <button type="button" class="btn primary" id="saveConfig">Save</button>
+        <button type="button" class="btn" id="copySummary">Copy summary</button>
         <button type="button" class="btn" id="loadBoard">Load worked example</button>
         <span class="io-msg" id="copyMsg" aria-live="polite"></span>
       </div>
@@ -754,6 +766,7 @@ tbody tr:last-child td{border-bottom:0}
      build-time snapshot of the same database so the calculator still works. */
   let db = null, sqlLive = false;
   let ITC = [], LU = [], META = {};   /* LU = base-district designations */
+  let PLOTS = [];                     /* the plot register: pick instead of typing */
   const state = { basis:"combined", itcLoc:"AD-CBD", groupOrder:[] };
 
   /* ---------- helpers --------------------------------------------------- */
@@ -795,6 +808,8 @@ tbody tr:last-child td{border-bottom:0}
     q("SELECT period, days FROM weighting").forEach(r=>{
       if(r.period === "weekday" || r.period === "weekend") WEEK[r.period] = r.days;
     });
+    PLOTS = q("SELECT id, plot_number, sector_plot_id, district, primary_use, "
+              + "devcode, devcode_cat, area FROM plot ORDER BY sector_plot_id");
     LU = q("SELECT id, category, designation, name, far, coverage, remarks, source "
            + "FROM land_use ORDER BY id");
     q("SELECT key, value FROM meta").forEach(r=> META[r.key] = r.value);
@@ -810,6 +825,7 @@ tbody tr:last-child td{border-bottom:0}
       if(r.period === "weekday" || r.period === "weekend") WEEK[r.period] = r.days;
     });
     LU = (SNAPSHOT.land_use || []).map(r=>Object.assign({},r));
+    PLOTS = (SNAPSHOT.plot || []).map(r=>Object.assign({},r));
     META = Object.assign({}, SNAPSHOT.meta);
     const c = SNAPSHOT.coefficient;
     if(c.gla_pct!=null)              COEF.glaPct          = c.gla_pct;
@@ -896,7 +912,7 @@ tbody tr:last-child td{border-bottom:0}
                                        slots: r.slots, itcOverride: r.itcOverride,
                                        unitArea: r.unitArea, unitManual: r.unitManual,
                                        qty: r.qty })) };
-    ["plotSize","dedCode","farManual","pcPct","glaPct",
+    ["plotSize","plotPick","dedCode","farManual","pcPct","glaPct",
      "unitArea","spaceArea","floorUsePct","parkFloorArea","spacesOverride"]
       .forEach(id => { const nd = document.getElementById(id); if(nd) o[id] = nd.value; });
     return o;
@@ -1962,8 +1978,212 @@ tbody tr:last-child td{border-bottom:0}
     if(d) d.addEventListener("click", ()=>applyTheme("dark", true));
   }
 
+  /* ---------- plot register ---------------------------------------------- */
+  /* The register fills the plot area; it does not touch the designation. The
+     register's DevCode and the land-use selection are separate decisions, and
+     silently moving the second would change FAR and coverage behind the user. The
+     DevCode is shown in the option text so it can be matched by hand. */
+  const MANUAL = "";
+  function plotById(id){
+    return PLOTS.find(p => String(p.sector_plot_id) === String(id)) || null;
+  }
+  function currentPlot(){
+    const sel = document.getElementById("plotPick");
+    return sel ? plotById(sel.value) : null;
+  }
+  function renderPlotPick(){
+    const sel = document.getElementById("plotPick");
+    if(!sel) return;
+    const keep = sel.value;
+    sel.innerHTML = "";
+    sel.appendChild(Object.assign(el("option"),
+      { value: MANUAL, textContent: PLOTS.length
+          ? "Manual entry — type an area below"
+          : "Manual entry — no plot register in this build" }));
+    PLOTS.forEach(p => {
+      const bits = [p.district, p.devcode].filter(Boolean).join(" · ");
+      sel.appendChild(Object.assign(el("option"), {
+        value: p.sector_plot_id,
+        textContent: p.sector_plot_id + "  —  " + fmt(p.area) + " m²"
+                     + (bits ? "  ·  " + bits : "")
+      }));
+    });
+    sel.value = plotById(keep) ? keep : MANUAL;
+    paintPlotPick();
+  }
+  function paintPlotPick(){
+    const p = currentPlot(), src = document.getElementById("plotPickSrc");
+    if(!src) return;
+    if(!p){ src.textContent = PLOTS.length ? "manual entry" : ""; return; }
+    const parts = [];
+    if(p.plot_number) parts.push("plot " + p.plot_number);
+    if(p.primary_use) parts.push(String(p.primary_use).toLowerCase());
+    if(p.devcode)     parts.push("code " + p.devcode);
+    src.textContent = parts.join(" · ") || "from the register";
+  }
+  function applyPlotPick(){
+    const p = currentPlot();
+    if(p && Number.isFinite(Number(p.area))){
+      const inp = document.getElementById("plotSize");
+      // 2 dp: register areas carry 8, and a plot size to the centimetre squared
+      // is already beyond what any of this is accurate to.
+      inp.value = String(Math.round(Number(p.area) * 100) / 100);
+    }
+    paintPlotPick();
+    render();
+  }
+
+  /* ---------- saved configurations --------------------------------------- */
+  /* One JSON document keyed by sector/plot address, so re-saving a plot replaces
+     its entry instead of appending a second one. The accumulated document lives in
+     localStorage; Save merges the current plot into it and writes the file out.
+     Where the File System Access API exists the same file is rewritten in place,
+     which also picks up entries saved on a previous visit. */
+  const STORE_KEY = "dcr.saved.v1";
+  let fileHandle = null;
+
+  function readStore(){
+    try{ const raw = localStorage.getItem(STORE_KEY);
+         const o = raw ? JSON.parse(raw) : {};
+         return (o && typeof o === "object" && !Array.isArray(o)) ? o : {}; }
+    catch(e){ return {}; }
+  }
+  function writeStore(o){
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(o)); }catch(e){}
+  }
+  function configEntry(){
+    const c = calc(), f = readForm(), p = currentPlot();
+    const act = a => a ? { activity_id: a.activity_id, name: a.name,
+                           isic_class: a.isic_class, itc_class: a.itc_class } : null;
+    return {
+      savedAt: new Date().toISOString(),
+      plot: p ? { sectorPlotId: p.sector_plot_id, plotNumber: p.plot_number,
+                  district: p.district, primaryUse: p.primary_use,
+                  devCode: p.devcode, devCodeCategory: p.devcode_cat,
+                  registerArea: p.area }
+              : { sectorPlotId: null, source: "manual entry" },
+      inputs: {
+        plotArea: c.plot,
+        designation: c.dRow ? c.dRow.designation : null,
+        designationName: c.dRow ? c.dRow.name : null,
+        itcLocation: f.itcLoc,
+        raw: f            // every field verbatim, so a reload restores exactly
+      },
+      overrides: activeOverrides(c.o).map(x => ({
+        label: x.label, original: x.from, value: x.to })),
+      derived: {
+        maxGFA: c.maxGFA, plotCoverage: c.cover, gla: c.gla,
+        maxActivities: c.act, unitArea: c.unit,
+        floorAreaUsed: c.sched.floor,
+        overGFA: !!c.sched.overFloor, overGLA: !!c.sched.overGLA,
+        overSlots: !!c.sched.overSlots
+      },
+      activities: SCHED.map(r => {
+        const pk = rowParking(r, c.unit);
+        return { activity: act(r.act), slots: num(r.slots) || 0,
+                 unitArea: rowUnit(r, c.unit).area,
+                 unitAreaEntered: !!r.unitManual,
+                 itcOverride: r.itcOverride || null,
+                 itcCode: pk.code ? pk.code.code : null,
+                 rate: Number.isFinite(pk.rate) ? pk.rate : null,
+                 chargedPer: pk.code ? pk.code.unit_label : null,
+                 quantity: r.qty === "" ? null : num(r.qty),
+                 bays: Number.isFinite(pk.raw) ? pk.raw : null };
+      }),
+      parking: {
+        spacesRequired: c.parking.need, areaPerSpace: c.parking.per,
+        totalArea: c.parking.needArea,
+        openGroundArea: c.parking.open, onGround: c.parking.onGround,
+        offsetSpaces: c.parking.basement, offsetArea: c.parking.basementArea,
+        basementFloors: c.parking.floors,
+        basementFloorArea: c.parking.fArea, usablePerFloor: c.parking.useP
+      }
+    };
+  }
+  function saveMsg(text, bad){
+    const m = document.getElementById("copyMsg");
+    if(!m) return;
+    m.textContent = text;
+    m.style.color = bad ? "var(--crit)" : "";
+  }
+  function download(store, name, verb, key){
+    const blob = new Blob([JSON.stringify(store, null, 2)], { type:"application/json" });
+    const a = el("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+    const n = Object.keys(store).length;
+    saveMsg(verb + " " + key + " \u2014 downloaded " + name + ", "
+            + n + " " + plural(n,"plot","plots") + " in the file.");
+  }
+  async function doSave(){
+    const p = currentPlot();
+    const key = p ? String(p.sector_plot_id) : null;
+    if(!key){
+      saveMsg("Pick a plot before saving — the file is keyed by sector/plot address.", true);
+      return;
+    }
+    const store = readStore();
+    const isUpdate = Object.prototype.hasOwnProperty.call(store, key);
+    store[key] = configEntry();
+    writeStore(store);
+    const name = "DCR_" + key.replace(/[^A-Za-z0-9_.-]+/g, "_") + ".json";
+    const verb = isUpdate ? "Updated" : "Saved";
+    try{
+      if(window.showSaveFilePicker){
+        if(!fileHandle){
+          fileHandle = await window.showSaveFilePicker({ suggestedName: name,
+            types:[{ description:"JSON", accept:{ "application/json":[".json"] } }] });
+          // Merge whatever the chosen file already holds, so picking an existing
+          // file updates it rather than replacing everything saved before.
+          try{
+            const existing = JSON.parse(await (await fileHandle.getFile()).text());
+            if(existing && typeof existing === "object" && !Array.isArray(existing)){
+              const merged = Object.assign({}, existing, store);
+              Object.assign(store, merged);
+              writeStore(store);
+            }
+          }catch(e){/* new or unparseable file: write ours */}
+        }
+        const w = await fileHandle.createWritable();
+        await w.write(JSON.stringify(store, null, 2));
+        await w.close();
+        saveMsg(verb + " " + key + " — " + Object.keys(store).length + " "
+                + plural(Object.keys(store).length,"plot","plots") + " in the file.");
+        return;
+      }
+      download(store, name, verb, key);
+    }catch(e){
+      if(e && e.name === "AbortError"){
+        saveMsg("Save cancelled \u2014 the entry is still held in this browser.");
+        return;
+      }
+      // The picker can refuse for reasons that have nothing to do with the data
+      // (no user gesture, a sandbox, an unsupported browser). Fall back rather
+      // than leave the user with nothing on disk.
+      fileHandle = null;
+      try{ download(store, name, verb, key); }
+      catch(e2){
+        saveMsg("Held in this browser, but the file could not be written: "
+                + (e2 && e2.message ? e2.message : e2), true);
+      }
+    }
+  }
+
+
   function wire(){
     wireTheme();
+    const pickSel = document.getElementById("plotPick");
+    if(pickSel) pickSel.addEventListener("change", applyPlotPick);
+    // Typing an area by hand detaches the field from the register: the figure is
+    // no longer that plot's, and saving it under that key would misfile it.
+    const psInp = document.getElementById("plotSize");
+    if(psInp) psInp.addEventListener("input", ()=>{
+      const s = document.getElementById("plotPick");
+      if(s && s.value !== MANUAL){ s.value = MANUAL; paintPlotPick(); }
+    });
+    const svBtn = document.getElementById("saveConfig");
+    if(svBtn) svBtn.addEventListener("click", ()=>{ doSave(); });
     ["plotSize","farManual","pcPct","glaPct"].forEach(id=>{
       document.getElementById(id).addEventListener("input", render);
     });
@@ -2158,6 +2378,7 @@ tbody tr:last-child td{border-bottom:0}
     if(fs && META.source_file) fs.textContent = META.source_file;
 
     fillDedSelect();
+    renderPlotPick();
 
     if(saved && saved.form){
       Object.keys(saved.form).forEach(k=>{
@@ -2196,6 +2417,9 @@ tbody tr:last-child td{border-bottom:0}
     })();
 
     $("#itcLoc").value = state.itcLoc;
+    // renderPlotPick ran before the saved form was restored, so the readout under
+    // the picker still describes whatever was selected then.
+    paintPlotPick();
     if(!SCHED.length) addSchedRow(null, 1, null);
     wire();
     renderSched();
