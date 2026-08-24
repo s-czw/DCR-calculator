@@ -269,9 +269,17 @@ project:
 | Authorised redirect URI | `https://s-czw.github.io/DCR-calculator/` |
 | Enabled API | Google Drive API |
 | Scope | `drive.file` — requested by the page, nothing to configure |
+| Consent screen | add each user under **Test users**, or publish the app |
 
 `drive.file` is the narrowest scope that works: it grants access only to files the page creates
-itself, so it cannot read anything else in the Drive.
+itself, so it cannot read anything else in the Drive. It is also **non-sensitive** in Google's
+classification, which means the app can be published to production without going through a
+verification review — the review is only required for the broader `drive` scopes.
+
+While the consent screen is left in *Testing*, Google blocks everyone not on the **Test users**
+list with `403 access_denied` and a page saying the app "has not completed the Google verification
+process". That wording suggests a review is needed; for `drive.file` it is not. Either add the
+users, or publish.
 
 The flow is `response_type=token` in a popup — no code exchange, so no client secret, which a
 browser could not hold anyway. Drive has no write-by-path, so a re-save is a **find then patch**:

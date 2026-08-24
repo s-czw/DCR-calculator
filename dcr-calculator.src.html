@@ -2146,10 +2146,10 @@ tbody tr:last-child td{border-bottom:0}
               // Google's error pages are on their origin, so the reason is not
               // readable from here. List what it actually tends to be.
               reject(new Error("The sign-in window closed without returning a token. "
-                + "Usually that means the client id is not valid, or "
-                + redirect + " is not registered on it as an authorised redirect "
-                + "URI and JavaScript origin. It can also just mean access was "
-                + "declined."));
+                + "The usual causes: the OAuth consent screen is still in Testing and "
+                + "this Google account is not on its test-user list; the client id is "
+                + "not valid; " + redirect + " is not registered on it as an authorised "
+                + "redirect URI and JavaScript origin; or access was declined."));
             }
             return;
           }
