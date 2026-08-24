@@ -247,8 +247,42 @@ rewritten in place — and its existing contents are merged first, so entries sa
 visit survive. Otherwise it downloads `DCR_<plot id>.json`. The accumulated document is also held
 in `localStorage`, so a failed or cancelled write never loses the entry.
 
-There are two ways the file can be handed over, because a plain download link is inert inside the
-claude.ai artifact viewer. The page asks the host first (`claude.use("downloads")`, declared as the
+### Uploading to SharePoint
+
+**Upload destination** (collapsed, under the Save row) sends the file to a OneDrive/SharePoint
+folder instead of writing it locally. Fill in the shared folder link and an Entra **application
+(client) id**; Save then asks for confirmation — naming the file, the plot, the entry count and the
+folder — and uploads on approval. Declining, or a failed upload, falls back to the local file, and
+the entry is in `localStorage` either way.
+
+The client id cannot be shipped here. Microsoft requires an application registered **in your own
+tenant** before a web page may write to your OneDrive, so someone with app-registration rights has
+to create one:
+
+| | |
+|---|---|
+| Type | Single-page application (SPA) |
+| Redirect URI | the exact page origin + path, e.g. `https://s-czw.github.io/DCR-calculator/` |
+| API permission | Microsoft Graph, **delegated**, `Files.ReadWrite.All` |
+| Consent | grant it for the tenant, or accept the prompt on first sign-in |
+
+Auth is authorization-code + PKCE in a popup, implemented directly rather than through MSAL, which
+would have to load from a CDN and break the single-file build. The folder link is resolved through
+Graph's `/shares/{id}/driveItem`, then the file goes to
+`PUT /drives/{driveId}/items/{itemId}:/{name}:/content`.
+
+The destination and client id are **settings held in this browser**, deliberately not baked into
+the source — this repository is public, and hard-coding them would publish an internal storage
+path. That also means each person configures it once on their own machine.
+
+**Not verified end to end.** No app registration existed while this was written, so the sign-in and
+upload legs are untested against a live tenant; the confirm step, the settings round-trip and the
+fallback all are. Expect to iterate on the first real sign-in.
+
+### Local delivery
+
+There are two ways the file can be handed over locally, because a plain download link is inert
+inside the claude.ai artifact viewer. The page asks the host first (`claude.use("downloads")`, declared as the
 `downloads` capability), and falls back to an ordinary anchor where there is no host to ask — which
 is the case on GitHub Pages and any local server. A viewer declining the host prompt is reported as
 declined, not as a failure.

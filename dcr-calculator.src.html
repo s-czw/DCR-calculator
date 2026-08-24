@@ -702,6 +702,35 @@ tbody tr:last-child td{border-bottom:0}
         <span class="io-msg" id="copyMsg" aria-live="polite"></span>
       </div>
 
+      <details class="panel fold" id="upPanel">
+        <summary><h2>Upload destination</h2><span class="tag">SharePoint</span></summary>
+        <div class="panel-bd">
+          <p class="hint">Save writes the file locally unless this is filled in. Microsoft
+            requires an application registered in your own tenant before a web page may
+            write to your OneDrive, so the client id has to come from your IT. These
+            settings stay in this browser and are never committed to the repository.</p>
+          <div class="field">
+            <label for="upFolderUrl">Shared folder link</label>
+            <div class="ctl"><input id="upFolderUrl" type="url" placeholder="https://…sharepoint.com/…/output"></div>
+          </div>
+          <div class="field">
+            <label for="upClientId">Entra application (client) id</label>
+            <div class="ctl"><input id="upClientId" type="text" placeholder="00000000-0000-0000-0000-000000000000"></div>
+          </div>
+          <div class="field">
+            <label for="upTenant">Tenant</label>
+            <div class="ctl"><input id="upTenant" type="text" placeholder="organizations"></div>
+            <p class="hint">Your tenant id or domain. <em>organizations</em> works for any
+              work account.</p>
+          </div>
+          <div class="btnrow">
+            <button type="button" class="btn mini" id="upTest">Sign in and check access</button>
+            <span class="io-msg" id="upMsg" aria-live="polite"></span>
+          </div>
+        </div>
+      </details>
+
+
     </div>
   </div>
 
@@ -2033,6 +2062,131 @@ tbody tr:last-child td{border-bottom:0}
     render();
   }
 
+  /* ---------- upload to SharePoint / OneDrive ----------------------------- */
+  /* A static page cannot reach an organisation's OneDrive on its own: Microsoft
+     requires an Entra ID application registered in that tenant, and the tenant is
+     the only place the client id can come from. So the destination and the client
+     id are SETTINGS, entered once and held in this browser -- deliberately not
+     baked into the source, which is public and would otherwise publish an
+     internal storage path.
+
+     The flow is authorization code + PKCE in a popup, with no library: MSAL would
+     have to come from a CDN, and this page is a single self-contained file. */
+  const UP_KEY = "dcr.upload.v1";
+  let upToken = null;          // { access_token, expires_at }
+  let upFolder = null;         // { driveId, id } resolved from the share link
+
+  function upCfg(){
+    try{
+      const o = JSON.parse(localStorage.getItem(UP_KEY) || "{}");
+      return { clientId: o.clientId || "", tenant: o.tenant || "organizations",
+               folderUrl: o.folderUrl || "" };
+    }catch(e){ return { clientId:"", tenant:"organizations", folderUrl:"" }; }
+  }
+  function upSave(c){ try{ localStorage.setItem(UP_KEY, JSON.stringify(c)); }catch(e){} }
+  function upReady(){ const c = upCfg(); return !!(c.clientId && c.folderUrl); }
+
+  function b64url(bytes){
+    let s = "";
+    new Uint8Array(bytes).forEach(b => s += String.fromCharCode(b));
+    return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+  }
+  async function pkce(){
+    const v = new Uint8Array(48);
+    crypto.getRandomValues(v);
+    const verifier = b64url(v);
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+    return { verifier, challenge: b64url(digest) };
+  }
+  /* Graph addresses a shared item by the sharing URL, base64url-encoded and
+     prefixed with "u!". This is what turns the folder link into a drive item. */
+  function shareId(url){
+    return "u!" + btoa(url).replace(/=+$/,"").replace(/\//g,"_").replace(/\+/g,"-");
+  }
+
+  function upAuth(){
+    const c = upCfg();
+    const redirect = location.origin + location.pathname;
+    return new Promise(async (resolve, reject) => {
+      const { verifier, challenge } = await pkce();
+      const state = b64url(crypto.getRandomValues(new Uint8Array(12)));
+      const q = new URLSearchParams({
+        client_id: c.clientId, response_type: "code", redirect_uri: redirect,
+        response_mode: "fragment", scope: "Files.ReadWrite.All offline_access",
+        state, code_challenge: challenge, code_challenge_method: "S256", prompt: "select_account"
+      });
+      const url = "https://login.microsoftonline.com/" + encodeURIComponent(c.tenant)
+                + "/oauth2/v2.0/authorize?" + q;
+      const win = window.open(url, "dcr-auth", "width=520,height=680");
+      if(!win){ reject(new Error("The sign-in popup was blocked. Allow popups for this page.")); return; }
+      let done = false;
+      const timer = setInterval(async () => {
+        let hash = null;
+        try{
+          // Same-origin only once the popup lands back on the redirect URI;
+          // cross-origin reads throw and are ignored until then.
+          if(win.closed){ if(!done){ clearInterval(timer); reject(new Error("Sign-in was cancelled.")); } return; }
+          if(win.location.origin === location.origin) hash = win.location.hash || win.location.search;
+        }catch(e){ return; }
+        if(!hash) return;
+        const p = new URLSearchParams(hash.replace(/^[#?]/,""));
+        const code = p.get("code");
+        if(!code && !p.get("error")) return;
+        done = true; clearInterval(timer); win.close();
+        if(p.get("error")){ reject(new Error(p.get("error_description") || p.get("error"))); return; }
+        if(p.get("state") !== state){ reject(new Error("Sign-in state did not match; aborted.")); return; }
+        try{
+          const body = new URLSearchParams({
+            client_id: c.clientId, grant_type: "authorization_code", code,
+            redirect_uri: redirect, code_verifier: verifier,
+            scope: "Files.ReadWrite.All offline_access"
+          });
+          const r = await fetch("https://login.microsoftonline.com/"
+                    + encodeURIComponent(c.tenant) + "/oauth2/v2.0/token",
+                    { method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
+                      body });
+          const j = await r.json();
+          if(!r.ok) throw new Error(j.error_description || j.error || ("token " + r.status));
+          upToken = { access_token: j.access_token, expires_at: Date.now() + (j.expires_in - 60)*1000 };
+          resolve(upToken);
+        }catch(e){ reject(e); }
+      }, 400);
+    });
+  }
+  async function upBearer(){
+    if(upToken && upToken.expires_at > Date.now()) return upToken.access_token;
+    return (await upAuth()).access_token;
+  }
+  async function graph(path, init){
+    const t = await upBearer();
+    const r = await fetch("https://graph.microsoft.com/v1.0" + path,
+      Object.assign({}, init, { headers: Object.assign(
+        { Authorization: "Bearer " + t }, (init && init.headers) || {}) }));
+    if(!r.ok){
+      let d = "";
+      try{ const j = await r.json(); d = (j.error && j.error.message) || ""; }catch(e){}
+      throw new Error("Graph " + r.status + (d ? ": " + d : ""));
+    }
+    return r.status === 204 ? null : r.json();
+  }
+  async function upResolveFolder(){
+    if(upFolder) return upFolder;
+    const c = upCfg();
+    const item = await graph("/shares/" + shareId(c.folderUrl) + "/driveItem"
+                             + "?$select=id,name,parentReference,webUrl");
+    const driveId = item.parentReference && item.parentReference.driveId;
+    if(!driveId || !item.id) throw new Error("That link did not resolve to a folder.");
+    upFolder = { driveId, id: item.id, name: item.name };
+    return upFolder;
+  }
+  async function upPut(name, text){
+    const f = await upResolveFolder();
+    // Simple upload: these documents are kilobytes, far below the 4 MB PUT limit.
+    return graph("/drives/" + encodeURIComponent(f.driveId) + "/items/"
+                 + encodeURIComponent(f.id) + ":/" + encodeURIComponent(name) + ":/content",
+                 { method:"PUT", headers:{"Content-Type":"application/json"}, body:text });
+  }
+
   /* ---------- saved configurations --------------------------------------- */
   /* One JSON document keyed by sector/plot address, so re-saving a plot replaces
      its entry instead of appending a second one. The accumulated document lives in
@@ -2110,7 +2264,7 @@ tbody tr:last-child td{border-bottom:0}
      download link is inert, so the host has to be asked; on a normal deployment
      there is no host to ask and an anchor is all that is needed. Try the host
      first, fall back to the anchor. */
-  async function download(store, name, verb, key){
+  async function deliver(store, name, verb, key){
     const text = JSON.stringify(store, null, 2);
     const count = Object.keys(store).length;
     const tail = ", " + count + " " + plural(count,"plot","plots") + " in the file.";
@@ -2154,6 +2308,26 @@ tbody tr:last-child td{border-bottom:0}
     const name = "DCR_" + key.replace(/[^A-Za-z0-9_.-]+/g, "_") + ".json";
     const verb = isUpdate ? "Updated" : "Saved";
     try{
+      // A configured upload is the destination the user asked for, so it wins; a
+      // local copy is the consolation prize if they decline or it fails.
+      if(upReady()){
+        const folder = upCfg().folderUrl.replace(/[?#].*$/, "");
+        const ok = confirm("Upload " + name + " to SharePoint?\n\n"
+                   + "Plot:    " + key + "\n"
+                   + "Entries: " + Object.keys(store).length + "\n"
+                   + "Folder:  " + folder + "\n\n"
+                   + "A file of the same name in that folder will be replaced.");
+        if(ok){
+          try{
+            await upPut(name, JSON.stringify(store, null, 2));
+            saveMsg(verb + " " + key + " \u2014 uploaded " + name + " to SharePoint.");
+            return;
+          }catch(e){
+            saveMsg("Upload failed, falling back to a local copy: "
+                    + (e && e.message ? e.message : e), true);
+          }
+        }
+      }
       if(window.showSaveFilePicker){
         if(!fileHandle){
           fileHandle = await window.showSaveFilePicker({ suggestedName: name,
@@ -2176,7 +2350,7 @@ tbody tr:last-child td{border-bottom:0}
                 + plural(Object.keys(store).length,"plot","plots") + " in the file.");
         return;
       }
-      await download(store, name, verb, key);
+      await deliver(store, name, verb, key);
     }catch(e){
       if(e && e.name === "AbortError"){
         saveMsg("Save cancelled \u2014 the entry is still held in this browser.");
@@ -2186,7 +2360,7 @@ tbody tr:last-child td{border-bottom:0}
       // (no user gesture, a sandbox, an unsupported browser). Fall back rather
       // than leave the user with nothing on disk.
       fileHandle = null;
-      try{ await download(store, name, verb, key); }
+      try{ await deliver(store, name, verb, key); }
       catch(e2){
         saveMsg("Held in this browser, but the file could not be written: "
                 + (e2 && e2.message ? e2.message : e2), true);
@@ -2205,6 +2379,29 @@ tbody tr:last-child td{border-bottom:0}
     if(psInp) psInp.addEventListener("input", ()=>{
       const s = document.getElementById("plotPick");
       if(s && s.value !== MANUAL){ s.value = MANUAL; paintPlotPick(); }
+    });
+    const upIds = { upFolderUrl:"folderUrl", upClientId:"clientId", upTenant:"tenant" };
+    Object.keys(upIds).forEach(id => {
+      const e = document.getElementById(id);
+      if(!e) return;
+      const c = upCfg();
+      e.value = c[upIds[id]] === "organizations" && id === "upTenant" ? "" : c[upIds[id]];
+      e.addEventListener("input", ()=>{
+        const cur = upCfg();
+        cur[upIds[id]] = e.value.trim() || (id === "upTenant" ? "organizations" : "");
+        upSave(cur);
+        upToken = null; upFolder = null;   // settings changed: re-authenticate
+      });
+    });
+    const upBtn = document.getElementById("upTest");
+    if(upBtn) upBtn.addEventListener("click", async ()=>{
+      const m = document.getElementById("upMsg");
+      if(!upReady()){ m.textContent = "Enter the folder link and the client id first."; return; }
+      m.textContent = "Signing in\u2026";
+      try{
+        const f = await upResolveFolder();
+        m.textContent = "Reached \u201c" + f.name + "\u201d. Uploads will go there.";
+      }catch(e){ m.textContent = "Failed: " + (e && e.message ? e.message : e); }
     });
     const svBtn = document.getElementById("saveConfig");
     if(svBtn) svBtn.addEventListener("click", ()=>{ doSave(); });
