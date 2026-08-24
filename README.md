@@ -247,46 +247,18 @@ rewritten in place — and its existing contents are merged first, so entries sa
 visit survive. Otherwise it downloads `DCR_<plot id>.json`. The accumulated document is also held
 in `localStorage`, so a failed or cancelled write never loses the entry.
 
-### Uploading to a shared folder
+### Uploading to OneDrive
 
-**Upload endpoint** is the route that needs nothing from IT. Give the page a URL that accepts the
-document and files it away; Save asks for confirmation, then POSTs. The URL carries its own
-authority, so there is no app registration and no one signs in.
+**Upload destination** (collapsed, under the Save row) sends the file to a OneDrive folder instead
+of writing it locally. Fill in the shared folder link and an Entra **application (client) id**;
+Save then asks for confirmation — naming the file, the plot, the entry count and the folder — and
+uploads on approval. Declining, or a failed upload, falls back to the local file, and the entry is
+in `localStorage` either way.
 
-A Power Automate (or Logic Apps) flow is the usual provider, and puts the file in the OneDrive
-folder you already have:
-
-1. New flow, trigger **When an HTTP request is received**. Leave the schema empty.
-2. Add **Create file** (OneDrive for Business, or SharePoint), pointing at the target folder.
-3. Set *File Name* to `triggerBody()?['filename']` and *File Content* to
-   `string(triggerBody()?['document'])`.
-4. Save the flow, copy the generated POST URL, paste it into **Upload endpoint**.
-
-The POST body is:
-
-```json
-{ "filename": "DCR_19_1_106_118_A.json", "plotId": "19_1_106_118_A",
-  "savedAt": "…", "entryCount": 2, "document": { "…": { } } }
-```
-
-`document` is the whole keyed store, so the file the flow writes is the same accumulating document
-described above — another user or app just reads it out of the shared folder.
-
-`Content-Type` is `text/plain;charset=UTF-8` on purpose. It is one of the three values CORS
-treats as safelisted, so the browser sends the POST directly; `application/json` would provoke a
-preflight `OPTIONS` that flow endpoints often do not answer. The body is still JSON text, which is
-why the flow reads it with `json(triggerBody())`. **Verified**: against a local endpoint, no
-preflight was issued and two plots arrived accumulated under their addresses.
-
-Treat the endpoint URL as a secret — it is the credential. It is held in this browser only.
-
-### Uploading straight to OneDrive (needs an app registration)
-
-**Upload destination** (collapsed, under the Save row) sends the file to a OneDrive/SharePoint
-folder instead of writing it locally. Fill in the shared folder link and an Entra **application
-(client) id**; Save then asks for confirmation — naming the file, the plot, the entry count and the
-folder — and uploads on approval. Declining, or a failed upload, falls back to the local file, and
-the entry is in `localStorage` either way.
+**Each person signs in as themselves.** The sign-in is between them and Microsoft; the upload lands
+with their identity and their own permissions on the folder, and the access token is held in memory
+only — never in `localStorage` — so it goes when the tab does. Nothing shared or long-lived is
+stored on their behalf.
 
 The client id cannot be shipped here. Microsoft requires an application registered **in your own
 tenant** before a web page may write to your OneDrive, so someone with app-registration rights has

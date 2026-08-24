@@ -703,26 +703,14 @@ tbody tr:last-child td{border-bottom:0}
       </div>
 
       <details class="panel fold" id="upPanel">
-        <summary><h2>Upload destination</h2><span class="tag">SharePoint</span></summary>
+        <summary><h2>Upload destination</h2><span class="tag">OneDrive</span></summary>
         <div class="panel-bd">
-          <p class="hint">Save writes the file locally unless a destination is set here. These
-            settings stay in this browser and are never committed to the repository.</p>
-          <div class="field">
-            <label for="upEndpoint">Upload endpoint</label>
-            <div class="ctl"><input id="upEndpoint" type="url" placeholder="https://…logic.azure.com/…/triggers/manual/paths/invoke?…"></div>
-            <p class="hint">A URL that accepts the document and files it away &#x2014; a Power
-              Automate or Logic Apps <em>When an HTTP request is received</em> trigger is the
-              usual one. The URL carries its own authority, so nothing has to be registered
-              and no one has to sign in. This takes precedence over the fields below.</p>
-          </div>
-
-          <div class="rule"></div>
-
-          <p class="hint">Or, if your tenant has an app registration for this page, address
-            OneDrive directly. Microsoft
-            requires an application registered in your own tenant before a web page may
-            write to your OneDrive, so the client id has to come from your IT. These
-            settings stay in this browser and are never committed to the repository.</p>
+          <p class="hint">Save writes the file locally unless this is filled in. Uploads go
+            straight to OneDrive over Microsoft Graph, signed in as you &#x2014; your own
+            account, your own permissions on the folder. Microsoft requires an application
+            registered in your tenant before a web page may do this, so the client id has to
+            come from whoever administers it. Nothing here is committed to the repository; the
+            settings stay in this browser and the sign-in is between you and Microsoft.</p>
           <div class="field">
             <label for="upFolderUrl">Shared folder link</label>
             <div class="ctl"><input id="upFolderUrl" type="url" placeholder="https://…sharepoint.com/…/output"></div>
@@ -2090,46 +2078,20 @@ tbody tr:last-child td{border-bottom:0}
   let upToken = null;          // { access_token, expires_at }
   let upFolder = null;         // { driveId, id } resolved from the share link
 
+  /* Each person signs in as themselves, so the upload lands with their identity
+     and their own permissions on the folder. The access token is held in memory
+     only -- never in localStorage -- and goes when the tab does. */
+
   function upCfg(){
     try{
       const o = JSON.parse(localStorage.getItem(UP_KEY) || "{}");
-      return { endpoint: o.endpoint || "", clientId: o.clientId || "",
-               tenant: o.tenant || "organizations", folderUrl: o.folderUrl || "" };
-    }catch(e){ return { endpoint:"", clientId:"", tenant:"organizations", folderUrl:"" }; }
+      return { clientId: o.clientId || "", tenant: o.tenant || "organizations",
+               folderUrl: o.folderUrl || "" };
+    }catch(e){ return { clientId:"", tenant:"organizations", folderUrl:"" }; }
   }
   function upSave(c){ try{ localStorage.setItem(UP_KEY, JSON.stringify(c)); }catch(e){} }
-  function upReady(){ const c = upCfg(); return !!(c.endpoint || (c.clientId && c.folderUrl)); }
-  function upMode(){ return upCfg().endpoint ? "endpoint" : "graph"; }
-  function upWhere(){
-    const c = upCfg();
-    if(c.endpoint){ try{ return new URL(c.endpoint).host; }catch(e){ return c.endpoint; } }
-    return c.folderUrl.replace(/[?#].*$/, "");
-  }
-
-  /* POST the document to a URL that already knows where to file it -- a Power
-     Automate or Logic Apps HTTP trigger, or anything else that accepts a body.
-     No app registration and no token: the URL itself carries the authority.
-
-     Content-Type is text/plain deliberately. It is one of the three values CORS
-     treats as safelisted, so the browser sends the POST directly; application/json
-     would trigger a preflight OPTIONS that many flow endpoints do not answer. The
-     body is still JSON text, and a flow reads it with json(triggerBody()). */
-  async function upPost(name, key, text, count){
-    const c = upCfg();
-    const r = await fetch(c.endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=UTF-8" },
-      body: JSON.stringify({ filename: name, plotId: key,
-                             savedAt: new Date().toISOString(),
-                             entryCount: count, document: JSON.parse(text) })
-    });
-    if(!r.ok){
-      let d = "";
-      try{ d = (await r.text()).slice(0, 200); }catch(e){}
-      throw new Error("endpoint returned " + r.status + (d ? ": " + d : ""));
-    }
-    return true;
-  }
+  function upReady(){ const c = upCfg(); return !!(c.clientId && c.folderUrl); }
+  function upWhere(){ return upCfg().folderUrl.replace(/[?#].*$/, ""); }
 
   function b64url(bytes){
     let s = "";
@@ -2357,19 +2319,14 @@ tbody tr:last-child td{border-bottom:0}
       // local copy is the consolation prize if they decline or it fails.
       if(upReady()){
         const folder = upWhere();
-        const ok = confirm("Upload " + name + "?\n\n"
+        const ok = confirm("Upload " + name + " to OneDrive?\n\n"
                    + "Plot:    " + key + "\n"
                    + "Entries: " + Object.keys(store).length + "\n"
                    + "To:      " + folder + "\n\n"
                    + "A file of the same name there will be replaced.");
         if(ok){
           try{
-            const text = JSON.stringify(store, null, 2);
-            if(upMode() === "endpoint"){
-              await upPost(name, key, text, Object.keys(store).length);
-            } else {
-              await upPut(name, text);
-            }
+            await upPut(name, JSON.stringify(store, null, 2));
             saveMsg(verb + " " + key + " \u2014 uploaded " + name + " to " + upWhere() + ".");
             return;
           }catch(e){
@@ -2430,7 +2387,7 @@ tbody tr:last-child td{border-bottom:0}
       const s = document.getElementById("plotPick");
       if(s && s.value !== MANUAL){ s.value = MANUAL; paintPlotPick(); }
     });
-    const upIds = { upEndpoint:"endpoint", upFolderUrl:"folderUrl", upClientId:"clientId", upTenant:"tenant" };
+    const upIds = { upFolderUrl:"folderUrl", upClientId:"clientId", upTenant:"tenant" };
     Object.keys(upIds).forEach(id => {
       const e = document.getElementById(id);
       if(!e) return;
@@ -2446,17 +2403,7 @@ tbody tr:last-child td{border-bottom:0}
     const upBtn = document.getElementById("upTest");
     if(upBtn) upBtn.addEventListener("click", async ()=>{
       const m = document.getElementById("upMsg");
-      if(!upReady()){ m.textContent = "Enter an endpoint, or a folder link and client id."; return; }
-      if(upMode() === "endpoint"){
-        m.textContent = "Sending a test document\u2026";
-        try{
-          await upPost("DCR_connection_test.json", "connection-test",
-                       JSON.stringify({ note:"connection test from the DCR calculator" }), 0);
-          m.textContent = "Endpoint accepted a test document. Check the folder for "
-                        + "DCR_connection_test.json.";
-        }catch(e){ m.textContent = "Failed: " + (e && e.message ? e.message : e); }
-        return;
-      }
+      if(!upReady()){ m.textContent = "Enter the folder link and the client id first."; return; }
       m.textContent = "Signing in\u2026";
       try{
         const f = await upResolveFolder();
