@@ -245,8 +245,13 @@ Saving needs a plot: with *Manual entry* selected there is no address to key on,
 rather than inventing one. Where the browser supports the File System Access API the same file is
 rewritten in place — and its existing contents are merged first, so entries saved on an earlier
 visit survive. Otherwise it downloads `DCR_<plot id>.json`. The accumulated document is also held
-in `localStorage`, so a failed or cancelled write never loses the entry. Note the artifact preview
-sandbox blocks downloads; use the deployed page or a local server to get the file.
+in `localStorage`, so a failed or cancelled write never loses the entry.
+
+There are two ways the file can be handed over, because a plain download link is inert inside the
+claude.ai artifact viewer. The page asks the host first (`claude.use("downloads")`, declared as the
+`downloads` capability), and falls back to an ordinary anchor where there is no host to ask — which
+is the case on GitHub Pages and any local server. A viewer declining the host prompt is reported as
+declined, not as a failure.
 
 ## Batch export from a geodatabase
 

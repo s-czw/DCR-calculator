@@ -2106,15 +2106,39 @@ tbody tr:last-child td{border-bottom:0}
     m.textContent = text;
     m.style.color = bad ? "var(--crit)" : "";
   }
-  function download(store, name, verb, key){
-    const blob = new Blob([JSON.stringify(store, null, 2)], { type:"application/json" });
+  /* Two ways to hand over the file. Inside the claude.ai artifact viewer a plain
+     download link is inert, so the host has to be asked; on a normal deployment
+     there is no host to ask and an anchor is all that is needed. Try the host
+     first, fall back to the anchor. */
+  async function download(store, name, verb, key){
+    const text = JSON.stringify(store, null, 2);
+    const count = Object.keys(store).length;
+    const tail = ", " + count + " " + plural(count,"plot","plots") + " in the file.";
+    try{
+      const dl = (typeof claude !== "undefined" && claude && typeof claude.use === "function")
+               ? await claude.use("downloads") : null;
+      if(dl){
+        await dl.save({ filename: name, data: text });
+        saveMsg(verb + " " + key + " \u2014 saved " + name + tail);
+        return;
+      }
+    }catch(e){
+      if(e && e.code === "declined"){
+        saveMsg("Save declined \u2014 the entry is still held in this browser.");
+        return;
+      }
+      if(e && e.code === "rate_limited"){
+        saveMsg("A save prompt is already open \u2014 answer it, then try again.", true);
+        return;
+      }
+      /* anything else: fall through and try the ordinary anchor */
+    }
+    const blob = new Blob([text], { type:"application/json" });
     const a = el("a");
     a.href = URL.createObjectURL(blob); a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
-    const n = Object.keys(store).length;
-    saveMsg(verb + " " + key + " \u2014 downloaded " + name + ", "
-            + n + " " + plural(n,"plot","plots") + " in the file.");
+    saveMsg(verb + " " + key + " \u2014 downloaded " + name + tail);
   }
   async function doSave(){
     const p = currentPlot();
@@ -2152,7 +2176,7 @@ tbody tr:last-child td{border-bottom:0}
                 + plural(Object.keys(store).length,"plot","plots") + " in the file.");
         return;
       }
-      download(store, name, verb, key);
+      await download(store, name, verb, key);
     }catch(e){
       if(e && e.name === "AbortError"){
         saveMsg("Save cancelled \u2014 the entry is still held in this browser.");
@@ -2162,7 +2186,7 @@ tbody tr:last-child td{border-bottom:0}
       // (no user gesture, a sandbox, an unsupported browser). Fall back rather
       // than leave the user with nothing on disk.
       fileHandle = null;
-      try{ download(store, name, verb, key); }
+      try{ await download(store, name, verb, key); }
       catch(e2){
         saveMsg("Held in this browser, but the file could not be written: "
                 + (e2 && e2.message ? e2.message : e2), true);
