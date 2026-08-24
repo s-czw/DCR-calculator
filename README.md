@@ -278,6 +278,17 @@ browser could not hold anyway. Drive has no write-by-path, so a re-save is a **f
 the folder is queried for a file of that name and the existing one is updated, rather than a second
 file with the same name being created.
 
+The panel prints the exact address to register, taken from `location`, so it cannot be mistyped —
+and note it differs between a local server and GitHub Pages, so both need registering if you use
+both.
+
+When a sign-in fails, Google's error page is on Google's origin and unreadable from here: all the
+page can observe is a window that closed. So the client id is shape-checked before the popup opens
+(they end in `.apps.googleusercontent.com`), and a window that closes without a token reports the
+three things it actually tends to be — bad client id, unregistered redirect URI, or declined
+access — rather than guessing "cancelled". A failed upload keeps its reason in the status line
+instead of being overwritten by the local-fallback message.
+
 **Verified at the request level** with the network layer stubbed: the create path issues the folder
 query then a `multipart/related` POST carrying `{name, parents:[id]}` and the document; the update
 path finds the file and `PATCH`es `uploadType=media`. Folder-id parsing accepts a full link, a link

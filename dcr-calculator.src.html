@@ -722,7 +722,8 @@ tbody tr:last-child td{border-bottom:0}
             <div class="ctl"><input id="upClientId" type="text" placeholder="…apps.googleusercontent.com"></div>
             <p class="hint">From a Google Cloud project: <em>Web application</em> credentials,
               with this page&#x2019;s address as an authorised JavaScript origin and redirect
-              URI, and the Drive API enabled.</p>
+              URI, and the Drive API enabled. Register exactly this address on both:
+              <code id="upRedirectShow"></code></p>
           </div>
           <div class="btnrow">
             <button type="button" class="btn mini" id="upTest">Sign in and check access</button>
@@ -2106,10 +2107,26 @@ tbody tr:last-child td{border-bottom:0}
     new Uint8Array(bytes).forEach(b => s += String.fromCharCode(b));
     return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
   }
+  function upRedirect(){ return location.origin + location.pathname; }
+  /* Google client ids always end in .apps.googleusercontent.com. Checking here
+     turns a dead popup into a sentence that says what is wrong: the popup lands on
+     Google's own error page, which is cross-origin and unreadable, so without this
+     the only observable symptom is a window that closed. */
+  function upClientIdProblem(){
+    const id = upCfg().clientId.trim();
+    if(!id) return "No OAuth client id yet.";
+    if(!/\.apps\.googleusercontent\.com$/.test(id))
+      return "That is not a Google client id \u2014 they end in "
+           + ".apps.googleusercontent.com. Create one in a Google Cloud project "
+           + "(Web application), then paste it here.";
+    return null;
+  }
   function upAuth(){
     const c = upCfg();
-    const redirect = location.origin + location.pathname;
+    const redirect = upRedirect();
     return new Promise((resolve, reject) => {
+      const bad = upClientIdProblem();
+      if(bad){ reject(new Error(bad)); return; }
       const state = b64url(crypto.getRandomValues(new Uint8Array(12)));
       const q = new URLSearchParams({
         client_id: c.clientId, redirect_uri: redirect, response_type: "token",
@@ -2124,7 +2141,16 @@ tbody tr:last-child td{border-bottom:0}
         let frag = null;
         try{
           if(win.closed){
-            if(!done){ clearInterval(timer); reject(new Error("Sign-in was cancelled.")); }
+            if(!done){
+              clearInterval(timer);
+              // Google's error pages are on their origin, so the reason is not
+              // readable from here. List what it actually tends to be.
+              reject(new Error("The sign-in window closed without returning a token. "
+                + "Usually that means the client id is not valid, or "
+                + redirect + " is not registered on it as an authorised redirect "
+                + "URI and JavaScript origin. It can also just mean access was "
+                + "declined."));
+            }
             return;
           }
           // Readable only once the popup is back on our own origin.
@@ -2270,16 +2296,17 @@ tbody tr:last-child td{border-bottom:0}
      download link is inert, so the host has to be asked; on a normal deployment
      there is no host to ask and an anchor is all that is needed. Try the host
      first, fall back to the anchor. */
-  async function deliver(store, name, verb, key){
+  async function deliver(store, name, verb, key, why){
     const text = JSON.stringify(store, null, 2);
     const count = Object.keys(store).length;
-    const tail = ", " + count + " " + plural(count,"plot","plots") + " in the file.";
+    const tail = ", " + count + " " + plural(count,"plot","plots") + " in the file."
+               + (why ? " Upload failed: " + why : "");
     try{
       const dl = (typeof claude !== "undefined" && claude && typeof claude.use === "function")
                ? await claude.use("downloads") : null;
       if(dl){
         await dl.save({ filename: name, data: text });
-        saveMsg(verb + " " + key + " \u2014 saved " + name + tail);
+        saveMsg(verb + " " + key + " \u2014 saved " + name + tail, !!why);
         return;
       }
     }catch(e){
@@ -2298,7 +2325,7 @@ tbody tr:last-child td{border-bottom:0}
     a.href = URL.createObjectURL(blob); a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
-    saveMsg(verb + " " + key + " \u2014 downloaded " + name + tail);
+    saveMsg(verb + " " + key + " \u2014 downloaded " + name + tail, !!why);
   }
   async function doSave(){
     const p = currentPlot();
@@ -2313,6 +2340,7 @@ tbody tr:last-child td{border-bottom:0}
     writeStore(store);
     const name = "DCR_" + key.replace(/[^A-Za-z0-9_.-]+/g, "_") + ".json";
     const verb = isUpdate ? "Updated" : "Saved";
+    let upWhy = null;            // why the upload did not happen, if it did not
     try{
       // A configured upload is the destination the user asked for, so it wins; a
       // local copy is the consolation prize if they decline or it fails.
@@ -2329,8 +2357,7 @@ tbody tr:last-child td{border-bottom:0}
             saveMsg(verb + " " + key + " \u2014 uploaded " + name + " to " + upWhere() + ".");
             return;
           }catch(e){
-            saveMsg("Upload failed, falling back to a local copy: "
-                    + (e && e.message ? e.message : e), true);
+            upWhy = e && e.message ? e.message : String(e);
           }
         }
       }
@@ -2356,7 +2383,7 @@ tbody tr:last-child td{border-bottom:0}
                 + plural(Object.keys(store).length,"plot","plots") + " in the file.");
         return;
       }
-      await deliver(store, name, verb, key);
+      await deliver(store, name, verb, key, upWhy);
     }catch(e){
       if(e && e.name === "AbortError"){
         saveMsg("Save cancelled \u2014 the entry is still held in this browser.");
@@ -2366,7 +2393,7 @@ tbody tr:last-child td{border-bottom:0}
       // (no user gesture, a sandbox, an unsupported browser). Fall back rather
       // than leave the user with nothing on disk.
       fileHandle = null;
-      try{ await deliver(store, name, verb, key); }
+      try{ await deliver(store, name, verb, key, upWhy); }
       catch(e2){
         saveMsg("Held in this browser, but the file could not be written: "
                 + (e2 && e2.message ? e2.message : e2), true);
@@ -2386,6 +2413,8 @@ tbody tr:last-child td{border-bottom:0}
       const s = document.getElementById("plotPick");
       if(s && s.value !== MANUAL){ s.value = MANUAL; paintPlotPick(); }
     });
+    const rdShow = document.getElementById("upRedirectShow");
+    if(rdShow) rdShow.textContent = upRedirect();
     const upIds = { upFolderUrl:"folderUrl", upClientId:"clientId" };
     Object.keys(upIds).forEach(id => {
       const e = document.getElementById(id);
@@ -2401,7 +2430,9 @@ tbody tr:last-child td{border-bottom:0}
     const upBtn = document.getElementById("upTest");
     if(upBtn) upBtn.addEventListener("click", async ()=>{
       const m = document.getElementById("upMsg");
-      if(!upReady()){ m.textContent = "Enter the folder link and the client id first."; return; }
+      if(!upFolderId()){ m.textContent = "That folder link has no id in it."; return; }
+      const badId = upClientIdProblem();
+      if(badId){ m.textContent = badId; return; }
       m.textContent = "Signing in\u2026";
       try{
         // A harmless read against the target folder: it proves the token works and
