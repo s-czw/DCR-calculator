@@ -136,6 +136,32 @@ The point is that an entered value always reads as a deviation, so a figure deri
 values never looks like one derived from a hand-entered assumption.
 
 
+## The sign-in gate
+
+One account: username `dmtdcr`. The password is not in this repository — it is compared as a
+salted SHA-256 digest, and only the digest is committed.
+
+**This is not a security control, and should not be relied on as one.** Say so to anyone who asks.
+The page is a single static file: the plot register, the ITC matrix and every rate travel inside
+it, so anyone who can load the file already has the data, whatever the gate does. Deleting the
+overlay from the DOM, or reading the source, gets straight past it. A known password can be
+brute-forced against a published digest in seconds.
+
+What it *is* good for: keeping the tool out of the way of people who have no business in it, and
+making it obvious that it is not for general use. If the contents ever genuinely need protecting,
+that has to happen at the server — private hosting with real authentication in front of it, which
+is what the `azure` deploy target in the workflow is there for.
+
+The digest is used instead of a literal for one specific reason: a plaintext password committed to
+a public repository is exposed permanently, is indexed, and stays in the history after it is
+changed — and people reuse passwords. Hashing keeps the literal out of the history. It does not
+make the gate strong.
+
+Mechanics: a `locked` class goes on the root element in the head script, before the stylesheet
+loads, so the app is never painted and then covered. The state lives in `sessionStorage`, so it
+survives a reload but not a new tab, and **Sign out** in the masthead clears it. A failed attempt
+pauses briefly, which costs a person nothing and makes scripted guessing through the form tedious.
+
 ## Visual design
 
 Two palettes. **Light is the default** — a first visit is light whatever the operating system

@@ -8,6 +8,14 @@
     var t = localStorage.getItem("dcr.theme");
     if(t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
   }catch(e){}
+  /* Lock before the first paint, so the app never flashes into view. This gate
+     hides the interface; it is not a security boundary. The page is one static
+     file, so its data travels with it: anyone who can load the file can read the
+     data whatever this does. */
+  try{
+    if(sessionStorage.getItem("dcr.auth") !== "1")
+      document.documentElement.classList.add("locked");
+  }catch(e){ document.documentElement.classList.add("locked"); }
 })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -205,6 +213,20 @@ details.coef>div{padding-top:14px; display:flex; flex-direction:column; gap:14px
 .btn.mini{padding:5px 9px; font-size:.72rem; font-weight:500}
 .btn.icon{padding:4px 8px; font-family:"IBM Plex Mono",monospace; line-height:1}
 .btnrow{display:flex; flex-wrap:wrap; gap:8px}
+
+/* ---------- sign-in gate ---------- */
+/* Driven by a class on the root element set before the stylesheet loads, so the
+   app is never painted first and then covered. display, not [hidden], because a
+   display on .wrap would beat the UA rule -- the same trap as the folding panels. */
+#gate{display:none}
+:root.locked #gate{display:flex; align-items:center; justify-content:center;
+  min-height:100vh; padding:24px}
+:root.locked .wrap{display:none}
+.gate-card{width:100%; max-width:360px; background:var(--surface);
+  border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow);
+  padding:26px 24px; display:flex; flex-direction:column; gap:16px}
+.gate-card h1{font-size:1.45rem; margin:0}
+#signOut{margin-left:2px}
 
 /* DISABLED: Google Drive upload panel styles. Save writes locally only.
    Re-enable together with the panel markup, the plumbing and the wiring.
@@ -491,6 +513,30 @@ tbody tr:last-child td{border-bottom:0}
 </style>
 
 
+<div id="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+  <form class="gate-card" id="gateForm">
+    <span class="eyebrow">Development Control Regulations &#x00B7; Plot Yield</span>
+    <h1 id="gateTitle">Sign in</h1>
+    <div class="field">
+      <label for="gateUser">Username</label>
+      <div class="ctl"><input id="gateUser" type="text" autocomplete="username"
+        autocapitalize="none" spellcheck="false" required></div>
+    </div>
+    <div class="field">
+      <label for="gatePass">Password</label>
+      <div class="ctl"><input id="gatePass" type="password"
+        autocomplete="current-password" required></div>
+    </div>
+    <div class="btnrow">
+      <button type="submit" class="btn primary">Sign in</button>
+      <span class="io-msg" id="gateMsg" aria-live="polite"></span>
+    </div>
+    <p class="hint">This keeps the tool out of the way of people who have no business
+      in it. It is not a security control: the page is one static file and its data
+      travels inside it.</p>
+  </form>
+</div>
+
 <div class="wrap">
 
   <header class="mast">
@@ -505,6 +551,7 @@ tbody tr:last-child td{border-bottom:0}
       <span class="chip" id="chipCode">code &#x2014;</span>
       <span class="chip" id="chipPark">parking &#x2014;</span>
       <span class="chip" id="chipOv" hidden>overrides &#x2014;</span>
+      <button type="button" class="btn mini" id="signOut">Sign out</button>
       <div class="theme" role="group" aria-label="Colour theme">
         <button type="button" id="themeLight" aria-pressed="true">Light</button>
         <button type="button" id="themeDark" aria-pressed="false">Dark</button>
@@ -2491,8 +2538,69 @@ tbody tr:last-child td{border-bottom:0}
   }
 
 
+  /* ---------- sign-in gate ----------------------------------------------- */
+  /* The credentials are compared as a SHA-256 digest rather than as literals. That
+     is NOT what makes this secure -- a determined reader can brute-force a known
+     digest, or simply delete the overlay from the DOM. It is here because this
+     repository is public: a plaintext password committed to it would be exposed
+     permanently and indexed, and passwords get reused elsewhere. The digest keeps
+     the literal out of the history. */
+  const GATE_SALT = "dcr-calculator|";
+  const GATE_DIGEST = "7cc03ec55d3707162f128314941c3b2b7fbe90ff84adc6e8b909491f66c2fb60";
+
+  async function gateDigest(user, pass){
+    const buf = new TextEncoder().encode(GATE_SALT + user + ":" + pass);
+    const d = await crypto.subtle.digest("SHA-256", buf);
+    return [...new Uint8Array(d)].map(b=>b.toString(16).padStart(2,"0")).join("");
+  }
+  function unlock(){
+    try{ sessionStorage.setItem("dcr.auth", "1"); }catch(e){}
+    document.documentElement.classList.remove("locked");
+    const ps = document.getElementById("plotSize");
+    if(ps) ps.focus();
+  }
+  function wireGate(){
+    const f = document.getElementById("gateForm");
+    const m = document.getElementById("gateMsg");
+    if(f) f.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const u = document.getElementById("gateUser").value.trim();
+      const p = document.getElementById("gatePass").value;
+      m.className = "io-msg";
+      m.textContent = "Checking\u2026";
+      let ok = false;
+      try{ ok = (await gateDigest(u, p)) === GATE_DIGEST; }
+      catch(e){ m.className = "io-msg err";
+                m.textContent = "This browser cannot hash: " + (e && e.message ? e.message : e);
+                return; }
+      if(ok){ m.textContent = ""; document.getElementById("gatePass").value = ""; unlock(); return; }
+      // A pause on failure: it costs a human nothing and makes scripted guessing
+      // through this form tedious.
+      await new Promise(r => setTimeout(r, 600));
+      m.className = "io-msg err";
+      m.textContent = "Those details were not recognised.";
+      document.getElementById("gatePass").select();
+    });
+    if(document.documentElement.classList.contains("locked")){
+      const gu = document.getElementById("gateUser");
+      if(gu) gu.focus();
+    }
+    const so = document.getElementById("signOut");
+    if(so) so.addEventListener("click", ()=>{
+      try{ sessionStorage.removeItem("dcr.auth"); }catch(e){}
+      document.documentElement.classList.add("locked");
+      const gp = document.getElementById("gatePass");
+      if(gp) gp.value = "";
+      const gu = document.getElementById("gateUser");
+      if(gu){ gu.value = ""; gu.focus(); }
+      const gm = document.getElementById("gateMsg");
+      if(gm){ gm.className = "io-msg"; gm.textContent = ""; }
+    });
+  }
+
   function wire(){
     wireTheme();
+    wireGate();
     const pickSel = document.getElementById("plotPick");
     if(pickSel) pickSel.addEventListener("change", applyPlotPick);
     // Typing an area by hand detaches the field from the register: the figure is
