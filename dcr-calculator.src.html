@@ -206,6 +206,35 @@ details.coef>div{padding-top:14px; display:flex; flex-direction:column; gap:14px
 .btn.icon{padding:4px 8px; font-family:"IBM Plex Mono",monospace; line-height:1}
 .btnrow{display:flex; flex-wrap:wrap; gap:8px}
 
+/* ---------- upload setup ---------- */
+/* The address to register is the one thing here that must be copied exactly, so
+   it gets a box of its own rather than sitting inside a sentence. */
+.upreg{background:var(--sunk); border:1px solid var(--line); border-radius:var(--r);
+  padding:12px 14px; display:flex; flex-direction:column; gap:9px}
+.upreg .pk{font-family:Manrope,sans-serif; font-size:.62rem; letter-spacing:.1em;
+  font-weight:500; text-transform:uppercase; color:var(--ink-3)}
+.upreg-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.upreg code{font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--ink);
+  word-break:break-all; flex:1 1 240px; min-width:0}
+.upsteps{border-top:1px dotted var(--line-strong); padding-top:12px}
+.upsteps>summary{cursor:pointer; list-style:none; font-family:Manrope,sans-serif;
+  font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; font-weight:500;
+  color:var(--ink-3)}
+.upsteps>summary::-webkit-details-marker{display:none}
+.upsteps>summary::after{content:" +"}
+.upsteps[open]>summary::after{content:" \2013"}
+.upsteps>summary:hover{color:var(--ink)}
+.upsteps ol{margin:11px 0 0; padding-left:20px; font-size:.78rem; color:var(--ink-2);
+  line-height:1.65}
+.upsteps li{margin-bottom:6px}
+.upsteps b{color:var(--ink); font-weight:600}
+.upsteps code{font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--brass)}
+/* Field feedback: settled values read as values, unset ones stay quiet. */
+.derived .yes{color:var(--accent-ink); font-weight:600}
+.derived .no{color:var(--ink-3)}
+.derived .warn{color:var(--brass); font-weight:600}
+.tag.ready{color:var(--accent-ink)}
+
 /* ---------- derivation ladder ---------- */
 .ladder{display:flex; flex-direction:column}
 .step{
@@ -703,32 +732,59 @@ tbody tr:last-child td{border-bottom:0}
       </div>
 
       <details class="panel fold" id="upPanel">
-        <summary><h2>Upload destination</h2><span class="tag">Google Drive</span></summary>
+        <summary class="panel-hd"><h2>Setup upload destination</h2>
+          <span class="tag" id="upState">not set up</span></summary>
         <div class="panel-bd">
-          <p class="hint">Save writes the file locally unless this is filled in. Uploads go to
-            Google Drive signed in as you &#x2014; your own account and your own access to the
-            folder. Google requires an OAuth client for the page before a browser may write to
-            a Drive, so the client id comes from a Google Cloud project. Nothing here is
-            committed to the repository; the settings stay in this browser and the sign-in is
-            between you and Google.</p>
+          <p class="hint">Save uploads the document to a Google Drive folder instead of writing
+            it locally. You sign in as yourself, so the file lands with your own account and your
+            own access to the folder. Both settings stay in this browser.</p>
+
           <div class="field">
             <label for="upFolderUrl">Drive folder link</label>
-            <div class="ctl"><input id="upFolderUrl" type="text" placeholder="https://drive.google.com/drive/folders/…"></div>
-            <p class="hint">Paste the folder link, or just its id. The id is the last part of
-              the URL.</p>
+            <div class="ctl"><input id="upFolderUrl" type="text"
+              placeholder="https://drive.google.com/drive/folders/…"></div>
+            <div class="derived"><span id="upFolderShow">&#x2014;</span>
+              <span class="src" id="upFolderSrc">the link, or just the id</span></div>
           </div>
+
           <div class="field">
             <label for="upClientId">OAuth client id</label>
-            <div class="ctl"><input id="upClientId" type="text" placeholder="…apps.googleusercontent.com"></div>
-            <p class="hint">From a Google Cloud project: <em>Web application</em> credentials,
-              with this page&#x2019;s address as an authorised JavaScript origin and redirect
-              URI, and the Drive API enabled. Register exactly this address on both:
-              <code id="upRedirectShow"></code></p>
+            <div class="ctl"><input id="upClientId" type="text"
+              placeholder="…apps.googleusercontent.com"></div>
+            <div class="derived"><span id="upClientShow">&#x2014;</span>
+              <span class="src" id="upClientSrc">from a Google Cloud project</span></div>
           </div>
+
+          <div class="upreg">
+            <span class="pk">Register this address on the OAuth client</span>
+            <div class="upreg-row">
+              <code id="upRedirectShow"></code>
+              <button type="button" class="btn mini" id="upCopyRedirect">Copy</button>
+            </div>
+            <p class="hint">As both an authorised JavaScript origin and a redirect URI. It
+              differs between a local server and the published page, so register whichever you
+              use — or both.</p>
+          </div>
+
           <div class="btnrow">
-            <button type="button" class="btn mini" id="upTest">Sign in and check access</button>
+            <button type="button" class="btn primary" id="upTest">Sign in and check access</button>
             <span class="io-msg" id="upMsg" aria-live="polite"></span>
           </div>
+
+          <details class="upsteps">
+            <summary>Where the client id comes from</summary>
+            <ol>
+              <li>In the <b>Google Cloud console</b>, pick or create a project.</li>
+              <li><b>APIs &amp; Services &#x203A; Library</b>: enable the <b>Google Drive API</b>.</li>
+              <li><b>Credentials &#x203A; Create credentials &#x203A; OAuth client ID</b>, type
+                <b>Web application</b>. Add the address above as an authorised JavaScript origin
+                and as a redirect URI.</li>
+              <li><b>OAuth consent screen</b>: add each person under <b>Test users</b>, or
+                publish the app. Only <code>drive.file</code> is requested, which Google treats
+                as non-sensitive, so publishing needs no verification review.</li>
+              <li>Paste the client id above and press <em>Sign in and check access</em>.</li>
+            </ol>
+          </details>
         </div>
       </details>
 
@@ -2097,6 +2153,33 @@ tbody tr:last-child td{border-bottom:0}
     return /^[A-Za-z0-9_-]{10,}$/.test(v) ? v : "";
   }
   function upReady(){ const c = upCfg(); return !!(c.clientId && upFolderId()); }
+  /* Both fields are pasted, and both are easy to paste wrong, so each says what it
+     made of the value rather than leaving a sign-in to fail later. */
+  function paintUpSetup(){
+    const c = upCfg(), id = upFolderId(), bad = upClientIdProblem();
+    const put = (showId, srcId, cls, val, src) => {
+      const a = document.getElementById(showId), b = document.getElementById(srcId);
+      if(a){ a.className = cls; a.textContent = val; }
+      if(b) b.textContent = src;
+    };
+    if(id)               put("upFolderShow","upFolderSrc","yes", id, "folder id");
+    else if(c.folderUrl) put("upFolderShow","upFolderSrc","warn", "no id in that",
+                             "expects /folders/\u2026");
+    else                 put("upFolderShow","upFolderSrc","no", "\u2014",
+                             "the link, or just the id");
+    if(!c.clientId)      put("upClientShow","upClientSrc","no", "\u2014",
+                             "from a Google Cloud project");
+    else if(bad)         put("upClientShow","upClientSrc","warn", "not a client id",
+                             "must end .apps.googleusercontent.com");
+    else                 put("upClientShow","upClientSrc","yes", "looks right",
+                             c.clientId.split("-")[0] || "web application");
+    const chip = document.getElementById("upState");
+    if(chip){
+      const ok = !!(id && !bad);
+      chip.textContent = ok ? "ready" : "not set up";
+      chip.classList.toggle("ready", ok);
+    }
+  }
   function upWhere(){
     const id = upFolderId();
     return id ? "Google Drive folder " + id.slice(0, 12) + "…" : "Google Drive";
@@ -2415,6 +2498,13 @@ tbody tr:last-child td{border-bottom:0}
     });
     const rdShow = document.getElementById("upRedirectShow");
     if(rdShow) rdShow.textContent = upRedirect();
+    const cpBtn = document.getElementById("upCopyRedirect");
+    if(cpBtn) cpBtn.addEventListener("click", ()=>{
+      copy(upRedirect()).then(ok=>{
+        cpBtn.textContent = ok ? "Copied" : "Copy blocked";
+        setTimeout(()=>{ cpBtn.textContent = "Copy"; }, 1800);
+      });
+    });
     const upIds = { upFolderUrl:"folderUrl", upClientId:"clientId" };
     Object.keys(upIds).forEach(id => {
       const e = document.getElementById(id);
@@ -2425,6 +2515,7 @@ tbody tr:last-child td{border-bottom:0}
         cur[upIds[id]] = e.value.trim();
         upSave(cur);
         upToken = null;                    // settings changed: re-authenticate
+        paintUpSetup();
       });
     });
     const upBtn = document.getElementById("upTest");
@@ -2441,6 +2532,7 @@ tbody tr:last-child td{border-bottom:0}
         m.textContent = "Signed in and the folder is reachable. Uploads will go there.";
       }catch(e){ m.textContent = "Failed: " + (e && e.message ? e.message : e); }
     });
+    paintUpSetup();
     const svBtn = document.getElementById("saveConfig");
     if(svBtn) svBtn.addEventListener("click", ()=>{ doSave(); });
     ["plotSize","farManual","pcPct","glaPct"].forEach(id=>{

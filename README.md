@@ -249,7 +249,7 @@ in `localStorage`, so a failed or cancelled write never loses the entry.
 
 ### Uploading to Google Drive
 
-**Upload destination** (collapsed, under the Save row) sends the file to a Drive folder instead of
+**Setup upload destination** (collapsed, under the Save row) sends the file to a Drive folder instead of
 writing it locally. Paste the **folder link** (or just its id) and an **OAuth client id**; Save then
 asks for confirmation — naming the file, the plot, the entry count and the folder — and uploads on
 approval. Declining, or a failed upload, falls back to the local file, and the entry is in
@@ -286,9 +286,13 @@ browser could not hold anyway. Drive has no write-by-path, so a re-save is a **f
 the folder is queried for a file of that name and the existing one is updated, rather than a second
 file with the same name being created.
 
-The panel prints the exact address to register, taken from `location`, so it cannot be mistyped —
-and note it differs between a local server and GitHub Pages, so both need registering if you use
-both.
+The panel prints the exact address to register in a box of its own with a copy button, taken from
+`location`, so it cannot be mistyped — and note it differs between a local server and GitHub Pages,
+so both need registering if you use both. Each field also reports what it made of what was pasted:
+the folder id it extracted, or that the link has none; that the client id looks right, or that it
+cannot be one. A tag in the panel header reads *ready* only when both are usable, so the panel
+answers "is this set up?" without opening it. The Google Cloud steps sit in a collapsed list rather
+than as prose.
 
 When a sign-in fails, Google's error page is on Google's origin and unreadable from here: all the
 page can observe is a window that closed. So the client id is shape-checked before the popup opens
