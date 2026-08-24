@@ -247,65 +247,21 @@ rewritten in place — and its existing contents are merged first, so entries sa
 visit survive. Otherwise it downloads `DCR_<plot id>.json`. The accumulated document is also held
 in `localStorage`, so a failed or cancelled write never loses the entry.
 
-### Uploading to Google Drive
+### Uploading to Google Drive — currently disabled
 
-**Setup upload destination** (collapsed, under the Save row) sends the file to a Drive folder instead of
-writing it locally. Paste the **folder link** (or just its id) and an **OAuth client id**; Save then
-asks for confirmation — naming the file, the plot, the entry count and the folder — and uploads on
-approval. Declining, or a failed upload, falls back to the local file, and the entry is in
-`localStorage` either way.
+Save writes locally only. The Drive upload is **commented out**, not deleted: the plumbing, the
+panel markup, its styles and the wiring in `wire()` are all still in `dcr-calculator.src.html`,
+each behind a `DISABLED:` marker naming the other pieces to bring back with it.
 
-**Each person signs in as themselves.** The sign-in is between them and Google; the upload lands
-with their identity and their own access to the folder. The token is held in memory only — never in
-`localStorage` — so it goes when the tab does.
+The JS is commented with `//` per line rather than one `/* */` block, because the code contains
+block comments of its own and those cannot nest. The CSS could not be wrapped for the same reason,
+so its rules are preserved as text inside a single comment.
 
-Google needs an OAuth client for the page before a browser may write to a Drive. In a Google Cloud
-project:
-
-| | |
-|---|---|
-| Credentials | OAuth client id, type **Web application** |
-| Authorised JavaScript origin | `https://s-czw.github.io` |
-| Authorised redirect URI | `https://s-czw.github.io/DCR-calculator/` |
-| Enabled API | Google Drive API |
-| Scope | `drive.file` — requested by the page, nothing to configure |
-| Consent screen | add each user under **Test users**, or publish the app |
-
-`drive.file` is the narrowest scope that works: it grants access only to files the page creates
-itself, so it cannot read anything else in the Drive. It is also **non-sensitive** in Google's
-classification, which means the app can be published to production without going through a
-verification review — the review is only required for the broader `drive` scopes.
-
-While the consent screen is left in *Testing*, Google blocks everyone not on the **Test users**
-list with `403 access_denied` and a page saying the app "has not completed the Google verification
-process". That wording suggests a review is needed; for `drive.file` it is not. Either add the
-users, or publish.
-
-The flow is `response_type=token` in a popup — no code exchange, so no client secret, which a
-browser could not hold anyway. Drive has no write-by-path, so a re-save is a **find then patch**:
-the folder is queried for a file of that name and the existing one is updated, rather than a second
-file with the same name being created.
-
-The panel prints the exact address to register in a box of its own with a copy button, taken from
-`location`, so it cannot be mistyped — and note it differs between a local server and GitHub Pages,
-so both need registering if you use both. Each field also reports what it made of what was pasted:
-the folder id it extracted, or that the link has none; that the client id looks right, or that it
-cannot be one. A tag in the panel header reads *ready* only when both are usable, so the panel
-answers "is this set up?" without opening it. The Google Cloud steps sit in a collapsed list rather
-than as prose.
-
-When a sign-in fails, Google's error page is on Google's origin and unreadable from here: all the
-page can observe is a window that closed. So the client id is shape-checked before the popup opens
-(they end in `.apps.googleusercontent.com`), and a window that closes without a token reports the
-three things it actually tends to be — bad client id, unregistered redirect URI, or declined
-access — rather than guessing "cancelled". A failed upload keeps its reason in the status line
-instead of being overwritten by the local-fallback message.
-
-**Verified at the request level** with the network layer stubbed: the create path issues the folder
-query then a `multipart/related` POST carrying `{name, parents:[id]}` and the document; the update
-path finds the file and `PATCH`es `uploadType=media`. Folder-id parsing accepts a full link, a link
-with a query string, an `open?id=` link and a bare id, and rejects anything else. **The OAuth leg
-itself is untested** — it needs a real client id.
+What it did, for whoever revives it: an OAuth client id and a Drive folder link, entered per
+browser; `response_type=token` in a popup, so no client secret; scope `drive.file`, which reaches
+only files the page created; and find-then-patch on save, because Drive has no write-by-path and a
+blind create would leave two files of the same name in the folder. The sign-in leg was never
+exercised against a live client id — everything downstream of the token was.
 
 ### Local delivery
 

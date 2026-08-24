@@ -206,34 +206,35 @@ details.coef>div{padding-top:14px; display:flex; flex-direction:column; gap:14px
 .btn.icon{padding:4px 8px; font-family:"IBM Plex Mono",monospace; line-height:1}
 .btnrow{display:flex; flex-wrap:wrap; gap:8px}
 
-/* ---------- upload setup ---------- */
-/* The address to register is the one thing here that must be copied exactly, so
-   it gets a box of its own rather than sitting inside a sentence. */
-.upreg{background:var(--sunk); border:1px solid var(--line); border-radius:var(--r);
-  padding:12px 14px; display:flex; flex-direction:column; gap:9px}
-.upreg .pk{font-family:Manrope,sans-serif; font-size:.62rem; letter-spacing:.1em;
-  font-weight:500; text-transform:uppercase; color:var(--ink-3)}
-.upreg-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
-.upreg code{font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--ink);
-  word-break:break-all; flex:1 1 240px; min-width:0}
-.upsteps{border-top:1px dotted var(--line-strong); padding-top:12px}
-.upsteps>summary{cursor:pointer; list-style:none; font-family:Manrope,sans-serif;
-  font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; font-weight:500;
-  color:var(--ink-3)}
-.upsteps>summary::-webkit-details-marker{display:none}
-.upsteps>summary::after{content:" +"}
-.upsteps[open]>summary::after{content:" \2013"}
-.upsteps>summary:hover{color:var(--ink)}
-.upsteps ol{margin:11px 0 0; padding-left:20px; font-size:.78rem; color:var(--ink-2);
-  line-height:1.65}
-.upsteps li{margin-bottom:6px}
-.upsteps b{color:var(--ink); font-weight:600}
-.upsteps code{font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--brass)}
-/* Field feedback: settled values read as values, unset ones stay quiet. */
-.derived .yes{color:var(--accent-ink); font-weight:600}
-.derived .no{color:var(--ink-3)}
-.derived .warn{color:var(--brass); font-weight:600}
-.tag.ready{color:var(--accent-ink)}
+/* DISABLED: Google Drive upload panel styles. Save writes locally only.
+   Re-enable together with the panel markup, the plumbing and the wiring.
+   The rules, verbatim:
+
+   .upreg{background:var(--sunk); border:1px solid var(--line); border-radius:var(--r);
+     padding:12px 14px; display:flex; flex-direction:column; gap:9px}
+   .upreg .pk{font-family:Manrope,sans-serif; font-size:.62rem; letter-spacing:.1em;
+     font-weight:500; text-transform:uppercase; color:var(--ink-3)}
+   .upreg-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+   .upreg code{font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--ink);
+     word-break:break-all; flex:1 1 240px; min-width:0}
+   .upsteps{border-top:1px dotted var(--line-strong); padding-top:12px}
+   .upsteps>summary{cursor:pointer; list-style:none; font-family:Manrope,sans-serif;
+     font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; font-weight:500;
+     color:var(--ink-3)}
+   .upsteps>summary::-webkit-details-marker{display:none}
+   .upsteps>summary::after{content:" +"}
+   .upsteps[open]>summary::after{content:" \2013"}
+   .upsteps>summary:hover{color:var(--ink)}
+   .upsteps ol{margin:11px 0 0; padding-left:20px; font-size:.78rem; color:var(--ink-2);
+     line-height:1.65}
+   .upsteps li{margin-bottom:6px}
+   .upsteps b{color:var(--ink); font-weight:600}
+   .upsteps code{font-family:"IBM Plex Mono",monospace; font-size:.72rem; color:var(--brass)}
+   .derived .yes{color:var(--accent-ink); font-weight:600}
+   .derived .no{color:var(--ink-3)}
+   .derived .warn{color:var(--brass); font-weight:600}
+   .tag.ready{color:var(--accent-ink)}
+*/
 
 /* ---------- derivation ladder ---------- */
 .ladder{display:flex; flex-direction:column}
@@ -731,6 +732,8 @@ tbody tr:last-child td{border-bottom:0}
         <span class="io-msg" id="copyMsg" aria-live="polite"></span>
       </div>
 
+      <!-- DISABLED: Google Drive upload panel. Save writes locally only.
+           Re-enable together with the CSS, the plumbing and the wiring.
       <details class="panel fold" id="upPanel">
         <summary class="panel-hd"><h2>Setup upload destination</h2>
           <span class="tag" id="upState">not set up</span></summary>
@@ -787,6 +790,7 @@ tbody tr:last-child td{border-bottom:0}
           </details>
         </div>
       </details>
+      -->
 
 
     </div>
@@ -2120,188 +2124,189 @@ tbody tr:last-child td{border-bottom:0}
     render();
   }
 
-  /* ---------- upload to Google Drive -------------------------------------- */
-  /* Same shape as before: the destination and the OAuth client id are settings
-     held in this browser, never baked into the source, which is public.
-
-     Google's implicit flow is used deliberately -- response_type=token returns an
-     access token straight to the popup, with no code exchange and so no client
-     secret, which a browser could not hold anyway. The token lives in memory for
-     its hour and is gone when the tab closes; there is no refresh token to keep.
-
-     drive.file is the narrowest scope that works: it grants the page access to
-     files it creates itself, which is all it does. It cannot read anything else in
-     the Drive. */
-  const UP_KEY = "dcr.upload.v1";
-  const GD_SCOPE = "https://www.googleapis.com/auth/drive.file";
-  let upToken = null;          // { access_token, expires_at } -- memory only
-
-  function upCfg(){
-    try{
-      const o = JSON.parse(localStorage.getItem(UP_KEY) || "{}");
-      return { clientId: o.clientId || "", folderUrl: o.folderUrl || "" };
-    }catch(e){ return { clientId:"", folderUrl:"" }; }
-  }
-  function upSave(c){ try{ localStorage.setItem(UP_KEY, JSON.stringify(c)); }catch(e){} }
-  /* A Drive folder link carries the folder id in the URL, so no API round trip is
-     needed to resolve it. A bare id is accepted too. */
-  function upFolderId(){
-    const v = (upCfg().folderUrl || "").trim();
-    const m = v.match(/\/folders\/([A-Za-z0-9_-]{10,})/)
-           || v.match(/[?&]id=([A-Za-z0-9_-]{10,})/);
-    if(m) return m[1];
-    return /^[A-Za-z0-9_-]{10,}$/.test(v) ? v : "";
-  }
-  function upReady(){ const c = upCfg(); return !!(c.clientId && upFolderId()); }
-  /* Both fields are pasted, and both are easy to paste wrong, so each says what it
-     made of the value rather than leaving a sign-in to fail later. */
-  function paintUpSetup(){
-    const c = upCfg(), id = upFolderId(), bad = upClientIdProblem();
-    const put = (showId, srcId, cls, val, src) => {
-      const a = document.getElementById(showId), b = document.getElementById(srcId);
-      if(a){ a.className = cls; a.textContent = val; }
-      if(b) b.textContent = src;
-    };
-    if(id)               put("upFolderShow","upFolderSrc","yes", id, "folder id");
-    else if(c.folderUrl) put("upFolderShow","upFolderSrc","warn", "no id in that",
-                             "expects /folders/\u2026");
-    else                 put("upFolderShow","upFolderSrc","no", "\u2014",
-                             "the link, or just the id");
-    if(!c.clientId)      put("upClientShow","upClientSrc","no", "\u2014",
-                             "from a Google Cloud project");
-    else if(bad)         put("upClientShow","upClientSrc","warn", "not a client id",
-                             "must end .apps.googleusercontent.com");
-    else                 put("upClientShow","upClientSrc","yes", "looks right",
-                             c.clientId.split("-")[0] || "web application");
-    const chip = document.getElementById("upState");
-    if(chip){
-      const ok = !!(id && !bad);
-      chip.textContent = ok ? "ready" : "not set up";
-      chip.classList.toggle("ready", ok);
-    }
-  }
-  function upWhere(){
-    const id = upFolderId();
-    return id ? "Google Drive folder " + id.slice(0, 12) + "…" : "Google Drive";
-  }
-
-  function b64url(bytes){
-    let s = "";
-    new Uint8Array(bytes).forEach(b => s += String.fromCharCode(b));
-    return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
-  }
-  function upRedirect(){ return location.origin + location.pathname; }
-  /* Google client ids always end in .apps.googleusercontent.com. Checking here
-     turns a dead popup into a sentence that says what is wrong: the popup lands on
-     Google's own error page, which is cross-origin and unreadable, so without this
-     the only observable symptom is a window that closed. */
-  function upClientIdProblem(){
-    const id = upCfg().clientId.trim();
-    if(!id) return "No OAuth client id yet.";
-    if(!/\.apps\.googleusercontent\.com$/.test(id))
-      return "That is not a Google client id \u2014 they end in "
-           + ".apps.googleusercontent.com. Create one in a Google Cloud project "
-           + "(Web application), then paste it here.";
-    return null;
-  }
-  function upAuth(){
-    const c = upCfg();
-    const redirect = upRedirect();
-    return new Promise((resolve, reject) => {
-      const bad = upClientIdProblem();
-      if(bad){ reject(new Error(bad)); return; }
-      const state = b64url(crypto.getRandomValues(new Uint8Array(12)));
-      const q = new URLSearchParams({
-        client_id: c.clientId, redirect_uri: redirect, response_type: "token",
-        scope: GD_SCOPE, include_granted_scopes: "true", state,
-        prompt: "consent"
-      });
-      const url = "https://accounts.google.com/o/oauth2/v2/auth?" + q;
-      const win = window.open(url, "dcr-gauth", "width=520,height=680");
-      if(!win){ reject(new Error("The sign-in popup was blocked. Allow popups for this page.")); return; }
-      let done = false;
-      const timer = setInterval(() => {
-        let frag = null;
-        try{
-          if(win.closed){
-            if(!done){
-              clearInterval(timer);
-              // Google's error pages are on their origin, so the reason is not
-              // readable from here. List what it actually tends to be.
-              reject(new Error("The sign-in window closed without returning a token. "
-                + "The usual causes: the OAuth consent screen is still in Testing and "
-                + "this Google account is not on its test-user list; the client id is "
-                + "not valid; " + redirect + " is not registered on it as an authorised "
-                + "redirect URI and JavaScript origin; or access was declined."));
-            }
-            return;
-          }
-          // Readable only once the popup is back on our own origin.
-          if(win.location.origin === location.origin) frag = win.location.hash;
-        }catch(e){ return; }
-        if(!frag) return;
-        const p = new URLSearchParams(frag.replace(/^#/,""));
-        const tok = p.get("access_token");
-        if(!tok && !p.get("error")) return;
-        done = true; clearInterval(timer); win.close();
-        if(p.get("error")){ reject(new Error(p.get("error_description") || p.get("error"))); return; }
-        if(p.get("state") !== state){ reject(new Error("Sign-in state did not match; aborted.")); return; }
-        upToken = { access_token: tok,
-                    expires_at: Date.now() + ((Number(p.get("expires_in")) || 3600) - 60) * 1000 };
-        resolve(upToken);
-      }, 400);
-    });
-  }
-  async function upBearer(){
-    if(upToken && upToken.expires_at > Date.now()) return upToken.access_token;
-    return (await upAuth()).access_token;
-  }
-  async function gapi(url, init){
-    const t = await upBearer();
-    const r = await fetch(url, Object.assign({}, init, { headers: Object.assign(
-      { Authorization: "Bearer " + t }, (init && init.headers) || {}) }));
-    if(!r.ok){
-      let d = "";
-      try{ const j = await r.json(); d = (j.error && j.error.message) || ""; }catch(e){}
-      throw new Error("Drive " + r.status + (d ? ": " + d : ""));
-    }
-    return r.status === 204 ? null : r.json();
-  }
-  /* Drive has no "put by path": a second create would leave two files with the
-     same name in the folder, so an existing one is found and patched instead. */
-  async function upFind(name, folder){
-    const q = "name = '" + name.replace(/'/g, "\\'") + "' and '" + folder
-            + "' in parents and trashed = false";
-    const j = await gapi("https://www.googleapis.com/drive/v3/files?spaces=drive&fields=files(id,name)"
-                         + "&q=" + encodeURIComponent(q));
-    return (j.files && j.files[0]) ? j.files[0].id : null;
-  }
-  async function upPut(name, text){
-    const folder = upFolderId();
-    if(!folder) throw new Error("No folder id in that link.");
-    const existing = await upFind(name, folder);
-    if(existing){
-      await gapi("https://www.googleapis.com/upload/drive/v3/files/" + existing
-                 + "?uploadType=media",
-                 { method:"PATCH", headers:{ "Content-Type":"application/json" }, body:text });
-      return { id: existing, updated: true };
-    }
-    const boundary = "dcr" + b64url(crypto.getRandomValues(new Uint8Array(12)));
-    const body = "--" + boundary + "\r\n"
-      + "Content-Type: application/json; charset=UTF-8\r\n\r\n"
-      + JSON.stringify({ name, parents:[folder] }) + "\r\n"
-      + "--" + boundary + "\r\n"
-      + "Content-Type: application/json\r\n\r\n" + text + "\r\n"
-      + "--" + boundary + "--";
-    const j = await gapi("https://www.googleapis.com/upload/drive/v3/files"
-                         + "?uploadType=multipart&fields=id,name",
-                         { method:"POST",
-                           headers:{ "Content-Type":"multipart/related; boundary=" + boundary },
-                           body });
-    return { id: j.id, updated: false };
-  }
-
-
+    // DISABLED: Google Drive upload. Save writes locally only. To re-enable, uncomment this block, the panel markup, the CSS, the wiring in wire() and the branch in doSave().
+//  /* ---------- upload to Google Drive -------------------------------------- */
+//  /* Same shape as before: the destination and the OAuth client id are settings
+//     held in this browser, never baked into the source, which is public.
+//
+//     Google's implicit flow is used deliberately -- response_type=token returns an
+//     access token straight to the popup, with no code exchange and so no client
+//     secret, which a browser could not hold anyway. The token lives in memory for
+//     its hour and is gone when the tab closes; there is no refresh token to keep.
+//
+//     drive.file is the narrowest scope that works: it grants the page access to
+//     files it creates itself, which is all it does. It cannot read anything else in
+//     the Drive. */
+//  const UP_KEY = "dcr.upload.v1";
+//  const GD_SCOPE = "https://www.googleapis.com/auth/drive.file";
+//  let upToken = null;          // { access_token, expires_at } -- memory only
+//
+//  function upCfg(){
+//    try{
+//      const o = JSON.parse(localStorage.getItem(UP_KEY) || "{}");
+//      return { clientId: o.clientId || "", folderUrl: o.folderUrl || "" };
+//    }catch(e){ return { clientId:"", folderUrl:"" }; }
+//  }
+//  function upSave(c){ try{ localStorage.setItem(UP_KEY, JSON.stringify(c)); }catch(e){} }
+//  /* A Drive folder link carries the folder id in the URL, so no API round trip is
+//     needed to resolve it. A bare id is accepted too. */
+//  function upFolderId(){
+//    const v = (upCfg().folderUrl || "").trim();
+//    const m = v.match(/\/folders\/([A-Za-z0-9_-]{10,})/)
+//           || v.match(/[?&]id=([A-Za-z0-9_-]{10,})/);
+//    if(m) return m[1];
+//    return /^[A-Za-z0-9_-]{10,}$/.test(v) ? v : "";
+//  }
+//  function upReady(){ const c = upCfg(); return !!(c.clientId && upFolderId()); }
+//  /* Both fields are pasted, and both are easy to paste wrong, so each says what it
+//     made of the value rather than leaving a sign-in to fail later. */
+//  function paintUpSetup(){
+//    const c = upCfg(), id = upFolderId(), bad = upClientIdProblem();
+//    const put = (showId, srcId, cls, val, src) => {
+//      const a = document.getElementById(showId), b = document.getElementById(srcId);
+//      if(a){ a.className = cls; a.textContent = val; }
+//      if(b) b.textContent = src;
+//    };
+//    if(id)               put("upFolderShow","upFolderSrc","yes", id, "folder id");
+//    else if(c.folderUrl) put("upFolderShow","upFolderSrc","warn", "no id in that",
+//                             "expects /folders/\u2026");
+//    else                 put("upFolderShow","upFolderSrc","no", "\u2014",
+//                             "the link, or just the id");
+//    if(!c.clientId)      put("upClientShow","upClientSrc","no", "\u2014",
+//                             "from a Google Cloud project");
+//    else if(bad)         put("upClientShow","upClientSrc","warn", "not a client id",
+//                             "must end .apps.googleusercontent.com");
+//    else                 put("upClientShow","upClientSrc","yes", "looks right",
+//                             c.clientId.split("-")[0] || "web application");
+//    const chip = document.getElementById("upState");
+//    if(chip){
+//      const ok = !!(id && !bad);
+//      chip.textContent = ok ? "ready" : "not set up";
+//      chip.classList.toggle("ready", ok);
+//    }
+//  }
+//  function upWhere(){
+//    const id = upFolderId();
+//    return id ? "Google Drive folder " + id.slice(0, 12) + "…" : "Google Drive";
+//  }
+//
+//  function b64url(bytes){
+//    let s = "";
+//    new Uint8Array(bytes).forEach(b => s += String.fromCharCode(b));
+//    return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+//  }
+//  function upRedirect(){ return location.origin + location.pathname; }
+//  /* Google client ids always end in .apps.googleusercontent.com. Checking here
+//     turns a dead popup into a sentence that says what is wrong: the popup lands on
+//     Google's own error page, which is cross-origin and unreadable, so without this
+//     the only observable symptom is a window that closed. */
+//  function upClientIdProblem(){
+//    const id = upCfg().clientId.trim();
+//    if(!id) return "No OAuth client id yet.";
+//    if(!/\.apps\.googleusercontent\.com$/.test(id))
+//      return "That is not a Google client id \u2014 they end in "
+//           + ".apps.googleusercontent.com. Create one in a Google Cloud project "
+//           + "(Web application), then paste it here.";
+//    return null;
+//  }
+//  function upAuth(){
+//    const c = upCfg();
+//    const redirect = upRedirect();
+//    return new Promise((resolve, reject) => {
+//      const bad = upClientIdProblem();
+//      if(bad){ reject(new Error(bad)); return; }
+//      const state = b64url(crypto.getRandomValues(new Uint8Array(12)));
+//      const q = new URLSearchParams({
+//        client_id: c.clientId, redirect_uri: redirect, response_type: "token",
+//        scope: GD_SCOPE, include_granted_scopes: "true", state,
+//        prompt: "consent"
+//      });
+//      const url = "https://accounts.google.com/o/oauth2/v2/auth?" + q;
+//      const win = window.open(url, "dcr-gauth", "width=520,height=680");
+//      if(!win){ reject(new Error("The sign-in popup was blocked. Allow popups for this page.")); return; }
+//      let done = false;
+//      const timer = setInterval(() => {
+//        let frag = null;
+//        try{
+//          if(win.closed){
+//            if(!done){
+//              clearInterval(timer);
+//              // Google's error pages are on their origin, so the reason is not
+//              // readable from here. List what it actually tends to be.
+//              reject(new Error("The sign-in window closed without returning a token. "
+//                + "The usual causes: the OAuth consent screen is still in Testing and "
+//                + "this Google account is not on its test-user list; the client id is "
+//                + "not valid; " + redirect + " is not registered on it as an authorised "
+//                + "redirect URI and JavaScript origin; or access was declined."));
+//            }
+//            return;
+//          }
+//          // Readable only once the popup is back on our own origin.
+//          if(win.location.origin === location.origin) frag = win.location.hash;
+//        }catch(e){ return; }
+//        if(!frag) return;
+//        const p = new URLSearchParams(frag.replace(/^#/,""));
+//        const tok = p.get("access_token");
+//        if(!tok && !p.get("error")) return;
+//        done = true; clearInterval(timer); win.close();
+//        if(p.get("error")){ reject(new Error(p.get("error_description") || p.get("error"))); return; }
+//        if(p.get("state") !== state){ reject(new Error("Sign-in state did not match; aborted.")); return; }
+//        upToken = { access_token: tok,
+//                    expires_at: Date.now() + ((Number(p.get("expires_in")) || 3600) - 60) * 1000 };
+//        resolve(upToken);
+//      }, 400);
+//    });
+//  }
+//  async function upBearer(){
+//    if(upToken && upToken.expires_at > Date.now()) return upToken.access_token;
+//    return (await upAuth()).access_token;
+//  }
+//  async function gapi(url, init){
+//    const t = await upBearer();
+//    const r = await fetch(url, Object.assign({}, init, { headers: Object.assign(
+//      { Authorization: "Bearer " + t }, (init && init.headers) || {}) }));
+//    if(!r.ok){
+//      let d = "";
+//      try{ const j = await r.json(); d = (j.error && j.error.message) || ""; }catch(e){}
+//      throw new Error("Drive " + r.status + (d ? ": " + d : ""));
+//    }
+//    return r.status === 204 ? null : r.json();
+//  }
+//  /* Drive has no "put by path": a second create would leave two files with the
+//     same name in the folder, so an existing one is found and patched instead. */
+//  async function upFind(name, folder){
+//    const q = "name = '" + name.replace(/'/g, "\\'") + "' and '" + folder
+//            + "' in parents and trashed = false";
+//    const j = await gapi("https://www.googleapis.com/drive/v3/files?spaces=drive&fields=files(id,name)"
+//                         + "&q=" + encodeURIComponent(q));
+//    return (j.files && j.files[0]) ? j.files[0].id : null;
+//  }
+//  async function upPut(name, text){
+//    const folder = upFolderId();
+//    if(!folder) throw new Error("No folder id in that link.");
+//    const existing = await upFind(name, folder);
+//    if(existing){
+//      await gapi("https://www.googleapis.com/upload/drive/v3/files/" + existing
+//                 + "?uploadType=media",
+//                 { method:"PATCH", headers:{ "Content-Type":"application/json" }, body:text });
+//      return { id: existing, updated: true };
+//    }
+//    const boundary = "dcr" + b64url(crypto.getRandomValues(new Uint8Array(12)));
+//    const body = "--" + boundary + "\r\n"
+//      + "Content-Type: application/json; charset=UTF-8\r\n\r\n"
+//      + JSON.stringify({ name, parents:[folder] }) + "\r\n"
+//      + "--" + boundary + "\r\n"
+//      + "Content-Type: application/json\r\n\r\n" + text + "\r\n"
+//      + "--" + boundary + "--";
+//    const j = await gapi("https://www.googleapis.com/upload/drive/v3/files"
+//                         + "?uploadType=multipart&fields=id,name",
+//                         { method:"POST",
+//                           headers:{ "Content-Type":"multipart/related; boundary=" + boundary },
+//                           body });
+//    return { id: j.id, updated: false };
+//  }
+//
+//
   /* ---------- saved configurations --------------------------------------- */
   /* One JSON document keyed by sector/plot address, so re-saving a plot replaces
      its entry instead of appending a second one. The accumulated document lives in
@@ -2425,25 +2430,26 @@ tbody tr:last-child td{border-bottom:0}
     const verb = isUpdate ? "Updated" : "Saved";
     let upWhy = null;            // why the upload did not happen, if it did not
     try{
-      // A configured upload is the destination the user asked for, so it wins; a
-      // local copy is the consolation prize if they decline or it fails.
-      if(upReady()){
-        const folder = upWhere();
-        const ok = confirm("Upload " + name + " to Google Drive?\n\n"
-                   + "Plot:    " + key + "\n"
-                   + "Entries: " + Object.keys(store).length + "\n"
-                   + "To:      " + folder + "\n\n"
-                   + "A file of the same name there will be replaced.");
-        if(ok){
-          try{
-            await upPut(name, JSON.stringify(store, null, 2));
-            saveMsg(verb + " " + key + " \u2014 uploaded " + name + " to " + upWhere() + ".");
-            return;
-          }catch(e){
-            upWhy = e && e.message ? e.message : String(e);
-          }
-        }
-      }
+    // DISABLED: upload branch. upWhy stays null, so deliver() reports a plain local save.
+//      // A configured upload is the destination the user asked for, so it wins; a
+//      // local copy is the consolation prize if they decline or it fails.
+//      if(upReady()){
+//        const folder = upWhere();
+//        const ok = confirm("Upload " + name + " to Google Drive?\n\n"
+//                   + "Plot:    " + key + "\n"
+//                   + "Entries: " + Object.keys(store).length + "\n"
+//                   + "To:      " + folder + "\n\n"
+//                   + "A file of the same name there will be replaced.");
+//        if(ok){
+//          try{
+//            await upPut(name, JSON.stringify(store, null, 2));
+//            saveMsg(verb + " " + key + " \u2014 uploaded " + name + " to " + upWhere() + ".");
+//            return;
+//          }catch(e){
+//            upWhy = e && e.message ? e.message : String(e);
+//          }
+//        }
+//      }
       if(window.showSaveFilePicker){
         if(!fileHandle){
           fileHandle = await window.showSaveFilePicker({ suggestedName: name,
@@ -2496,43 +2502,44 @@ tbody tr:last-child td{border-bottom:0}
       const s = document.getElementById("plotPick");
       if(s && s.value !== MANUAL){ s.value = MANUAL; paintPlotPick(); }
     });
-    const rdShow = document.getElementById("upRedirectShow");
-    if(rdShow) rdShow.textContent = upRedirect();
-    const cpBtn = document.getElementById("upCopyRedirect");
-    if(cpBtn) cpBtn.addEventListener("click", ()=>{
-      copy(upRedirect()).then(ok=>{
-        cpBtn.textContent = ok ? "Copied" : "Copy blocked";
-        setTimeout(()=>{ cpBtn.textContent = "Copy"; }, 1800);
-      });
-    });
-    const upIds = { upFolderUrl:"folderUrl", upClientId:"clientId" };
-    Object.keys(upIds).forEach(id => {
-      const e = document.getElementById(id);
-      if(!e) return;
-      e.value = upCfg()[upIds[id]];
-      e.addEventListener("input", ()=>{
-        const cur = upCfg();
-        cur[upIds[id]] = e.value.trim();
-        upSave(cur);
-        upToken = null;                    // settings changed: re-authenticate
-        paintUpSetup();
-      });
-    });
-    const upBtn = document.getElementById("upTest");
-    if(upBtn) upBtn.addEventListener("click", async ()=>{
-      const m = document.getElementById("upMsg");
-      if(!upFolderId()){ m.textContent = "That folder link has no id in it."; return; }
-      const badId = upClientIdProblem();
-      if(badId){ m.textContent = badId; return; }
-      m.textContent = "Signing in\u2026";
-      try{
-        // A harmless read against the target folder: it proves the token works and
-        // that this folder is reachable, without writing anything.
-        await upFind("DCR_access_check.json", upFolderId());
-        m.textContent = "Signed in and the folder is reachable. Uploads will go there.";
-      }catch(e){ m.textContent = "Failed: " + (e && e.message ? e.message : e); }
-    });
-    paintUpSetup();
+    // DISABLED: Google Drive upload. Save writes locally only. To re-enable, uncomment this block, the panel markup, the CSS, the wiring in wire() and the branch in doSave().
+//    const rdShow = document.getElementById("upRedirectShow");
+//    if(rdShow) rdShow.textContent = upRedirect();
+//    const cpBtn = document.getElementById("upCopyRedirect");
+//    if(cpBtn) cpBtn.addEventListener("click", ()=>{
+//      copy(upRedirect()).then(ok=>{
+//        cpBtn.textContent = ok ? "Copied" : "Copy blocked";
+//        setTimeout(()=>{ cpBtn.textContent = "Copy"; }, 1800);
+//      });
+//    });
+//    const upIds = { upFolderUrl:"folderUrl", upClientId:"clientId" };
+//    Object.keys(upIds).forEach(id => {
+//      const e = document.getElementById(id);
+//      if(!e) return;
+//      e.value = upCfg()[upIds[id]];
+//      e.addEventListener("input", ()=>{
+//        const cur = upCfg();
+//        cur[upIds[id]] = e.value.trim();
+//        upSave(cur);
+//        upToken = null;                    // settings changed: re-authenticate
+//        paintUpSetup();
+//      });
+//    });
+//    const upBtn = document.getElementById("upTest");
+//    if(upBtn) upBtn.addEventListener("click", async ()=>{
+//      const m = document.getElementById("upMsg");
+//      if(!upFolderId()){ m.textContent = "That folder link has no id in it."; return; }
+//      const badId = upClientIdProblem();
+//      if(badId){ m.textContent = badId; return; }
+//      m.textContent = "Signing in\u2026";
+//      try{
+//        // A harmless read against the target folder: it proves the token works and
+//        // that this folder is reachable, without writing anything.
+//        await upFind("DCR_access_check.json", upFolderId());
+//        m.textContent = "Signed in and the folder is reachable. Uploads will go there.";
+//      }catch(e){ m.textContent = "Failed: " + (e && e.message ? e.message : e); }
+//    });
+//    paintUpSetup();
     const svBtn = document.getElementById("saveConfig");
     if(svBtn) svBtn.addEventListener("click", ()=>{ doSave(); });
     ["plotSize","farManual","pcPct","glaPct"].forEach(id=>{
