@@ -247,42 +247,42 @@ rewritten in place — and its existing contents are merged first, so entries sa
 visit survive. Otherwise it downloads `DCR_<plot id>.json`. The accumulated document is also held
 in `localStorage`, so a failed or cancelled write never loses the entry.
 
-### Uploading to OneDrive
+### Uploading to Google Drive
 
-**Upload destination** (collapsed, under the Save row) sends the file to a OneDrive folder instead
-of writing it locally. Fill in the shared folder link and an Entra **application (client) id**;
-Save then asks for confirmation — naming the file, the plot, the entry count and the folder — and
-uploads on approval. Declining, or a failed upload, falls back to the local file, and the entry is
-in `localStorage` either way.
+**Upload destination** (collapsed, under the Save row) sends the file to a Drive folder instead of
+writing it locally. Paste the **folder link** (or just its id) and an **OAuth client id**; Save then
+asks for confirmation — naming the file, the plot, the entry count and the folder — and uploads on
+approval. Declining, or a failed upload, falls back to the local file, and the entry is in
+`localStorage` either way.
 
-**Each person signs in as themselves.** The sign-in is between them and Microsoft; the upload lands
-with their identity and their own permissions on the folder, and the access token is held in memory
-only — never in `localStorage` — so it goes when the tab does. Nothing shared or long-lived is
-stored on their behalf.
+**Each person signs in as themselves.** The sign-in is between them and Google; the upload lands
+with their identity and their own access to the folder. The token is held in memory only — never in
+`localStorage` — so it goes when the tab does.
 
-The client id cannot be shipped here. Microsoft requires an application registered **in your own
-tenant** before a web page may write to your OneDrive, so someone with app-registration rights has
-to create one:
+Google needs an OAuth client for the page before a browser may write to a Drive. In a Google Cloud
+project:
 
 | | |
 |---|---|
-| Type | Single-page application (SPA) |
-| Redirect URI | the exact page origin + path, e.g. `https://s-czw.github.io/DCR-calculator/` |
-| API permission | Microsoft Graph, **delegated**, `Files.ReadWrite.All` |
-| Consent | grant it for the tenant, or accept the prompt on first sign-in |
+| Credentials | OAuth client id, type **Web application** |
+| Authorised JavaScript origin | `https://s-czw.github.io` |
+| Authorised redirect URI | `https://s-czw.github.io/DCR-calculator/` |
+| Enabled API | Google Drive API |
+| Scope | `drive.file` — requested by the page, nothing to configure |
 
-Auth is authorization-code + PKCE in a popup, implemented directly rather than through MSAL, which
-would have to load from a CDN and break the single-file build. The folder link is resolved through
-Graph's `/shares/{id}/driveItem`, then the file goes to
-`PUT /drives/{driveId}/items/{itemId}:/{name}:/content`.
+`drive.file` is the narrowest scope that works: it grants access only to files the page creates
+itself, so it cannot read anything else in the Drive.
 
-The destination and client id are **settings held in this browser**, deliberately not baked into
-the source — this repository is public, and hard-coding them would publish an internal storage
-path. That also means each person configures it once on their own machine.
+The flow is `response_type=token` in a popup — no code exchange, so no client secret, which a
+browser could not hold anyway. Drive has no write-by-path, so a re-save is a **find then patch**:
+the folder is queried for a file of that name and the existing one is updated, rather than a second
+file with the same name being created.
 
-**Not verified end to end.** No app registration existed while this was written, so the sign-in and
-upload legs are untested against a live tenant; the confirm step, the settings round-trip and the
-fallback all are. Expect to iterate on the first real sign-in.
+**Verified at the request level** with the network layer stubbed: the create path issues the folder
+query then a `multipart/related` POST carrying `{name, parents:[id]}` and the document; the update
+path finds the file and `PATCH`es `uploadType=media`. Folder-id parsing accepts a full link, a link
+with a query string, an `open?id=` link and a bare id, and rejects anything else. **The OAuth leg
+itself is untested** — it needs a real client id.
 
 ### Local delivery
 
