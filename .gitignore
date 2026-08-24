@@ -6,11 +6,15 @@ dcr-calculator.html
 # Local preview config; contains machine-specific absolute paths.
 .claude/
 
-# Source workbooks are client data. Never commit them.
+# Source workbooks and geodatabases are client data. Never commit them.
+# data/ was tracked once by accident and reached the public remote; history
+# has been rewritten to drop it, and verify_build.py now fails if it returns.
 sources/
+data/
 *.xls
 *.xlsx
 *.pdf
+*.gdb/
 
 # Python / OS noise
 __pycache__/
