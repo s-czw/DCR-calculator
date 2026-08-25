@@ -136,6 +136,33 @@ The point is that an entered value always reads as a deviation, so a figure deri
 values never looks like one derived from a hand-entered assumption.
 
 
+## The methodology document
+
+**Methodology PDF**, beside Save, opens the browser's print dialog on a document explaining every
+field and every formula — nine sections over four pages. "Save as PDF" is a destination in that
+dialog on every current browser, so no PDF library ships in the page.
+
+`build_doc.py` is the single source. It holds the content once and renders it twice:
+
+```bash
+python3 build_doc.py
+```
+
+| Output | |
+|---|---|
+| `docs/DCR_methodology.pdf` | via ReportLab, for circulation |
+| the page's print view | an HTML section injected between the `DOC:BEGIN` / `DOC:END` markers |
+
+Two hand-maintained copies would drift, and a methodology note that disagrees with the tool is
+worse than none — hence one source. **Re-run it after changing any formula**, and commit both the
+script and the regenerated page.
+
+Two rendering notes. The section is `display:none` on screen and the *only* thing shown under
+`@media print`; the app and the sign-in gate are hidden there. And ReportLab's built-in fonts carry
+no Unicode superscript glyphs — they render as solid black boxes — so `m²` goes through ReportLab's
+`<super>` tag, which shifts an ordinary digit. The build checks that no Unicode superscript reaches
+the PDF.
+
 ## The sign-in gate
 
 One account: username `dmtdcr`. The password is not in this repository — it is compared as a

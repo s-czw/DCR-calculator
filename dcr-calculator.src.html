@@ -214,6 +214,39 @@ details.coef>div{padding-top:14px; display:flex; flex-direction:column; gap:14px
 .btn.icon{padding:4px 8px; font-family:"IBM Plex Mono",monospace; line-height:1}
 .btnrow{display:flex; flex-wrap:wrap; gap:8px}
 
+/* ---------- methodology document ---------- */
+/* Hidden on screen, and the only thing on the page when printing. The browser's
+   own print dialog is the PDF writer, so the document needs no library and cannot
+   fall out of step with the tool it describes. */
+#methodology{display:none}
+@media print{
+  :root, body{background:#FFFFFF !important; color:#1C1C1C !important}
+  .wrap, #gate{display:none !important}
+  #methodology{display:block !important; max-width:none; padding:0}
+  @page{size:A4; margin:18mm 20mm}
+}
+#methodology h1{font-size:11.5pt; margin:16pt 0 5pt; page-break-after:avoid}
+#methodology h2{font-size:10.5pt; margin:12pt 0 4pt; page-break-after:avoid}
+#methodology p, #methodology li{font-size:9.2pt; line-height:1.45; margin:0 0 6pt}
+#methodology .doc-hd{border-bottom:1.2pt solid #1C1C1C; padding-bottom:8pt;
+  margin-bottom:12pt}
+#methodology .doc-hd h1{font-size:17pt; margin:0 0 2pt}
+#methodology .doc-sub{font-size:10.5pt; color:#2C6098; margin:0 0 1pt}
+#methodology .doc-meta{font-size:8pt; color:#5C5C61; margin:0}
+#methodology .doc-formula{font-family:"IBM Plex Mono",monospace; font-size:8.2pt;
+  line-height:1.4; background:#F4F4F5; border-left:2pt solid #C9C9CD;
+  padding:8pt 10pt; margin:4pt 0 9pt; white-space:pre-wrap;
+  page-break-inside:avoid}
+#methodology .doc-table{width:100%; border-collapse:collapse; margin:3pt 0 10pt;
+  font-size:8.4pt}
+#methodology .doc-table th{text-align:left; font-weight:600; border-bottom:1pt solid #1C1C1C;
+  padding:4pt 9pt 4pt 0; vertical-align:top}
+#methodology .doc-table td{border-bottom:.4pt solid #C9C9CD; padding:4pt 9pt 4pt 0;
+  vertical-align:top}
+#methodology .doc-table tr{page-break-inside:avoid}
+#methodology ul{margin:0 0 8pt; padding-left:15pt}
+#methodology code{font-family:"IBM Plex Mono",monospace; font-size:8.2pt}
+
 /* ---------- sign-in gate ---------- */
 /* Driven by a class on the root element set before the stylesheet loads, so the
    app is never painted first and then covered. display, not [hidden], because a
@@ -534,6 +567,144 @@ tbody tr:last-child td{border-bottom:0}
   </form>
 </div>
 
+<!-- DOC:BEGIN -->
+<section id="methodology" aria-hidden="true">
+  <header class="doc-hd">
+    <h1>Development Control Regulations — Plot Yield Calculator</h1>
+    <p class="doc-sub">Fields, formulas and calculation methodology</p>
+    <p class="doc-meta">Generated 2026-08-25 &#x00B7; regenerate with <code>python3 build_doc.py</code></p>
+  </header>
+  <p>This note describes what every field in the calculator means, where its value comes from, and how the derived figures are computed. Formulas are given exactly as the tool applies them. Where a value is an assumption rather than a published figure, it is marked as such — see <b>Assumptions and open items</b> at the end.</p>
+  <h1>1. How a calculation flows</h1>
+  <p>Four figures follow from the plot area and its land-use designation. Each is a single multiplication or division; the sequence is what matters.</p>
+  <pre class="doc-formula">plot area          entered, or taken from the plot register
+FAR                from the designation, overridable
+coverage %         from the designation, overridable
+
+Max GFA          = plot area x FAR
+Plot coverage    = plot area x coverage %
+GLA              = Max GFA x GLA share
+Max activities   = floor(GLA / unit area)</pre>
+  <p><b>Plot coverage is a footprint, not a share of the total GFA.</b> It is the floor area the Code permits on the ground floor, expressed as a proportion of the plot. What is left of the plot outside it is the open ground, and that is what decides how much parking can sit on grade.</p>
+  <p><b>Max activities is a count, not an area.</b> The division is floored, because a partial tenancy is not a tenancy. It is a ceiling on how many separate activities the leasable area supports at the minimum unit size — not a target.</p>
+  <h1>2. Input fields</h1>
+  <table class="doc-table"><thead><tr>
+    <th>Field</th>
+    <th>Where the value comes from</th>
+    <th>How it is used</th>
+  </tr></thead><tbody>
+    <tr><td>Plot</td><td>The plot register: 66 plots, each with its sector/plot address, district, DevCode and area. Selecting one fills the plot area.</td><td>Convenience only. Typing an area by hand returns this to manual entry, so a figure is never filed against the wrong plot.</td></tr>
+    <tr><td>Plot size</td><td>Entered, or filled from the register. In m<sup>2</sup>.</td><td>The driver of every other figure.</td></tr>
+    <tr><td>Land use / designation</td><td>The Code schedule: 59 designations, each publishing a FAR and a Max Plot Coverage.</td><td>Supplies FAR and coverage. 15 designations publish no FAR and 12 no coverage; those need an override.</td></tr>
+    <tr><td>FAR override</td><td>Typed. A ratio, not a percentage.</td><td>Replaces the designation's FAR. Used when the Code governs a plot by note reference rather than a published figure.</td></tr>
+    <tr><td>Max plot coverage</td><td>The designation, or typed. 0–100 with at most two decimals.</td><td>Sets the ground-floor footprint, and with it the open ground left for parking.</td></tr>
+    <tr><td>GLA share</td><td>Defaults to 75%. <b>Not a Code citation</b> — the worked example's value.</td><td>Converts Max GFA to leasable area.</td></tr>
+    <tr><td>ITC location</td><td>Abu Dhabi or Al Ain, CBD or not.</td><td>Chooses which variant of an ITC class applies, falling back progressively when a class is not split that finely.</td></tr>
+  </tbody></table>
+  <h1>3. Parameters</h1>
+  <p>Each of these has a published or standard value and may be overridden. An override shows the original beside the field and annotates every figure it changed, so a number is never quietly different from the Code.</p>
+  <table class="doc-table"><thead><tr>
+    <th>Parameter</th>
+    <th>Default</th>
+    <th>Meaning</th>
+  </tr></thead><tbody>
+    <tr><td>Unit area per activity</td><td>60 m<sup>2</sup></td><td>The minimum tenancy size. Divides GLA to give the activity ceiling.</td></tr>
+    <tr><td>Area per parking space</td><td>32.5 m<sup>2</sup></td><td>From the standard. Includes the manoeuvring share, which is why it exceeds a bay's own footprint.</td></tr>
+    <tr><td>Usable per basement floor</td><td>75%</td><td>The share of a basement floor that becomes parking, after ramps, cores and plant.</td></tr>
+    <tr><td>Basement floor area</td><td>the plot area</td><td>A basement may use the whole plot; unlike a storey above ground it is not held to the coverage limit. That is why this defaults to the plot and not to the footprint.</td></tr>
+    <tr><td>Required spaces</td><td>from the schedule</td><td>Override when UPPC or ITC has granted a reduction. Replaces the schedule's total.</td></tr>
+  </tbody></table>
+  <h1>4. The activity schedule</h1>
+  <p>Parking is not a property of the plot; it follows from what occupies it. Each row is one activity, and contributes its own parking demand.</p>
+  <table class="doc-table"><thead><tr>
+    <th>Column</th>
+    <th>Meaning</th>
+  </tr></thead><tbody>
+    <tr><td>Activity (DED)</td><td>One of 3,892 DED economic activities, with its ISIC class.</td></tr>
+    <tr><td>Slots</td><td>How many tenancies of this activity. Counts against the activity ceiling.</td></tr>
+    <tr><td>Unit area</td><td>The floor area one slot occupies. Inherited from the parameter, or entered per row — shown as <i>inherited</i> or <i>entered</i>.</td></tr>
+    <tr><td>ITC category</td><td>The ITC class whose rate applies. Mapped automatically from the activity, with a confidence of high, medium or low, and reassignable by hand.</td></tr>
+    <tr><td>Rate / units</td><td>The rate for the resolved class. Classes charged per unit rather than by area show a quantity box here instead, with the per-unit rate beneath it.</td></tr>
+    <tr><td>Bays</td><td>This row's exact contribution, unrounded.</td></tr>
+  </tbody></table>
+  <p><b>Rounding happens once, on the total.</b> Rounding each row up and then adding would charge for part spaces the scheme never needs, and the error compounds with the number of rows:</p>
+  <pre class="doc-formula">2.372 + 5.536 + 5.99  =  13.898  ->  14 spaces      correct
+ceil(2.372) + ceil(5.536) + ceil(5.99)  =  15       wrong</pre>
+  <h1>5. ITC rates</h1>
+  <p>The matrix holds 141 rate codes across 70 classes, each published for a weekday and a weekend. The tool uses a single blended rate on a standard week:</p>
+  <pre class="doc-formula">combined = weekday x (5/7) + weekend x (2/7)
+         = weekday x 71.43% + weekend x 28.57%
+
+rate_total = employee/resident + visitor + truck/bus</pre>
+  <p><b>A rate is not always charged against floor area.</b> Each class names its own driver, and only 63 of the 141 codes are charged against an area at all:</p>
+  <table class="doc-table"><thead><tr>
+    <th>Driver</th>
+    <th>Codes</th>
+    <th>Quantity the rate is charged against</th>
+  </tr></thead><tbody>
+    <tr><td>count</td><td>73</td><td>A number the user supplies: units, bedrooms, seats, students, beds, doctors, berths, taxi bays, invitees, fuelling positions.</td></tr>
+    <tr><td>gfa</td><td>62</td><td>Floor area, per 100 or per 1,000 m<sup>2</sup> of GFA.</td></tr>
+    <tr><td>site</td><td>5</td><td>Site area, per 100 or per 1,000 m<sup>2</sup>.</td></tr>
+    <tr><td>gla</td><td>1</td><td>Leasable area, per 100 m<sup>2</sup>.</td></tr>
+  </tbody></table>
+  <pre class="doc-formula">area-driven   bays = slots x unit area x conversion x rate
+count-driven  bays = quantity x conversion x rate</pre>
+  <p>A count-driven row with no quantity entered contributes nothing and raises a flag, rather than being silently charged by floor area.</p>
+  <h1>6. Parking: open ground first, then basement</h1>
+  <p>A space needs its own area, so the ground left outside the footprint holds only so many. The remainder goes to basement or podium, where a floor is only partly usable.</p>
+  <pre class="doc-formula">spaces required        = ceil( sum of the rows' exact bays )
+total parking area     = spaces required x 32.5
+open ground area       = plot area - plot coverage
+spaces on ground       = min( required, floor(open ground / 32.5) )
+offset spaces          = required - spaces on ground
+offset parking area    = total parking area - on-ground area
+basement floors        = ceil( offset area / (basement floor area x 75%) )</pre>
+  <p><b>Community Retail is the case that forces basement parking, and it follows from the Code rather than a special rule.</b> CR is published at 100% plot coverage, so the footprint is the whole plot, there is no open ground, and every space goes below.</p>
+  <table class="doc-table"><thead><tr>
+    <th></th>
+    <th>general plot</th>
+    <th>Community Retail</th>
+  </tr></thead><tbody>
+    <tr><td>Spaces required</td><td>30</td><td>120</td></tr>
+    <tr><td>Total parking area</td><td>975 m<sup>2</sup></td><td>3,900 m<sup>2</sup></td></tr>
+    <tr><td>Plot / coverage</td><td>1,000 m<sup>2</sup> / 60%</td><td>1,000 m<sup>2</sup> / <b>100%</b></td></tr>
+    <tr><td>Open ground</td><td>400 m<sup>2</sup>, holds 12</td><td><b>none</b></td></tr>
+    <tr><td>On ground</td><td>12</td><td>0</td></tr>
+    <tr><td>In basement/podium</td><td>18, 585 m<sup>2</sup></td><td>120, 3,900 m<sup>2</sup></td></tr>
+    <tr><td>Floors at 75% usable</td><td>1</td><td><b>6</b></td></tr>
+  </tbody></table>
+  <h1>7. Limitations L-3 and L-4</h1>
+  <p>The Regulations cap parking demand at two spaces per 100 m<sup>2</sup> of GFA. The ceiling that puts on a plot is exact:</p>
+  <pre class="doc-formula">ceiling = Max GFA x 2 / 100        spaces</pre>
+  <ul>
+    <li><b>Below 1,600 m<sup>2</sup></b> — limitation <b>L-4</b> bars a use whose demand exceeds the ceiling.</li>
+    <li><b>At or above 1,600 m<sup>2</sup></b> — <b>L-3</b> permits it, but the excess is the developer's responsibility and earns no additional GFA.</li>
+  </ul>
+  <h1>8. Restrictions the tool raises</h1>
+  <table class="doc-table"><thead><tr>
+    <th>Flag</th>
+    <th>Condition</th>
+    <th>Why it matters</th>
+  </tr></thead><tbody>
+    <tr><td>SLOTS</td><td>slots used &amp;gt; activities permitted</td><td>The schedule holds more tenancies than the GLA supports.</td></tr>
+    <tr><td>GFA</td><td>scheduled floor area &amp;gt; Max GFA</td><td>A restriction. The FAR does not permit the floor area, whatever the slot count says.</td></tr>
+    <tr><td>GLA</td><td>scheduled floor area &amp;gt; GLA, within GFA</td><td>A note, not a restriction. Tenancies are let from leasable area, so this is the binding limit in practice — but GLA is itself an assumption, so it is not treated as a cap.</td></tr>
+    <tr><td>QTY</td><td>a count-driven activity has no quantity</td><td>Its parking cannot be counted until the quantity is given.</td></tr>
+    <tr><td>L-4 / L-3</td><td>demand exceeds 2 spaces per 100 m<sup>2</sup> GFA</td><td>Barred below 1,600 m<sup>2</sup>; above it, the excess is the developer's.</td></tr>
+  </tbody></table>
+  <p>The slot count stops standing in for floor area as soon as unit areas vary: six slots at a hand-entered 260 m<sup>2</sup> can sit inside the permitted count and still overrun the plot. The GFA and GLA checks exist because the slot check cannot catch that.</p>
+  <h1>9. Assumptions and open items</h1>
+  <p>Treat the derived figures as working numbers, not cleared outputs.</p>
+  <ul>
+    <li><b>The GLA share of 75% is uncited.</b> It is the worked example's value, not a Code figure. It scales GLA, the activity ceiling, and the GLA restriction.</li>
+    <li><b>The DED to ITC crosswalk is heuristic</b> — authored here, not supplied by the client: 162 activities mapped with high confidence, 2,722 medium, 1,008 low. Every row can be reassigned by hand, and the confidence is shown on each.</li>
+    <li><b>15 designations publish no FAR and 12 no coverage.</b> The Code governs them by note reference, and those notes are not in the data. They need an override.</li>
+    <li><b>An issued DCR report gave AVG. REQUIRED PARKING = 0</b> for a small commercial plot where the ITC rate implies 3 spaces. Not a rounding artefact, and unresolved. It should be raised with whoever owns the DCR generation system before any parking figure is quoted from that source.</li>
+    <li><b>Area per space (32.5 m<sup>2</sup>) and floor efficiency (75%) come from the standard.</b> They replaced earlier stand-ins that had no source behind them.</li>
+  </ul>
+</section>
+<!-- DOC:END -->
+
 <div class="wrap">
 
   <header class="mast">
@@ -771,6 +942,7 @@ tbody tr:last-child td{border-bottom:0}
 
       <div class="btnrow">
         <button type="button" class="btn primary" id="saveConfig">Save</button>
+        <button type="button" class="btn" id="printDoc">Methodology PDF</button>
         <button type="button" class="btn" id="copySummary">Copy summary</button>
         <button type="button" class="btn" id="loadBoard">Load worked example</button>
         <span class="io-msg" id="copyMsg" aria-live="polite"></span>
@@ -2598,6 +2770,10 @@ tbody tr:last-child td{border-bottom:0}
   function wire(){
     wireTheme();
     wireGate();
+    // The print dialog is the PDF writer: "Save as PDF" is a destination in it on
+    // every current browser, so no PDF library ships in the page.
+    const pd = document.getElementById("printDoc");
+    if(pd) pd.addEventListener("click", ()=>{ window.print(); });
     const pickSel = document.getElementById("plotPick");
     if(pickSel) pickSel.addEventListener("change", applyPlotPick);
     // Typing an area by hand detaches the field from the register: the figure is
