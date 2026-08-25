@@ -138,7 +138,7 @@ values never looks like one derived from a hand-entered assumption.
 
 ## The methodology document
 
-**Methodology PDF**, beside Save, opens the browser's print dialog on a document explaining every
+**Export PDF**, beside Save, opens the browser's print dialog on a document explaining every
 field and every formula — nine sections over four pages. "Save as PDF" is a destination in that
 dialog on every current browser, so no PDF library ships in the page.
 
