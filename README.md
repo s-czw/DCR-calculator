@@ -136,43 +136,41 @@ The point is that an entered value always reads as a deviation, so a figure deri
 values never looks like one derived from a hand-entered assumption.
 
 
-## The methodology document
+## The exported calculation report
 
-**Export PDF**, beside Save, opens the browser's print dialog on a document explaining every
-field and every formula — nine sections over four pages. "Save as PDF" is a destination in that
-dialog on every current browser, so no PDF library ships in the page.
+**Export PDF**, beside Save, prints a record of the calculation currently on screen — one plot,
+its inputs, its results, and the arithmetic behind each. It is generated from `calc()` at print
+time, not authored, so it cannot describe figures the page is not showing.
 
-The suggested filename is `<sector/plot address>_<yyyymmddHHmmss>`, or `manual_<stamp>` when no
-plot is selected — for example `W31_P1_20260825200905`. Browsers take that name from
-`document.title`, so the title is swapped before printing and restored afterwards. It is a
-*suggestion*: the dialog still lets the name be changed.
+| Section | |
+|---|---|
+| Inputs | every field, its value, and where that value came from — Code, register, standard or assumption |
+| Results | Max GFA, plot coverage, GLA, the activity ceiling and the L-3/L-4 space ceiling |
+| Scheduled activities | each row with its slots, unit area, ITC class, rate, what the rate is charged against, and its exact bays |
+| Parking | required spaces through to basement floors |
+| Restrictions | whatever the tool flagged, in words |
+| Values overridden | published against used, where they differ |
 
-The address is used rather than the bare plot number because the register holds the same plot
-number in more than one sector — `MZW22_C1` and `RD132_C1` — so `C1` alone would not say which plot
-a document describes. It also matches the key the saved JSON uses.
+Every derived figure carries its formula **with the numbers substituted**, so a reader can check
+it without the tool:
 
-`build_doc.py` is the single source. It holds the content once and renders it twice:
-
-```bash
-python3 build_doc.py
+```
+Max allowed activities   5 activities   floor(GLA ÷ unit area) = floor(316.35 ÷ 60) = floor(5.273)
+Basement floors          3              ceil(650 ÷ (401.72 × 75%)) = ceil(2.157)
 ```
 
-| Output | |
-|---|---|
-| `docs/DCR_methodology.pdf` | via ReportLab, for circulation |
-| the page's print view | an HTML section injected between the `DOC:BEGIN` / `DOC:END` markers |
+The suggested filename is `<sector/plot address>_<yyyymmddHHmmss>`, or `manual_<stamp>` when no
+plot is selected. Browsers take that name from `document.title`, so the title is swapped before
+printing and restored afterwards; it is a suggestion, and the dialog still allows a change. The
+address is used rather than the bare plot number because the register holds the same number in
+more than one sector — `MZW22_C1` and `RD132_C1` — so `C1` alone would not identify the plot.
 
-Two hand-maintained copies would drift, and a methodology note that disagrees with the tool is
-worse than none — hence one source. **Re-run it after changing any formula**, and commit both the
-script and the regenerated page.
+The report section is `display:none` on screen and the only thing shown under `@media print`; the
+app and the sign-in screen do not print. `beforeprint` regenerates it, so printing from the
+browser's own menu gives the same sheet as the button. No PDF library ships in the page — the
+print dialog is the PDF writer.
 
-Two rendering notes. The section is `display:none` on screen and the *only* thing shown under
-`@media print`; the app and the sign-in gate are hidden there. And ReportLab's built-in fonts carry
-no Unicode superscript glyphs — they render as solid black boxes — so `m²` goes through ReportLab's
-`<super>` tag, which shifts an ordinary digit. The build checks that no Unicode superscript reaches
-the PDF.
-
-## The sign-in gate
+## The sign-in gate## The sign-in gate
 
 One account: username `dmtdcr`. The password is not in this repository — it is compared as a
 salted SHA-256 digest, and only the digest is committed.

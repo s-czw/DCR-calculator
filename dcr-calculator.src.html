@@ -214,38 +214,44 @@ details.coef>div{padding-top:14px; display:flex; flex-direction:column; gap:14px
 .btn.icon{padding:4px 8px; font-family:"IBM Plex Mono",monospace; line-height:1}
 .btnrow{display:flex; flex-wrap:wrap; gap:8px}
 
-/* ---------- methodology document ---------- */
+/* ---------- calculation report ---------- */
 /* Hidden on screen, and the only thing on the page when printing. The browser's
    own print dialog is the PDF writer, so the document needs no library and cannot
    fall out of step with the tool it describes. */
-#methodology{display:none}
+#report{display:none}
 @media print{
   :root, body{background:#FFFFFF !important; color:#1C1C1C !important}
   .wrap, #gate{display:none !important}
-  #methodology{display:block !important; max-width:none; padding:0}
+  #report{display:block !important; max-width:none; padding:0}
   @page{size:A4; margin:18mm 20mm}
 }
-#methodology h1{font-size:11.5pt; margin:16pt 0 5pt; page-break-after:avoid}
-#methodology h2{font-size:10.5pt; margin:12pt 0 4pt; page-break-after:avoid}
-#methodology p, #methodology li{font-size:9.2pt; line-height:1.45; margin:0 0 6pt}
-#methodology .doc-hd{border-bottom:1.2pt solid #1C1C1C; padding-bottom:8pt;
+#report h1{font-size:11.5pt; margin:16pt 0 5pt; page-break-after:avoid}
+#report h2{font-size:10.5pt; margin:12pt 0 4pt; page-break-after:avoid}
+#report p, #report li{font-size:9.2pt; line-height:1.45; margin:0 0 6pt}
+#report .doc-hd{border-bottom:1.2pt solid #1C1C1C; padding-bottom:8pt;
   margin-bottom:12pt}
-#methodology .doc-hd h1{font-size:17pt; margin:0 0 2pt}
-#methodology .doc-sub{font-size:10.5pt; color:#2C6098; margin:0 0 1pt}
-#methodology .doc-meta{font-size:8pt; color:#5C5C61; margin:0}
-#methodology .doc-formula{font-family:"IBM Plex Mono",monospace; font-size:8.2pt;
+#report .doc-hd h1{font-size:17pt; margin:0 0 2pt}
+#report .doc-sub{font-size:10.5pt; color:#2C6098; margin:0 0 1pt}
+#report .doc-meta{font-size:8pt; color:#5C5C61; margin:0}
+#report .doc-formula{font-family:"IBM Plex Mono",monospace; font-size:8.2pt;
   line-height:1.4; background:#F4F4F5; border-left:2pt solid #C9C9CD;
   padding:8pt 10pt; margin:4pt 0 9pt; white-space:pre-wrap;
   page-break-inside:avoid}
-#methodology .doc-table{width:100%; border-collapse:collapse; margin:3pt 0 10pt;
+#report .doc-table{width:100%; border-collapse:collapse; margin:3pt 0 10pt;
   font-size:8.4pt}
-#methodology .doc-table th{text-align:left; font-weight:600; border-bottom:1pt solid #1C1C1C;
+#report .doc-table th{text-align:left; font-weight:600; border-bottom:1pt solid #1C1C1C;
   padding:4pt 9pt 4pt 0; vertical-align:top}
-#methodology .doc-table td{border-bottom:.4pt solid #C9C9CD; padding:4pt 9pt 4pt 0;
+#report .doc-table td{border-bottom:.4pt solid #C9C9CD; padding:4pt 9pt 4pt 0;
   vertical-align:top}
-#methodology .doc-table tr{page-break-inside:avoid}
-#methodology ul{margin:0 0 8pt; padding-left:15pt}
-#methodology code{font-family:"IBM Plex Mono",monospace; font-size:8.2pt}
+#report .doc-table tr{page-break-inside:avoid}
+#report ul{margin:0 0 8pt; padding-left:15pt}
+#report code, #report .mono{font-family:"IBM Plex Mono",monospace; font-size:7.8pt;
+  color:#1C1C1C; white-space:pre-wrap}
+#report .doc-note{font-size:8.4pt; color:#5C5C61; border-left:2pt solid #C9C9CD;
+  padding-left:8pt; margin:0 0 9pt}
+#report .doc-table.wide td:last-child{width:47%}
+#report h1{page-break-after:avoid}
+#report table{page-break-inside:auto}
 
 /* ---------- sign-in gate ---------- */
 /* Driven by a class on the root element set before the stylesheet loads, so the
@@ -567,143 +573,9 @@ tbody tr:last-child td{border-bottom:0}
   </form>
 </div>
 
-<!-- DOC:BEGIN -->
-<section id="methodology" aria-hidden="true">
-  <header class="doc-hd">
-    <h1>Development Control Regulations — Plot Yield Calculator</h1>
-    <p class="doc-sub">Fields, formulas and calculation methodology</p>
-    <p class="doc-meta">Generated 2026-08-25 &#x00B7; regenerate with <code>python3 build_doc.py</code></p>
-  </header>
-  <p>This note describes what every field in the calculator means, where its value comes from, and how the derived figures are computed. Formulas are given exactly as the tool applies them. Where a value is an assumption rather than a published figure, it is marked as such — see <b>Assumptions and open items</b> at the end.</p>
-  <h1>1. How a calculation flows</h1>
-  <p>Four figures follow from the plot area and its land-use designation. Each is a single multiplication or division; the sequence is what matters.</p>
-  <pre class="doc-formula">plot area          entered, or taken from the plot register
-FAR                from the designation, overridable
-coverage %         from the designation, overridable
-
-Max GFA          = plot area x FAR
-Plot coverage    = plot area x coverage %
-GLA              = Max GFA x GLA share
-Max activities   = floor(GLA / unit area)</pre>
-  <p><b>Plot coverage is a footprint, not a share of the total GFA.</b> It is the floor area the Code permits on the ground floor, expressed as a proportion of the plot. What is left of the plot outside it is the open ground, and that is what decides how much parking can sit on grade.</p>
-  <p><b>Max activities is a count, not an area.</b> The division is floored, because a partial tenancy is not a tenancy. It is a ceiling on how many separate activities the leasable area supports at the minimum unit size — not a target.</p>
-  <h1>2. Input fields</h1>
-  <table class="doc-table"><thead><tr>
-    <th>Field</th>
-    <th>Where the value comes from</th>
-    <th>How it is used</th>
-  </tr></thead><tbody>
-    <tr><td>Plot</td><td>The plot register: 66 plots, each with its sector/plot address, district, DevCode and area. Selecting one fills the plot area.</td><td>Convenience only. Typing an area by hand returns this to manual entry, so a figure is never filed against the wrong plot.</td></tr>
-    <tr><td>Plot size</td><td>Entered, or filled from the register. In m<sup>2</sup>.</td><td>The driver of every other figure.</td></tr>
-    <tr><td>Land use / designation</td><td>The Code schedule: 59 designations, each publishing a FAR and a Max Plot Coverage.</td><td>Supplies FAR and coverage. 15 designations publish no FAR and 12 no coverage; those need an override.</td></tr>
-    <tr><td>FAR override</td><td>Typed. A ratio, not a percentage.</td><td>Replaces the designation's FAR. Used when the Code governs a plot by note reference rather than a published figure.</td></tr>
-    <tr><td>Max plot coverage</td><td>The designation, or typed. 0–100 with at most two decimals.</td><td>Sets the ground-floor footprint, and with it the open ground left for parking.</td></tr>
-    <tr><td>GLA share</td><td>Defaults to 75%. <b>Not a Code citation</b> — the worked example's value.</td><td>Converts Max GFA to leasable area.</td></tr>
-    <tr><td>ITC location</td><td>Abu Dhabi or Al Ain, CBD or not.</td><td>Chooses which variant of an ITC class applies, falling back progressively when a class is not split that finely.</td></tr>
-  </tbody></table>
-  <h1>3. Parameters</h1>
-  <p>Each of these has a published or standard value and may be overridden. An override shows the original beside the field and annotates every figure it changed, so a number is never quietly different from the Code.</p>
-  <table class="doc-table"><thead><tr>
-    <th>Parameter</th>
-    <th>Default</th>
-    <th>Meaning</th>
-  </tr></thead><tbody>
-    <tr><td>Unit area per activity</td><td>60 m<sup>2</sup></td><td>The minimum tenancy size. Divides GLA to give the activity ceiling.</td></tr>
-    <tr><td>Area per parking space</td><td>32.5 m<sup>2</sup></td><td>From the standard. Includes the manoeuvring share, which is why it exceeds a bay's own footprint.</td></tr>
-    <tr><td>Usable per basement floor</td><td>75%</td><td>The share of a basement floor that becomes parking, after ramps, cores and plant.</td></tr>
-    <tr><td>Basement floor area</td><td>the plot area</td><td>A basement may use the whole plot; unlike a storey above ground it is not held to the coverage limit. That is why this defaults to the plot and not to the footprint.</td></tr>
-    <tr><td>Required spaces</td><td>from the schedule</td><td>Override when UPPC or ITC has granted a reduction. Replaces the schedule's total.</td></tr>
-  </tbody></table>
-  <h1>4. The activity schedule</h1>
-  <p>Parking is not a property of the plot; it follows from what occupies it. Each row is one activity, and contributes its own parking demand.</p>
-  <table class="doc-table"><thead><tr>
-    <th>Column</th>
-    <th>Meaning</th>
-  </tr></thead><tbody>
-    <tr><td>Activity (DED)</td><td>One of 3,892 DED economic activities, with its ISIC class.</td></tr>
-    <tr><td>Slots</td><td>How many tenancies of this activity. Counts against the activity ceiling.</td></tr>
-    <tr><td>Unit area</td><td>The floor area one slot occupies. Inherited from the parameter, or entered per row — shown as <i>inherited</i> or <i>entered</i>.</td></tr>
-    <tr><td>ITC category</td><td>The ITC class whose rate applies. Mapped automatically from the activity, with a confidence of high, medium or low, and reassignable by hand.</td></tr>
-    <tr><td>Rate / units</td><td>The rate for the resolved class. Classes charged per unit rather than by area show a quantity box here instead, with the per-unit rate beneath it.</td></tr>
-    <tr><td>Bays</td><td>This row's exact contribution, unrounded.</td></tr>
-  </tbody></table>
-  <p><b>Rounding happens once, on the total.</b> Rounding each row up and then adding would charge for part spaces the scheme never needs, and the error compounds with the number of rows:</p>
-  <pre class="doc-formula">2.372 + 5.536 + 5.99  =  13.898  ->  14 spaces      correct
-ceil(2.372) + ceil(5.536) + ceil(5.99)  =  15       wrong</pre>
-  <h1>5. ITC rates</h1>
-  <p>The matrix holds 141 rate codes across 70 classes, each published for a weekday and a weekend. The tool uses a single blended rate on a standard week:</p>
-  <pre class="doc-formula">combined = weekday x (5/7) + weekend x (2/7)
-         = weekday x 71.43% + weekend x 28.57%
-
-rate_total = employee/resident + visitor + truck/bus</pre>
-  <p><b>A rate is not always charged against floor area.</b> Each class names its own driver, and only 63 of the 141 codes are charged against an area at all:</p>
-  <table class="doc-table"><thead><tr>
-    <th>Driver</th>
-    <th>Codes</th>
-    <th>Quantity the rate is charged against</th>
-  </tr></thead><tbody>
-    <tr><td>count</td><td>73</td><td>A number the user supplies: units, bedrooms, seats, students, beds, doctors, berths, taxi bays, invitees, fuelling positions.</td></tr>
-    <tr><td>gfa</td><td>62</td><td>Floor area, per 100 or per 1,000 m<sup>2</sup> of GFA.</td></tr>
-    <tr><td>site</td><td>5</td><td>Site area, per 100 or per 1,000 m<sup>2</sup>.</td></tr>
-    <tr><td>gla</td><td>1</td><td>Leasable area, per 100 m<sup>2</sup>.</td></tr>
-  </tbody></table>
-  <pre class="doc-formula">area-driven   bays = slots x unit area x conversion x rate
-count-driven  bays = quantity x conversion x rate</pre>
-  <p>A count-driven row with no quantity entered contributes nothing and raises a flag, rather than being silently charged by floor area.</p>
-  <h1>6. Parking: open ground first, then basement</h1>
-  <p>A space needs its own area, so the ground left outside the footprint holds only so many. The remainder goes to basement or podium, where a floor is only partly usable.</p>
-  <pre class="doc-formula">spaces required        = ceil( sum of the rows' exact bays )
-total parking area     = spaces required x 32.5
-open ground area       = plot area - plot coverage
-spaces on ground       = min( required, floor(open ground / 32.5) )
-offset spaces          = required - spaces on ground
-offset parking area    = total parking area - on-ground area
-basement floors        = ceil( offset area / (basement floor area x 75%) )</pre>
-  <p><b>Community Retail is the case that forces basement parking, and it follows from the Code rather than a special rule.</b> CR is published at 100% plot coverage, so the footprint is the whole plot, there is no open ground, and every space goes below.</p>
-  <table class="doc-table"><thead><tr>
-    <th></th>
-    <th>general plot</th>
-    <th>Community Retail</th>
-  </tr></thead><tbody>
-    <tr><td>Spaces required</td><td>30</td><td>120</td></tr>
-    <tr><td>Total parking area</td><td>975 m<sup>2</sup></td><td>3,900 m<sup>2</sup></td></tr>
-    <tr><td>Plot / coverage</td><td>1,000 m<sup>2</sup> / 60%</td><td>1,000 m<sup>2</sup> / <b>100%</b></td></tr>
-    <tr><td>Open ground</td><td>400 m<sup>2</sup>, holds 12</td><td><b>none</b></td></tr>
-    <tr><td>On ground</td><td>12</td><td>0</td></tr>
-    <tr><td>In basement/podium</td><td>18, 585 m<sup>2</sup></td><td>120, 3,900 m<sup>2</sup></td></tr>
-    <tr><td>Floors at 75% usable</td><td>1</td><td><b>6</b></td></tr>
-  </tbody></table>
-  <h1>7. Limitations L-3 and L-4</h1>
-  <p>The Regulations cap parking demand at two spaces per 100 m<sup>2</sup> of GFA. The ceiling that puts on a plot is exact:</p>
-  <pre class="doc-formula">ceiling = Max GFA x 2 / 100        spaces</pre>
-  <ul>
-    <li><b>Below 1,600 m<sup>2</sup></b> — limitation <b>L-4</b> bars a use whose demand exceeds the ceiling.</li>
-    <li><b>At or above 1,600 m<sup>2</sup></b> — <b>L-3</b> permits it, but the excess is the developer's responsibility and earns no additional GFA.</li>
-  </ul>
-  <h1>8. Restrictions the tool raises</h1>
-  <table class="doc-table"><thead><tr>
-    <th>Flag</th>
-    <th>Condition</th>
-    <th>Why it matters</th>
-  </tr></thead><tbody>
-    <tr><td>SLOTS</td><td>slots used &amp;gt; activities permitted</td><td>The schedule holds more tenancies than the GLA supports.</td></tr>
-    <tr><td>GFA</td><td>scheduled floor area &amp;gt; Max GFA</td><td>A restriction. The FAR does not permit the floor area, whatever the slot count says.</td></tr>
-    <tr><td>GLA</td><td>scheduled floor area &amp;gt; GLA, within GFA</td><td>A note, not a restriction. Tenancies are let from leasable area, so this is the binding limit in practice — but GLA is itself an assumption, so it is not treated as a cap.</td></tr>
-    <tr><td>QTY</td><td>a count-driven activity has no quantity</td><td>Its parking cannot be counted until the quantity is given.</td></tr>
-    <tr><td>L-4 / L-3</td><td>demand exceeds 2 spaces per 100 m<sup>2</sup> GFA</td><td>Barred below 1,600 m<sup>2</sup>; above it, the excess is the developer's.</td></tr>
-  </tbody></table>
-  <p>The slot count stops standing in for floor area as soon as unit areas vary: six slots at a hand-entered 260 m<sup>2</sup> can sit inside the permitted count and still overrun the plot. The GFA and GLA checks exist because the slot check cannot catch that.</p>
-  <h1>9. Assumptions and open items</h1>
-  <p>Treat the derived figures as working numbers, not cleared outputs.</p>
-  <ul>
-    <li><b>The GLA share of 75% is uncited.</b> It is the worked example's value, not a Code figure. It scales GLA, the activity ceiling, and the GLA restriction.</li>
-    <li><b>The DED to ITC crosswalk is heuristic</b> — authored here, not supplied by the client: 162 activities mapped with high confidence, 2,722 medium, 1,008 low. Every row can be reassigned by hand, and the confidence is shown on each.</li>
-    <li><b>15 designations publish no FAR and 12 no coverage.</b> The Code governs them by note reference, and those notes are not in the data. They need an override.</li>
-    <li><b>An issued DCR report gave AVG. REQUIRED PARKING = 0</b> for a small commercial plot where the ITC rate implies 3 spaces. Not a rounding artefact, and unresolved. It should be raised with whoever owns the DCR generation system before any parking figure is quoted from that source.</li>
-    <li><b>Area per space (32.5 m<sup>2</sup>) and floor efficiency (75%) come from the standard.</b> They replaced earlier stand-ins that had no source behind them.</li>
-  </ul>
-</section>
-<!-- DOC:END -->
+<!-- Filled at print time from the live calculation: a record of one plot, not a
+     static reference, so it can never describe figures the page is not showing. -->
+<section id="report" aria-hidden="true"></section>
 
 <div class="wrap">
 
@@ -2767,6 +2639,196 @@ basement floors        = ceil( offset area / (basement floor area x 75%) )</pre>
     });
   }
 
+  /* ---------- the printed report ------------------------------------------ */
+  /* Built from calc() at print time, so it is a record of the calculation on
+     screen rather than a document that might describe something else. Every
+     derived figure carries its formula with the actual numbers substituted: the
+     point of the sheet is that a reader can check the arithmetic without the
+     tool. */
+  function reportStamp(t){
+    const z = n => String(n).padStart(2, "0");
+    return t.getFullYear() + "-" + z(t.getMonth()+1) + "-" + z(t.getDate())
+         + " " + z(t.getHours()) + ":" + z(t.getMinutes());
+  }
+  function renderReport(){
+    const R = document.getElementById("report");
+    if(!R) return;
+    R.innerHTML = "";
+    const c = calc(), p = c.parking, t = c.sched, plot = currentPlot();
+    const n2 = v => Number.isFinite(v) ? fmt(v, 2) : "—";
+    const n0 = v => Number.isFinite(v) ? fmt(v) : "—";
+    const m2 = v => Number.isFinite(v) ? fmt(v) + " m²" : "—";
+
+    const add = (tag, cls, txt) => { const e = el(tag, cls, txt); R.appendChild(e); return e; };
+    const table = (cls, head, rows) => {
+      const tb = el("table", "doc-table " + (cls || ""));
+      const th = el("thead"), tr = el("tr");
+      head.forEach(h => tr.appendChild(el("th", "", h)));
+      th.appendChild(tr); tb.appendChild(th);
+      const bd = el("tbody");
+      rows.forEach(r => {
+        const row = el("tr");
+        r.forEach(cell => {
+          const td = el("td");
+          if(cell && cell.mono){ const s = el("span","mono", cell.mono); td.appendChild(s); }
+          else td.textContent = (cell === null || cell === undefined) ? "—" : String(cell);
+          row.appendChild(td);
+        });
+        bd.appendChild(row);
+      });
+      tb.appendChild(bd); R.appendChild(tb); return tb;
+    };
+
+    /* ---- heading ---- */
+    const hd = el("header", "doc-hd");
+    hd.appendChild(el("h1", "", "Plot yield calculation"));
+    hd.appendChild(el("p", "doc-sub",
+      plot ? plot.sector_plot_id + (plot.district ? "  ·  " + plot.district : "")
+           : "Manual entry — no plot selected from the register"));
+    hd.appendChild(el("p", "doc-meta", "Generated " + reportStamp(new Date())
+      + "  ·  Development Control Regulations plot yield calculator"));
+    R.appendChild(hd);
+
+    /* ---- inputs ---- */
+    add("h1", "", "Inputs");
+    const ov = k => c.o[k] && c.o[k].overridden ? " (overridden)" : "";
+    const inRows = [];
+    if(plot) inRows.push(["Plot", plot.sector_plot_id,
+      [plot.plot_number ? "plot " + plot.plot_number : null, plot.primary_use,
+       plot.devcode ? "code " + plot.devcode : null].filter(Boolean).join(" · ")]);
+    inRows.push(["Plot size", m2(c.plot), plot ? "from the register" : "entered"]);
+    inRows.push(["Land use", c.dRow ? c.dRow.designation : "—",
+                 c.dRow ? c.dRow.name : ""]);
+    inRows.push(["Floor area ratio (FAR)", Number.isFinite(c.far) ? fmt(c.far, 3) : "—",
+                 (c.o.far && c.o.far.overridden) ? "entered, the Code gives "
+                   + fmt(c.o.far.original, 3) : "from the Code"]);
+    inRows.push(["Max plot coverage", n2(c.pcPct) + "%",
+                 (c.o.pcPct && c.o.pcPct.overridden) ? "entered, the Code gives "
+                   + n2(c.o.pcPct.original) + "%" : "from the Code"]);
+    inRows.push(["GLA share of Max GFA", n2(c.glaPct) + "%",
+                 "assumption, not a Code figure" + ov("glaPct")]);
+    inRows.push(["Unit area per activity", m2(c.unit), "minimum tenancy size" + ov("unit")]);
+    inRows.push(["Area per parking space", n2(p.per) + " m²",
+                 "from the standard" + ov("spaceArea")]);
+    inRows.push(["Usable per basement floor", n2(p.useP) + "%",
+                 "after ramps, cores and plant" + ov("floorUse")]);
+    inRows.push(["Basement floor area", m2(p.fArea),
+                 "a basement is not held to the coverage limit" + ov("floorArea")]);
+    inRows.push(["ITC location", state.itcLoc || "—", "selects the rate variant"]);
+    if(c.o.spaces && c.o.spaces.overridden)
+      inRows.push(["Required spaces", n0(p.need),
+                   "overridden; the schedule gives " + n0(c.o.spaces.original)]);
+    table("", ["Field", "Value", "Source"], inRows);
+
+    /* ---- derived ---- */
+    add("h1", "", "Results");
+    add("p", "", "Each figure below is derived from the inputs above. The formula column "
+                 + "shows the arithmetic with those values substituted.");
+    table("wide", ["Result", "Value", "How it is calculated"], [
+      ["Max GFA", m2(c.maxGFA),
+       { mono: "plot size × FAR  =  " + n0(c.plot) + " × " + fmt(c.far, 3) }],
+      ["Plot coverage", m2(c.cover),
+       { mono: "plot size × coverage %  =  " + n0(c.plot) + " × " + n2(c.pcPct) + "%" }],
+      ["Gross leasable area", m2(c.gla),
+       { mono: "Max GFA × GLA share  =  " + n0(c.maxGFA) + " × " + n2(c.glaPct) + "%" }],
+      ["Max allowed activities", n0(c.act) + " " + plural(c.act, "activity", "activities"),
+       { mono: "floor(GLA ÷ unit area)  =  floor(" + n0(c.gla) + " ÷ " + n0(c.unit)
+               + ")  =  floor(" + fmt(c.actRaw, 3) + ")" }],
+      ["L-3 / L-4 space ceiling",
+       Number.isFinite(c.maxGFA) ? n2(c.maxGFA * 2 / 100) + " spaces" : "—",
+       { mono: "Max GFA × 2 ÷ 100  =  " + n0(c.maxGFA) + " × 2 ÷ 100" }],
+    ]);
+
+    /* ---- schedule ---- */
+    add("h1", "", "Scheduled activities");
+    if(!SCHED.length){
+      add("p", "", "No activities scheduled, so no parking demand is derived.");
+    } else {
+      table("", ["Activity", "Slots", "Unit area", "ITC class", "Rate", "Charged per", "Bays"],
+        SCHED.map(r => {
+          const pk = rowParking(r, c.unit), u = rowUnit(r, c.unit);
+          return [ r.act ? r.act.name : "—",
+                   n0(num(r.slots) || 0),
+                   m2(u.area),
+                   pk.code ? pk.code.code : "—",
+                   Number.isFinite(pk.rate) ? fmt(pk.rate, 3) : "—",
+                   pk.code ? (pk.code.driver_kind === "count"
+                              ? (r.qty === "" ? "quantity not given" : n0(num(r.qty)) + " × "
+                                 + pk.code.unit_label.toLowerCase())
+                              : pk.code.driver_label) : "—",
+                   Number.isFinite(pk.raw) ? fmt(pk.raw, 3) : "—" ];
+        }));
+      add("p", "doc-note", "Slots used " + n0(t.slots) + " of "
+        + (Number.isFinite(t.allowed) ? n0(t.allowed) : "—")
+        + "  ·  floor area consumed " + m2(t.floor)
+        + (Number.isFinite(t.capGFA) ? " of " + m2(t.capGFA) + " permitted" : ""));
+    }
+
+    /* ---- parking ---- */
+    add("h1", "", "Parking");
+    const noGround = p.open === 0;
+    table("wide", ["Result", "Value", "How it is calculated"], [
+      ["Spaces required", n0(p.need) + " " + plural(p.need, "space", "spaces"),
+       { mono: "ceil(sum of the rows' bays)  =  ceil(" + fmt(t.raw, 3) + ")" }],
+      ["Total parking area required", m2(p.needArea),
+       { mono: "spaces × area per space  =  " + n0(p.need) + " × " + n2(p.per) }],
+      ["Open ground area", noGround ? "none" : m2(p.open),
+       { mono: "plot size − plot coverage  =  " + n0(c.plot) + " − " + n0(c.cover) }],
+      ["Spaces on ground", noGround ? "none" : n0(p.onGround),
+       { mono: noGround ? "no open ground: the footprint covers the plot"
+             : "min(required, floor(open ground ÷ area per space))  =  min("
+               + n0(p.need) + ", floor(" + n0(p.open) + " ÷ " + n2(p.per) + "))" }],
+      ["Offset spaces required", n0(p.basement),
+       { mono: "required − on ground  =  " + n0(p.need) + " − " + n0(p.onGround) }],
+      ["Offset parking area required", m2(p.basementArea),
+       { mono: "total area − on-ground area  =  " + n0(p.needArea) + " − "
+               + n0(p.gradeArea !== undefined ? p.gradeArea : p.onGround * p.per) }],
+      ["In basement / podium parking", n0(p.basement) + " " + plural(p.basement,"space","spaces"),
+       { mono: "the offset spaces: what the open ground could not take" }],
+      ["Basement / podium parking floors", n0(p.floors),
+       { mono: "ceil(offset area ÷ (floor area × usable %))  =  ceil("
+               + n0(p.basementArea) + " ÷ (" + n0(p.fArea) + " × " + n2(p.useP)
+               + "%))  =  ceil(" + fmt(p.floorsRaw, 3) + ")" }],
+    ]);
+    if(p.isCR && noGround)
+      add("p", "doc-note", "Community Retail is published at 100% plot coverage, so there is "
+        + "no open ground and every space goes below. This follows from the Code, not from a "
+        + "special rule for parking.");
+
+    /* ---- what the tool flagged ---- */
+    const flags = [];
+    if(t.overSlots) flags.push("The schedule uses " + n0(t.slots) + " slots but only "
+      + n0(t.allowed) + " activities are permitted.");
+    if(t.overFloor) flags.push("The scheduled floor area of " + m2(t.floor)
+      + " exceeds the " + m2(t.capGFA) + " the FAR permits.");
+    else if(t.overGLA) flags.push("The scheduled floor area of " + m2(t.floor)
+      + " fits the GFA but exceeds the " + m2(t.capGLA) + " of leasable area.");
+    if(t.incomplete) flags.push(n0(t.incomplete) + " activity charged per unit has no quantity, "
+      + "so its parking is not counted.");
+    const effRate = t.raw > 0 && c.maxGFA > 0 ? t.raw / c.maxGFA * 100 : NaN;
+    if(Number.isFinite(effRate) && effRate > 2 + 1e-9)
+      flags.push("Demand is " + n2(effRate) + " spaces per 100 m² of GFA, over the cap of 2. "
+        + (c.plot < 1600 ? "Limitation L-4 bars this on a plot under 1,600 m²."
+                         : "L-3 permits it, but the excess is the developer's responsibility."));
+    if(flags.length){
+      add("h1", "", "Restrictions");
+      const ul = el("ul");
+      flags.forEach(f => ul.appendChild(el("li", "", f)));
+      R.appendChild(ul);
+    }
+
+    /* ---- overrides ---- */
+    const ovs = activeOverrides(c.o);
+    if(ovs.length){
+      add("h1", "", "Values overridden");
+      table("", ["Parameter", "Published", "Used"],
+        ovs.map(x => [x.label, x.fmt ? x.fmt(x.from) : String(x.from),
+                                x.fmt ? x.fmt(x.to)   : String(x.to)]));
+    }
+    add("p", "doc-meta", "Figures are working numbers, not cleared outputs. The GLA share and "
+      + "the DED-to-ITC mapping are assumptions; see the project README.");
+  }
+
   function wire(){
     wireTheme();
     wireGate();
@@ -2780,6 +2842,8 @@ basement floors        = ceil( offset area / (basement floor area x 75%) )</pre>
     const TAB_TITLE = document.title;
     const restoreTitle = ()=>{ document.title = TAB_TITLE; };
     window.addEventListener("afterprint", restoreTitle);
+    // Printing from the browser's own menu has to give the same sheet.
+    window.addEventListener("beforeprint", renderReport);
     const pd = document.getElementById("printDoc");
     if(pd) pd.addEventListener("click", ()=>{
       const t = new Date(), z = n => String(n).padStart(2, "0");
@@ -2791,6 +2855,7 @@ basement floors        = ceil( offset area / (basement floor area x 75%) )</pre>
       // the document describes. It is also the key the saved JSON uses.
       const base = plot ? String(plot.sector_plot_id).replace(/[^A-Za-z0-9_.-]+/g, "_")
                         : "manual";
+      renderReport();
       document.title = base + "_" + stamp;
       // afterprint is not fired by every browser; do not leave the tab renamed.
       setTimeout(restoreTitle, 60000);
