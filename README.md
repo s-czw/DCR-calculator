@@ -142,6 +142,15 @@ values never looks like one derived from a hand-entered assumption.
 field and every formula — nine sections over four pages. "Save as PDF" is a destination in that
 dialog on every current browser, so no PDF library ships in the page.
 
+The suggested filename is `<sector/plot address>_<yyyymmddHHmmss>`, or `manual_<stamp>` when no
+plot is selected — for example `W31_P1_20260825200905`. Browsers take that name from
+`document.title`, so the title is swapped before printing and restored afterwards. It is a
+*suggestion*: the dialog still lets the name be changed.
+
+The address is used rather than the bare plot number because the register holds the same plot
+number in more than one sector — `MZW22_C1` and `RD132_C1` — so `C1` alone would not say which plot
+a document describes. It also matches the key the saved JSON uses.
+
 `build_doc.py` is the single source. It holds the content once and renders it twice:
 
 ```bash
