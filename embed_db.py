@@ -81,6 +81,13 @@ def snapshot(db_path):
         "plot": [dict(r) for r in con.execute(
             "SELECT id, plot_number, sector_plot_id, district, primary_use, "
             "devcode, devcode_cat, area FROM plot ORDER BY sector_plot_id")],
+        # 2,000-odd rows across 20 plots; the picker reads only the selected
+        # plot's, but the snapshot has to carry them all.
+        "plot_uad": [dict(r) for r in con.execute(
+            "SELECT sector_plot_id, activity_code, activity_name, variant_en, variant_ar, "
+            "licence_type, luc_code, category, transport_mode, found_walk_700m, "
+            "found_drive_10m, inclusion, proposed, rational, identifier, identifier_logic "
+            "FROM plot_uad ORDER BY sector_plot_id, id")],
         "weighting": [dict(r) for r in
                       con.execute("SELECT period, days, share FROM weighting")],
         # 3,900-odd rows; the picker searches these when SQLite is unavailable

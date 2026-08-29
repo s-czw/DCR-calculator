@@ -136,6 +136,43 @@ The point is that an entered value always reads as a deviation, so a figure deri
 values never looks like one derived from a hand-entered assumption.
 
 
+## Per-plot UAD activities
+
+Each plot has its own workbook, `Plot_<sector/plot id>.xls`, holding 260 candidate activities.
+Two filters are applied at build time and only the survivors are loaded:
+
+```
+Plot_Proposed_UAD                 = Yes
+UAD_Activity_Inclusion_Exclusion  = Include
+```
+
+That keeps **2,061 activities across 20 plots**. The excluded rows are not loaded; the workbooks
+stay outside the repository as the record of what was filtered out.
+
+```bash
+python3 build_db.py --uad-only            # refresh just plot_uad
+python3 build_db.py --uad-only <folder>   # from somewhere else
+```
+
+`--uad-only` exists because the UAD workbooks are reissued on their own schedule, and a full
+rebuild needs the ITC matrix, the designation index and the DED list — client files that are not
+kept here. Adding one table should not require all of them.
+
+**Linking is by filename, and the two spellings differ.** The file writes spaces as underscores
+while the register keeps them, and keeps a trailing underscore where the plot id has one:
+
+| Workbook | Register |
+|---|---|
+| `Plot_29_3_11_11_.xls` | `29_3_11_11_` |
+| `Plot_BAYNOUNAH_CITY_T1.xls` | `BAYNOUNAH CITY_T1` |
+
+19 of the 20 link. **`65_3_16_5_` has no entry in the 66-plot register**, so its activities are
+loaded under the filename id but the plot cannot be selected until it is added to `DCR_plots.xlsx`.
+
+The activities reach the export JSON under `uadActivities`, with the filters recorded alongside in
+`uadFilters` so a consumer can see what was applied. Both are **additions** — every block that was
+there before is unchanged.
+
 ## The exported calculation report
 
 **Export PDF**, beside Save, prints a record of the calculation currently on screen — one plot,
@@ -145,7 +182,8 @@ time, not authored, so it cannot describe figures the page is not showing.
 | Section | |
 |---|---|
 | Inputs | every field, its value, and where that value came from — Code, register, standard or assumption |
-| Results | Max GFA, plot coverage, GLA, the activity ceiling and the L-3/L-4 space ceiling |
+| Results | Max GFA, plot coverage, GLA, the activity ceiling, the worker ceiling and the L-3/L-4 space ceiling |
+| UAD activities | the plot's filtered UAD list, where it has one |
 | Scheduled activities | each row with its slots, unit area, ITC class, rate, what the rate is charged against, and its exact bays |
 | Parking | required spaces through to basement floors |
 | Restrictions | whatever the tool flagged, in words |

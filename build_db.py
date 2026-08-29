@@ -27,6 +27,17 @@ DEFAULT_XLS = os.path.join(SRC, "ITC_Trip & Parking Calculation Sheet_V1.xls")
 DEFAULT_DESIG = os.path.join(SRC, "Designation_Index.xlsx")
 DEFAULT_DED = os.path.join(SRC, "DED \u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0627\u0646\u0634\u0637\u0629 (2026 \u064a\u0648\u0644\u064a\u0648).xlsx")
 DEFAULT_PLOTS = os.path.join(SRC, "DCR_plots.xlsx")
+# One workbook per plot, named Plot_<sector/plot id>.xls with spaces written as
+# underscores. Client data, so it lives outside the repository like the rest.
+DEFAULT_UAD = os.environ.get("DCR_UAD_DIR") or os.path.join(HERE, "data",
+                                                            "20260824_Full_20_Plots")
+# Row 5 onwards; rows 1-4 are a disclaimer and a blank.
+UAD_HEADER_ROW = 4
+UAD_COLS = ["ACTIVITYCODE", "MAIN_ACTIVITY_NAME", "ACTIVITY_VARIANTS_EN",
+            "ACTIVITY_VARIANTS_Ar", "LICENSETYPEEN", "UAD_LUC_Code", "UAD_Category",
+            "UAD_Main_Transportation_Mode", "Activity_Found_Walking_700m",
+            "Activity_Found_Driving_10min", "UAD_Activity_Inclusion_Exclusion",
+            "Plot_Proposed_UAD", "Rational", "Identifier", "IdentifeirLogic"]
 
 # A standard week: five weekdays, two weekend days.
 WEEK = {"weekday": 5.0, "weekend": 2.0}
@@ -154,6 +165,31 @@ CREATE TABLE plot (
     area          REAL
 );
 CREATE INDEX idx_plot_sector ON plot (sector_plot_id);
+
+-- Per-plot UAD activities, one row per activity that passed BOTH filters:
+--   Plot_Proposed_UAD = Yes   AND   UAD_Activity_Inclusion_Exclusion = Include
+-- The excluded rows are not loaded; the workbooks stay outside the repository as
+-- the record of what was filtered out.
+CREATE TABLE plot_uad (
+    id              INTEGER PRIMARY KEY,
+    sector_plot_id  TEXT NOT NULL,
+    activity_code   TEXT,
+    activity_name   TEXT,
+    variant_en      TEXT,
+    variant_ar      TEXT,
+    licence_type    TEXT,
+    luc_code        TEXT,
+    category        TEXT,
+    transport_mode  TEXT,
+    found_walk_700m TEXT,
+    found_drive_10m TEXT,
+    inclusion       TEXT,
+    proposed        TEXT,
+    rational        TEXT,
+    identifier      TEXT,
+    identifier_logic TEXT
+);
+CREATE INDEX idx_uad_plot ON plot_uad (sector_plot_id);
 
 CREATE TABLE coefficient (key TEXT PRIMARY KEY, value REAL NOT NULL, note TEXT);
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -405,6 +441,48 @@ def parse(grid):
     return out
 
 
+def load_uad(folder, known_ids):
+    """Per-plot UAD activities, keeping only rows that pass both filters."""
+    import glob
+    if not folder or not os.path.isdir(folder):
+        return [], []
+    import xlrd
+    # The filename writes spaces as underscores; the register keeps the spaces, and
+    # keeps a trailing underscore where the plot id has one. Normalise to compare.
+    lookup = {r.replace(" ", "_"): r for r in known_ids}
+    out, unmatched = [], []
+    for f in sorted(glob.glob(os.path.join(folder, "Plot_*.xls"))):
+        stem = os.path.basename(f)[len("Plot_"):-len(".xls")]
+        plot_id = lookup.get(stem)
+        if plot_id is None:
+            unmatched.append(stem)
+            plot_id = stem          # keep the data; it simply cannot be picked yet
+        sh = xlrd.open_workbook(f).sheet_by_index(0)
+        hdr = [norm(sh.cell_value(UAD_HEADER_ROW, c)) or "" for c in range(sh.ncols)]
+        ix = {name: hdr.index(name) for name in UAD_COLS if name in hdr}
+        for want in ("Plot_Proposed_UAD", "UAD_Activity_Inclusion_Exclusion"):
+            if want not in ix:
+                sys.exit(f"{os.path.basename(f)}: no {want} column; headers were {hdr}")
+        for r in range(UAD_HEADER_ROW + 1, sh.nrows):
+            cell = lambda n: norm(sh.cell_value(r, ix[n])) if n in ix else None
+            if (cell("Plot_Proposed_UAD") or "").lower() != "yes":
+                continue
+            if (cell("UAD_Activity_Inclusion_Exclusion") or "").lower() != "include":
+                continue
+            out.append(dict(
+                sector_plot_id=plot_id, activity_code=cell("ACTIVITYCODE"),
+                activity_name=cell("MAIN_ACTIVITY_NAME"), variant_en=cell("ACTIVITY_VARIANTS_EN"),
+                variant_ar=cell("ACTIVITY_VARIANTS_Ar"), licence_type=cell("LICENSETYPEEN"),
+                luc_code=cell("UAD_LUC_Code"), category=cell("UAD_Category"),
+                transport_mode=cell("UAD_Main_Transportation_Mode"),
+                found_walk_700m=cell("Activity_Found_Walking_700m"),
+                found_drive_10m=cell("Activity_Found_Driving_10min"),
+                inclusion=cell("UAD_Activity_Inclusion_Exclusion"),
+                proposed=cell("Plot_Proposed_UAD"), rational=cell("Rational"),
+                identifier=cell("Identifier"), identifier_logic=cell("IdentifeirLogic")))
+    return out, unmatched
+
+
 def load_plots(path):
     """The plot register: one row per plot, keyed by its sector/plot address."""
     from openpyxl import load_workbook
@@ -465,7 +543,79 @@ def load_plots(path):
     return out
 
 
+UAD_DDL = """
+CREATE TABLE plot_uad (
+    id              INTEGER PRIMARY KEY,
+    sector_plot_id  TEXT NOT NULL,
+    activity_code   TEXT,
+    activity_name   TEXT,
+    variant_en      TEXT,
+    variant_ar      TEXT,
+    licence_type    TEXT,
+    luc_code        TEXT,
+    category        TEXT,
+    transport_mode  TEXT,
+    found_walk_700m TEXT,
+    found_drive_10m TEXT,
+    inclusion       TEXT,
+    proposed        TEXT,
+    rational        TEXT,
+    identifier      TEXT,
+    identifier_logic TEXT
+);
+CREATE INDEX idx_uad_plot ON plot_uad (sector_plot_id);
+"""
+
+UAD_INSERT = (
+    "INSERT INTO plot_uad (sector_plot_id, activity_code, activity_name, variant_en, "
+    "variant_ar, licence_type, luc_code, category, transport_mode, found_walk_700m, "
+    "found_drive_10m, inclusion, proposed, rational, identifier, identifier_logic) VALUES "
+    "(:sector_plot_id,:activity_code,:activity_name,:variant_en,:variant_ar,:licence_type,"
+    ":luc_code,:category,:transport_mode,:found_walk_700m,:found_drive_10m,:inclusion,"
+    ":proposed,:rational,:identifier,:identifier_logic)")
+
+
+def uad_only(folder):
+    """Refresh just plot_uad on the existing database.
+
+    The UAD workbooks are reissued on their own schedule, and the rate matrix and
+    DED list they would otherwise be rebuilt alongside are client files that are
+    not kept here. Rebuilding everything to add one table would mean needing all
+    of them present; this needs only the workbooks that changed.
+    """
+    if not os.path.exists(DB):
+        sys.exit(f"{DB} not found - a full build has to run first")
+    con = sqlite3.connect(DB)
+    con.row_factory = sqlite3.Row
+    known = [r["sector_plot_id"] for r in con.execute("SELECT sector_plot_id FROM plot")]
+    rows, unmatched = load_uad(folder, known)
+    if not rows:
+        sys.exit(f"no UAD rows found in {folder}")
+    con.executescript("DROP TABLE IF EXISTS plot_uad;")
+    con.executescript(UAD_DDL)
+    con.executemany(UAD_INSERT, rows)
+    con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?,?)",
+                ("uad_dir", os.path.basename(os.path.normpath(folder))))
+    con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?,?)",
+                ("uad_rows", str(len(rows))))
+    n_plots = len({r["sector_plot_id"] for r in rows})
+    con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?,?)",
+                ("uad_plots", str(n_plots)))
+    con.commit()
+    print(f"  {len(rows):,} UAD activities kept across {n_plots} plots")
+    print(f"  filters: Plot_Proposed_UAD = Yes and UAD_Activity_Inclusion_Exclusion = Include")
+    if unmatched:
+        print(f"  no register entry for {unmatched} - loaded under the filename id, but the "
+              f"plot cannot be selected until it is added to DCR_plots.xlsx")
+    return len(rows)
+
+
 def main():
+    if "--uad-only" in sys.argv:
+        rest = [a for a in sys.argv[1:] if a != "--uad-only"]
+        uad_only(rest[0] if rest else DEFAULT_UAD)
+        return
+
     xls = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_XLS
     if not os.path.exists(xls):
         sys.exit(f"not found: {xls}")
@@ -507,6 +657,8 @@ def main():
     ded = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_DED
     plots_src = sys.argv[4] if len(sys.argv) > 4 else DEFAULT_PLOTS
     plots = load_plots(plots_src) if os.path.exists(plots_src) else []
+    uad_dir = sys.argv[5] if len(sys.argv) > 5 else DEFAULT_UAD
+    uad, uad_unmatched = load_uad(uad_dir, [p["sector_plot_id"] for p in plots])
     acts = load_activities(ded) if os.path.exists(ded) else []
     con.executemany(
         "INSERT INTO ded_activity (activity_id, name, section, division, isic_class, "
@@ -530,6 +682,13 @@ def main():
         "INSERT INTO plot (plot_number, sector_plot_id, district, primary_use, "
         "devcode, devcode_cat, area) VALUES (:plot_number,:sector_plot_id,:district,"
         ":primary_use,:devcode,:devcode_cat,:area)", plots)
+    con.executemany(
+        "INSERT INTO plot_uad (sector_plot_id, activity_code, activity_name, variant_en, "
+        "variant_ar, licence_type, luc_code, category, transport_mode, found_walk_700m, "
+        "found_drive_10m, inclusion, proposed, rational, identifier, identifier_logic) VALUES "
+        "(:sector_plot_id,:activity_code,:activity_name,:variant_en,:variant_ar,:licence_type,"
+        ":luc_code,:category,:transport_mode,:found_walk_700m,:found_drive_10m,:inclusion,"
+        ":proposed,:rational,:identifier,:identifier_logic)", uad)
     con.executemany("INSERT INTO coefficient (key, value, note) VALUES (?,?,?)", [
         ("gla_pct", 75, "GLA = Max GFA x this %. User-editable; not a Code citation."),
         ("coverage_pct_default", 60,
@@ -547,9 +706,21 @@ def main():
         ("activities", str(len(acts))),
         ("plot_file", os.path.basename(plots_src) if plots else "(none)"),
         ("plots", str(len(plots))),
+        ("uad_dir", os.path.basename(os.path.normpath(uad_dir)) if uad else "(none)"),
+        ("uad_rows", str(len(uad))),
+        ("uad_plots", str(len({r["sector_plot_id"] for r in uad}))),
         ("built", date.today().isoformat()),
     ])
     con.commit()
+
+    if uad:
+        n_plots = len({r["sector_plot_id"] for r in uad})
+        print(f"  UAD: {len(uad):,} activities kept across {n_plots} plots "
+              f"(Plot_Proposed_UAD = Yes and UAD_Activity_Inclusion_Exclusion = Include)")
+    if uad_unmatched:
+        print(f"  UAD workbooks with no plot in the register: {uad_unmatched} "
+              f"- their activities are loaded under the filename id, but the plot "
+              f"cannot be selected until it is added to the register")
 
     print(f"{DB}  <-  {os.path.basename(xls)}")
     for p in sorted(counts):

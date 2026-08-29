@@ -746,7 +746,7 @@ tbody tr:last-child td{border-bottom:0}
     <div style="display:flex; flex-direction:column; gap:22px; min-width:0">
 
       <section class="panel">
-        <div class="panel-hd"><h2>Derivation</h2><span class="tag">4 steps</span></div>
+        <div class="panel-hd"><h2>Derivation</h2><span class="tag">5 steps</span></div>
         <div class="ladder" id="ladder"><div class="boot" id="bootMsg">opening database&#x2026;</div></div>
         <div class="flags" id="flags"></div>
       </section>
@@ -946,6 +946,7 @@ tbody tr:last-child td{border-bottom:0}
   let db = null, sqlLive = false;
   let ITC = [], LU = [], META = {};   /* LU = base-district designations */
   let PLOTS = [];                     /* the plot register: pick instead of typing */
+  let UAD = [];                       /* per-plot UAD activities, already filtered */
   const state = { basis:"combined", itcLoc:"AD-CBD", groupOrder:[] };
 
   /* ---------- helpers --------------------------------------------------- */
@@ -987,6 +988,10 @@ tbody tr:last-child td{border-bottom:0}
     q("SELECT period, days FROM weighting").forEach(r=>{
       if(r.period === "weekday" || r.period === "weekend") WEEK[r.period] = r.days;
     });
+    UAD = q("SELECT sector_plot_id, activity_code, activity_name, variant_en, variant_ar, "
+            + "licence_type, luc_code, category, transport_mode, found_walk_700m, "
+            + "found_drive_10m, inclusion, proposed, rational, identifier, identifier_logic "
+            + "FROM plot_uad ORDER BY sector_plot_id, id");
     PLOTS = q("SELECT id, plot_number, sector_plot_id, district, primary_use, "
               + "devcode, devcode_cat, area FROM plot ORDER BY sector_plot_id");
     LU = q("SELECT id, category, designation, name, far, coverage, remarks, source "
@@ -1005,6 +1010,7 @@ tbody tr:last-child td{border-bottom:0}
     });
     LU = (SNAPSHOT.land_use || []).map(r=>Object.assign({},r));
     PLOTS = (SNAPSHOT.plot || []).map(r=>Object.assign({},r));
+    UAD = (SNAPSHOT.plot_uad || []).map(r=>Object.assign({},r));
     META = Object.assign({}, SNAPSHOT.meta);
     const c = SNAPSHOT.coefficient;
     if(c.gla_pct!=null)              COEF.glaPct          = c.gla_pct;
@@ -1114,6 +1120,7 @@ tbody tr:last-child td{border-bottom:0}
      Every one of these has an original from the Code, the standard or the plot.
      The input stays empty while the original applies, showing it as placeholder
      text, so an entered value is always visibly a deviation.                  */
+  const WORKER_AREA  = 13;     // m2 of GFA per worker
   const SPACE_AREA   = 32.5;   // m2 per parking space
   const FLOOR_USABLE = 75;     // % of a basement floor that is usable
 
@@ -1205,13 +1212,18 @@ tbody tr:last-child td{border-bottom:0}
     const actRaw = Number.isFinite(gla) && unit > 0 ? gla/unit : NaN;
     const act    = Number.isFinite(actRaw) ? Math.floor(actRaw) : NaN;
 
+    // Max workers the GFA supports, at 13 m2 a worker. Floored for the same reason
+    // as the activity count: a part of a worker is not one.
+    const workRaw = Number.isFinite(maxGFA) && WORKER_AREA > 0 ? maxGFA/WORKER_AREA : NaN;
+    const workers = Number.isFinite(workRaw) ? Math.floor(workRaw) : NaN;
+
     const sched  = schedTotals(act, maxGFA, gla);
     o.spaces     = pick("spaces", sched.baysCeil);
     const parking = parkingPlan(plot, cover, o, dRow);
 
     paintPlaceholders(o);
     return { plot, dRow, far, pcPct, glaPct, unit, o,
-             maxGFA, cover, gla, actRaw, act, sched, parking };
+             maxGFA, cover, gla, actRaw, act, workRaw, workers, sched, parking };
   }
 
   /* ---------- parking: open ground first, then basement -----------------
@@ -1757,6 +1769,14 @@ tbody tr:last-child td{border-bottom:0}
       raw: Number.isFinite(c.actRaw) ? "= " + fmt(c.actRaw,3) + " \u2192 floor" : "",
       note: recalcNote(c.o, ["unit","glaPct","far"]) }));
 
+    L.appendChild(stepRow({ n:5, cls:"count", title:"Max number of workers", abbr:"WRK",
+      sub: "Max GFA divided by " + fmt(WORKER_AREA) + " m\u00b2 a worker, rounded down",
+      formula: (Number.isFinite(c.maxGFA)?fmt(c.maxGFA):"Max GFA") + " \u00f7 " + fmt(WORKER_AREA),
+      value: Number.isFinite(c.workers)?fmt(c.workers):"\u2014",
+      unit: plural(c.workers,"worker","workers"),
+      raw: Number.isFinite(c.workRaw) ? "= " + fmt(c.workRaw,3) + " \u2192 floor" : "",
+      note: recalcNote(c.o, ["far"]) }));
+
     renderSchedFoot(c.act, c.maxGFA, c.gla);
     renderPark(c);
     renderOverrides(c);
@@ -2166,6 +2186,11 @@ tbody tr:last-child td{border-bottom:0}
   function plotById(id){
     return PLOTS.find(p => String(p.sector_plot_id) === String(id)) || null;
   }
+  /* The workbooks are already filtered at build time to Plot_Proposed_UAD = Yes and
+     UAD_Activity_Inclusion_Exclusion = Include, so everything held here is included */
+  function uadFor(id){
+    return id ? UAD.filter(r => String(r.sector_plot_id) === String(id)) : [];
+  }
   function currentPlot(){
     const sel = document.getElementById("plotPick");
     return sel ? plotById(sel.value) : null;
@@ -2436,6 +2461,7 @@ tbody tr:last-child td{border-bottom:0}
       derived: {
         maxGFA: c.maxGFA, plotCoverage: c.cover, gla: c.gla,
         maxActivities: c.act, unitArea: c.unit,
+        maxNoWorkers: c.workers, workerArea: WORKER_AREA,
         floorAreaUsed: c.sched.floor,
         overGFA: !!c.sched.overFloor, overGLA: !!c.sched.overGLA,
         overSlots: !!c.sched.overSlots
@@ -2452,6 +2478,22 @@ tbody tr:last-child td{border-bottom:0}
                  quantity: r.qty === "" ? null : num(r.qty),
                  bays: Number.isFinite(pk.raw) ? pk.raw : null };
       }),
+      // The plot's UAD activities, as filtered from its workbook. Additive: every
+      // block above is unchanged, so a consumer reading the old shape still works.
+      uadActivities: (function(){
+        const p = currentPlot();
+        return p ? uadFor(p.sector_plot_id).map(r => ({
+          activityCode: r.activity_code, activityName: r.activity_name,
+          variantEn: r.variant_en, variantAr: r.variant_ar,
+          licenceType: r.licence_type, lucCode: r.luc_code, category: r.category,
+          transportMode: r.transport_mode,
+          foundWalking700m: r.found_walk_700m, foundDriving10min: r.found_drive_10m,
+          inclusion: r.inclusion, proposedUAD: r.proposed,
+          rational: r.rational, identifier: r.identifier,
+          identifierLogic: r.identifier_logic })) : [];
+      })(),
+      uadFilters: { Plot_Proposed_UAD: "Yes",
+                    UAD_Activity_Inclusion_Exclusion: "Include" },
       parking: {
         spacesRequired: c.parking.need, areaPerSpace: c.parking.per,
         totalArea: c.parking.needArea,
@@ -2734,6 +2776,10 @@ tbody tr:last-child td{border-bottom:0}
       ["Max allowed activities", n0(c.act) + " " + plural(c.act, "activity", "activities"),
        { mono: "floor(GLA ÷ unit area)  =  floor(" + n0(c.gla) + " ÷ " + n0(c.unit)
                + ")  =  floor(" + fmt(c.actRaw, 3) + ")" }],
+      ["Max number of workers", (Number.isFinite(c.workers) ? n0(c.workers) : "—")
+        + " " + plural(c.workers, "worker", "workers"),
+       { mono: "floor(Max GFA ÷ " + fmt(WORKER_AREA) + ")  =  floor(" + n0(c.maxGFA)
+               + " ÷ " + fmt(WORKER_AREA) + ")  =  floor(" + fmt(c.workRaw, 3) + ")" }],
       ["L-3 / L-4 space ceiling",
        Number.isFinite(c.maxGFA) ? n2(c.maxGFA * 2 / 100) + " spaces" : "—",
        { mono: "Max GFA × 2 ÷ 100  =  " + n0(c.maxGFA) + " × 2 ÷ 100" }],
@@ -2762,6 +2808,18 @@ tbody tr:last-child td{border-bottom:0}
         + (Number.isFinite(t.allowed) ? n0(t.allowed) : "—")
         + "  ·  floor area consumed " + m2(t.floor)
         + (Number.isFinite(t.capGFA) ? " of " + m2(t.capGFA) + " permitted" : ""));
+    }
+
+    /* ---- UAD activities ---- */
+    const uad = plot ? uadFor(plot.sector_plot_id) : [];
+    if(uad.length){
+      add("h1", "", "UAD activities");
+      add("p", "", "From this plot's workbook, filtered to Plot_Proposed_UAD = Yes and "
+                 + "UAD_Activity_Inclusion_Exclusion = Include. " + uad.length + " "
+                 + plural(uad.length, "activity", "activities") + " kept.");
+      table("", ["Code", "Activity", "UAD category", "Licence", "LUC"],
+        uad.map(r => [r.activity_code, r.activity_name, r.category,
+                      r.licence_type, r.luc_code]));
     }
 
     /* ---- parking ---- */
