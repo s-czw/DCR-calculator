@@ -169,8 +169,10 @@ while the register keeps them, and keeps a trailing underscore where the plot id
 19 of the 20 link. **`65_3_16_5_` has no entry in the 66-plot register**, so its activities are
 loaded under the filename id but the plot cannot be selected until it is added to `DCR_plots.xlsx`.
 
-The activities reach the export JSON under `uadActivities`, with the filters recorded alongside in
-`uadFilters` so a consumer can see what was applied. Both are **additions** — every block that was
+Each scheduled row exports its `uadCode` and the **mapped** `uadCategory` alongside `uadName`,
+`itcEquivalent`, `itcCode` and `priority`. The plot's full filtered list stays under
+`uadActivities` with the workbook's own fields verbatim, and `uadFilters` records what was applied,
+so both readings of a category are available and it is clear which is which. Both are **additions** — every block that was
 there before is unchanged.
 
 ## UAD activities drive the schedule
@@ -237,12 +239,23 @@ space count.
 The option lists are built once and cloned. Creating them per row meant ~17,700 `<option>`
 elements on every re-render, which was most of the remaining time.
 
-**The picker offers the plot's own activities**, not the 40 mapping categories — those are the
-set the user is choosing within, and each carries its own name and category. This matters because
-**1,898 rows have a category that differs from the mapping's**: `Nuts Roasting` is a *Roastery*,
-mapped through LUC 2719 *Food Retailing*. Offering the mapping name would rename the activity on
-screen. With no plot selected the picker falls back to the 40 mapping categories, so a row can
-still be added by hand.
+**The dropdown lists the plot's own activities by name** — `Nuts Roasting`, not a category. The
+line beneath gives the **UAD category from the mapping sheet**, keyed on the LUC code the workbook
+supplied:
+
+```
+[ Nuts Roasting            v ]        auto -> 112 Local Shopping Centre
+  Food Retailing  ·  2719
+```
+
+The category deliberately comes from `uad_map`, **not** from the workbook's own category column:
+**1,898 rows disagree between the two**. The workbook files `Nuts Roasting` as a *Roastery*, while
+LUC 2719 maps to *Food Retailing*, and it is the mapping that decides the ITC class and therefore
+the rate. Showing the workbook's own word would put a category on screen that nothing downstream
+uses.
+
+With no plot selected the picker falls back to the 40 mapping categories, so a row can still be
+added by hand.
 
 **The ITC category select reflects what the row already resolved to** — `auto → 112 Local
 Shopping Centre` rather than *pick a category*, which read as though nothing had been resolved

@@ -463,9 +463,9 @@ tbody tr:last-child td{border-bottom:0}
 /* Wide enough that the UAD name and the LUC/ITC line each stay on one line. At
    200px they both wrapped, which is what made every row three lines tall and the
    panel run down the page. Anything longer is clipped rather than wrapped. */
-.sched .act-cell{position:relative; min-width:310px; max-width:340px}
+.sched .act-cell{position:relative; min-width:270px; max-width:320px}
 .sched .act-cell select{width:100%}
-.sched .act-cell .uad-name,.sched .act-cell .uad-meta{
+.sched .act-cell .uad-meta{
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .sched input[type=text],.sched input[type=number]{
   width:100%; min-width:44px; background:transparent; border:1px solid transparent;
@@ -1483,8 +1483,7 @@ tbody tr:last-child td{border-bottom:0}
       _plotOpts = document.createDocumentFragment();
       plotUadRows().forEach(r => _plotOpts.appendChild(Object.assign(el("option"), {
         value: r.activity_code,
-        textContent: (r.activity_name || "?")
-                   + (r.category ? "  \u00b7  " + r.category : "") })));
+        textContent: r.activity_name || r.activity_code || "?" })));
     }
     return _plotOpts.cloneNode(true);
   }
@@ -1647,15 +1646,12 @@ tbody tr:last-child td{border-bottom:0}
       const meta = el("div", "uad-meta");
       meta.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.62rem; "
                          + "color:var(--ink-3); margin-top:3px";
-      if(row.uadName){
-        const nm = el("div", "uad-name");
-        nm.style.cssText = "font-size:.74rem; color:var(--ink-2); margin-top:2px";
-        nm.textContent = row.uadName;
-        td0.appendChild(nm);
-      }
       const mp = uadByCode(row.uadCode);
-      meta.textContent = mp ? "LUC " + mp.uad_code + "  \u00b7  ITC " + mp.itc_class
-                              + "  \u00b7  " + mp.itc_equivalent
+      // The UAD category comes from the mapping sheet, keyed on the LUC code the
+      // plot's workbook gave -- not from the workbook's own category column, which
+      // often differs (Nuts Roasting is filed there as a Roastery). The ITC class
+      // is not repeated here; the column beside it already shows what it resolved to.
+      meta.textContent = mp ? mp.uad_category + "  \u00b7  " + mp.uad_code
                             : (row.act ? row.act.activity_id + "  \u00b7  ISIC "
                                          + (row.act.division || "?")
                                        : "no UAD code \u2014 choose an ITC class by hand");
@@ -2649,7 +2645,9 @@ tbody tr:last-child td{border-bottom:0}
                  uadCode: r.uadCode || null,
                  uadActivityCode: r.uadActivityCode || null,
                  uadName: r.uadName || null,
-                 uadCategory: m ? m.uad_category : (r.uadCategory || null),
+                 // The mapped category, from uad_map by LUC code -- the same thing
+                 // the schedule shows, not the workbook's own category column.
+                 uadCategory: m ? m.uad_category : null,
                  itcEquivalent: m ? m.itc_equivalent : null,
                  priority: !!r.priority,
                  slots: num(r.slots) || 0,
