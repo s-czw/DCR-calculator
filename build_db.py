@@ -33,6 +33,25 @@ DEFAULT_UAD = os.environ.get("DCR_UAD_DIR") or os.path.join(HERE, "data",
                                                             "20260824_Full_20_Plots")
 # Row 5 onwards; rows 1-4 are a disclaimer and a blank.
 UAD_HEADER_ROW = 4
+DEFAULT_UAD_MAP = os.path.join(SRC, "uad.xlsx")
+
+# The mapping sheet names ITC land uses in its own words. These are the classes it
+# means. Six differ only by plural or punctuation; two needed deciding:
+#   Nurseries/Child Care -> 511, the only nursery class in the matrix.
+#   Sport Centre         -> 632 Sports Club rather than 634 Special Sport Centre.
+#     The rows carrying it are a fitness centre, indoor recreation and a jiu jitsu
+#     club -- clubs rather than a special facility. THIS IS A JUDGEMENT, and the
+#     entry here most worth a second opinion.
+ITC_EQUIVALENT = {
+    "on-street shopping":                 "115",
+    "local shopping centre":              "112",
+    "supermarkets":                       "114",
+    "quality/high turnover restaurants":  "122",
+    "fast food restaurants":              "123",
+    "nurseries/child care":               "511",
+    "private clinics":                    "822",
+    "sport centre":                       "632",
+}
 UAD_COLS = ["ACTIVITYCODE", "MAIN_ACTIVITY_NAME", "ACTIVITY_VARIANTS_EN",
             "ACTIVITY_VARIANTS_Ar", "LICENSETYPEEN", "UAD_LUC_Code", "UAD_Category",
             "UAD_Main_Transportation_Mode", "Activity_Found_Walking_700m",
@@ -165,6 +184,15 @@ CREATE TABLE plot (
     area          REAL
 );
 CREATE INDEX idx_plot_sector ON plot (sector_plot_id);
+
+-- The UAD code/category the user picks from, and the ITC class whose rate applies.
+CREATE TABLE uad_map (
+    uad_code       TEXT PRIMARY KEY,
+    uad_category   TEXT NOT NULL,
+    itc_equivalent TEXT NOT NULL,
+    itc_class      TEXT NOT NULL,
+    note           TEXT
+);
 
 -- Per-plot UAD activities, one row per activity that passed BOTH filters:
 --   Plot_Proposed_UAD = Yes   AND   UAD_Activity_Inclusion_Exclusion = Include
@@ -441,6 +469,41 @@ def parse(grid):
     return out
 
 
+def load_uad_map(path):
+    """UAD code -> UAD category -> the ITC class its rate comes from.
+
+    Row 1 groups the columns, row 2 names them, data starts at row 3. The sheet
+    holds two "UADs Categories" columns -- one according to Inspection, one
+    according to LUC. The LUC one is taken, because the plot workbooks report
+    UAD_LUC_Code and UAD_Category on that same basis.
+    """
+    from openpyxl import load_workbook
+    ws = load_workbook(path, data_only=True).worksheets[0]
+    rows = [[("" if v is None else str(v).strip()) for v in r]
+            for r in ws.iter_rows(min_row=3, values_only=True)]
+    out, seen = [], {}
+    for r in rows:
+        if len(r) < 4 or not any(r):
+            continue
+        code = r[1].split(".")[0].strip()
+        cat, equiv = r[2].strip(), r[3].strip()
+        if not code or code == "0" or not equiv:
+            continue          # an unnumbered row cannot be matched to a plot row
+        itc = ITC_EQUIVALENT.get(equiv.lower())
+        if itc is None:
+            sys.exit(f"{os.path.basename(path)}: ITC land use {equiv!r} is not in "
+                     f"ITC_EQUIVALENT; add it there with the class it means")
+        if code in seen:
+            if seen[code] != (cat, itc):
+                sys.exit(f"{os.path.basename(path)}: UAD code {code} maps two ways: "
+                         f"{seen[code]} and {(cat, itc)}")
+            continue
+        seen[code] = (cat, itc)
+        out.append(dict(uad_code=code, uad_category=cat, itc_equivalent=equiv,
+                        itc_class=itc, note=r[4].strip() if len(r) > 4 else None))
+    return out
+
+
 def load_uad(folder, known_ids):
     """Per-plot UAD activities, keeping only rows that pass both filters."""
     import glob
@@ -543,6 +606,19 @@ def load_plots(path):
     return out
 
 
+UAD_MAP_DDL = """
+CREATE TABLE uad_map (
+    uad_code       TEXT PRIMARY KEY,
+    uad_category   TEXT NOT NULL,
+    itc_equivalent TEXT NOT NULL,
+    itc_class      TEXT NOT NULL,
+    note           TEXT
+);
+"""
+
+UAD_MAP_INSERT = ("INSERT INTO uad_map (uad_code, uad_category, itc_equivalent, itc_class, "
+                  "note) VALUES (:uad_code,:uad_category,:itc_equivalent,:itc_class,:note)")
+
 UAD_DDL = """
 CREATE TABLE plot_uad (
     id              INTEGER PRIMARY KEY,
@@ -575,7 +651,7 @@ UAD_INSERT = (
     ":proposed,:rational,:identifier,:identifier_logic)")
 
 
-def uad_only(folder):
+def uad_only(folder, map_path=None):
     """Refresh just plot_uad on the existing database.
 
     The UAD workbooks are reissued on their own schedule, and the rate matrix and
@@ -591,6 +667,33 @@ def uad_only(folder):
     rows, unmatched = load_uad(folder, known)
     if not rows:
         sys.exit(f"no UAD rows found in {folder}")
+
+    map_path = map_path or DEFAULT_UAD_MAP
+    mapping = load_uad_map(map_path) if os.path.exists(map_path) else []
+    if mapping:
+        # An ITC class the matrix does not hold would give a silent zero rate.
+        have = {r[0] for r in con.execute("SELECT DISTINCT class_code FROM itc_rate")}
+        orphan = sorted({m["itc_class"] for m in mapping if m["itc_class"] not in have})
+        if orphan:
+            sys.exit(f"uad_map points at ITC classes absent from the matrix: {orphan}")
+        con.executescript("DROP TABLE IF EXISTS uad_map;")
+        con.executescript(UAD_MAP_DDL)
+        con.executemany(UAD_MAP_INSERT, mapping)
+        con.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?,?)",
+                    ("uad_map_rows", str(len(mapping))))
+        print(f"  {len(mapping)} UAD codes mapped to ITC classes")
+        # Which of the plots' codes the mapping does not reach.
+        codes = {m["uad_code"] for m in mapping}
+        used = {}
+        for r in rows:
+            c = (r["luc_code"] or "").split(".")[0].strip()
+            used[c] = used.get(c, 0) + 1
+        gaps = {c: n for c, n in used.items() if c not in codes}
+        if gaps:
+            total = sum(gaps.values())
+            print(f"  {total} activity rows have no mapped UAD code "
+                  f"({len(gaps)} distinct): {sorted(gaps)[:6]}")
+            print(f"    they are kept and shown, but need an ITC class chosen by hand")
     con.executescript("DROP TABLE IF EXISTS plot_uad;")
     con.executescript(UAD_DDL)
     con.executemany(UAD_INSERT, rows)
@@ -613,7 +716,8 @@ def uad_only(folder):
 def main():
     if "--uad-only" in sys.argv:
         rest = [a for a in sys.argv[1:] if a != "--uad-only"]
-        uad_only(rest[0] if rest else DEFAULT_UAD)
+        uad_only(rest[0] if rest else DEFAULT_UAD,
+                 rest[1] if len(rest) > 1 else None)
         return
 
     xls = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_XLS

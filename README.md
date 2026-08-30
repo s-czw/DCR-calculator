@@ -173,6 +173,50 @@ The activities reach the export JSON under `uadActivities`, with the filters rec
 `uadFilters` so a consumer can see what was applied. Both are **additions** — every block that was
 there before is unchanged.
 
+## UAD activities drive the schedule
+
+The activity schedule is **UAD-driven**. A plot arrives with its activities already chosen — the
+workbook rows that passed both filters — and the user adds, removes or prioritises from there. The
+ITC class is a *consequence* of the UAD code, not something picked directly.
+
+```
+workbook  ->  filtered UAD activities  ->  add / remove / prioritise  ->  UAD code
+          ->  uad_map  ->  ITC class  ->  rate  ->  parking
+```
+
+`uad.xlsx` supplies the middle step. Its sheet has two header rows and two `UADs Categories`
+columns — one *According to Inspection*, one *According to LUC*. The **LUC** one is taken, because
+the plot workbooks report `UAD_LUC_Code` and `UAD_Category` on that same basis. 40 codes map.
+
+**The ITC land uses are named in the sheet's own words, not the matrix's.** Only two match a class
+name exactly, so `ITC_EQUIVALENT` in `build_db.py` records what each one means:
+
+| Sheet says | ITC class | |
+|---|---|---|
+| On-Street Shopping | 115 | exact |
+| Local Shopping Centre | 112 | exact |
+| Supermarkets | 114 | plural |
+| Quality/High Turnover Restaurants | 122 | plural |
+| Fast Food Restaurants | 123 | plural |
+| Private Clinics | 822 | plural |
+| Nurseries/Child Care | 511 | *Nursery/ Child Care* |
+| Sport Centre | **632** | **a judgement** |
+
+`Sport Centre` could be 632 *Sports Club* or 634 *Special Sport Centre*. The rows carrying it are a
+fitness centre, indoor recreation and a jiu jitsu club — clubs rather than a special facility — so
+632. **This is the entry most worth a second opinion**, and the build fails loudly if a name
+appears that is not in the table, rather than guessing.
+
+Selecting a plot **replaces** the schedule, deduplicated by UAD code: a plot lists many DED
+activities sharing one code, and the schedule charges per code, so `RD41_C1`'s 158 activities
+become 27 rows. Merging with whatever was already scheduled would be silently wrong.
+
+**Priority** is a per-row flag. It marks the row and reaches both the export (`priority` on each
+activity) and the printed report (a star column). It does not affect any calculation.
+
+18 rows across the plots have a **blank** `UAD_LUC_Code`, category *Roastery*. They are kept and
+shown, but no mapping can reach them, so they need an ITC class chosen by hand.
+
 ## The exported calculation report
 
 **Export PDF**, beside Save, prints a record of the calculation currently on screen — one plot,

@@ -467,6 +467,10 @@ tbody tr:last-child td{border-bottom:0}
 }
 .sched input:hover{border-color:var(--line)}
 .sched input:focus{border-color:var(--accent); background:var(--sunk); outline:none}
+/* A priority row is marked on the row itself, so it reads as one at a glance
+   rather than needing the checkbox column to be scanned. */
+.sched tr.pri{background:var(--accent-soft)}
+.sched tr.pri td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .sched input[type=number]{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; text-align:right}
 .sched select{
   background:var(--sunk); border:1px solid var(--line-strong); border-radius:3px;
@@ -759,7 +763,7 @@ tbody tr:last-child td{border-bottom:0}
         <div class="tbl-scroll">
           <table class="sched">
             <thead><tr>
-              <th>Activity (DED)</th><th class="n">Slots</th><th class="n">Unit area</th>
+              <th>UAD activity</th><th class="n">Pri</th><th class="n">Slots</th><th class="n">Unit area</th>
               <th>ITC category</th><th class="n">Rate / units</th><th class="n">Bays</th>
               <th><span class="sr">Remove</span></th>
             </tr></thead>
@@ -947,6 +951,7 @@ tbody tr:last-child td{border-bottom:0}
   let ITC = [], LU = [], META = {};   /* LU = base-district designations */
   let PLOTS = [];                     /* the plot register: pick instead of typing */
   let UAD = [];                       /* per-plot UAD activities, already filtered */
+  let UADMAP = [];                    /* UAD code -> category -> ITC class */
   const state = { basis:"combined", itcLoc:"AD-CBD", groupOrder:[] };
 
   /* ---------- helpers --------------------------------------------------- */
@@ -988,6 +993,8 @@ tbody tr:last-child td{border-bottom:0}
     q("SELECT period, days FROM weighting").forEach(r=>{
       if(r.period === "weekday" || r.period === "weekend") WEEK[r.period] = r.days;
     });
+    UADMAP = q("SELECT uad_code, uad_category, itc_equivalent, itc_class, note "
+               + "FROM uad_map ORDER BY uad_category");
     UAD = q("SELECT sector_plot_id, activity_code, activity_name, variant_en, variant_ar, "
             + "licence_type, luc_code, category, transport_mode, found_walk_700m, "
             + "found_drive_10m, inclusion, proposed, rational, identifier, identifier_logic "
@@ -1011,6 +1018,7 @@ tbody tr:last-child td{border-bottom:0}
     LU = (SNAPSHOT.land_use || []).map(r=>Object.assign({},r));
     PLOTS = (SNAPSHOT.plot || []).map(r=>Object.assign({},r));
     UAD = (SNAPSHOT.plot_uad || []).map(r=>Object.assign({},r));
+    UADMAP = (SNAPSHOT.uad_map || []).map(r=>Object.assign({},r));
     META = Object.assign({}, SNAPSHOT.meta);
     const c = SNAPSHOT.coefficient;
     if(c.gla_pct!=null)              COEF.glaPct          = c.gla_pct;
@@ -1096,7 +1104,9 @@ tbody tr:last-child td{border-bottom:0}
                 sched: SCHED.map(r=>({ act: r.act ? r.act.activity_id : null,
                                        slots: r.slots, itcOverride: r.itcOverride,
                                        unitArea: r.unitArea, unitManual: r.unitManual,
-                                       qty: r.qty })) };
+                                       qty: r.qty, uadCode: r.uadCode,
+                                       priority: !!r.priority, uadName: r.uadName,
+                                       uadCategory: r.uadCategory })) };
     ["plotSize","plotPick","dedCode","farManual","pcPct","glaPct",
      "unitArea","spaceArea","floorUsePct","parkFloorArea","spacesOverride"]
       .forEach(id => { const nd = document.getElementById(id); if(nd) o[id] = nd.value; });
@@ -1337,7 +1347,7 @@ tbody tr:last-child td{border-bottom:0}
 
   function rowParking(row, unit){
     const u = rowUnit(row, unit);
-    const cls = row.itcOverride || (row.act ? row.act.itc_class : null);
+    const cls = rowClass(row);
     const code = cls ? resolveCode(cls) : null;
     if(!code) return { code:null, rate:NaN, bays:NaN, needsQty:false, unit:u };
     const slots = Math.max(0, num(row.slots) || 0);
@@ -1388,8 +1398,21 @@ tbody tr:last-child td{border-bottom:0}
              overGLA:   Number.isFinite(capGLA) && floor > capGLA + 1e-9,
              incomplete:incomplete, rows:SCHED.length };
   }
+  function uadByCode(code){
+    return code ? UADMAP.find(m => String(m.uad_code) === String(code)) || null : null;
+  }
+  /* The ITC class a row is charged on. A hand override wins; otherwise the UAD code
+     decides it through the mapping, and a DED activity is the fallback for rows
+     saved before the schedule became UAD-driven. */
+  function rowClass(row){
+    if(row.itcOverride) return row.itcOverride;
+    const m = uadByCode(row.uadCode);
+    if(m) return m.itc_class;
+    return row.act ? row.act.itc_class : null;
+  }
   function addSchedRow(actId, slots, override){
     SCHED.push({ id: ++schedSeq, act: actId ? activityById(actId) : null,
+                 uadCode: null, priority: false,
                  slots: slots == null ? 1 : slots, itcOverride: override || null,
                  unitArea: "", unitManual: false, qty: "", search: "" });
   }
@@ -1469,12 +1492,15 @@ tbody tr:last-child td{border-bottom:0}
     const u = rowUnit(row, unit);
     const p = rowParking(row, unit);
 
-    const uf = tr.cells[2].querySelector(".uflag");
+    // Queried, not indexed. These used to be tr.cells[2] and tr.cells[5], which
+    // silently pointed at the wrong cells the moment a column was inserted.
+    const uf = tr.querySelector(".uflag");
     if(uf){
       uf.className = "uflag " + (u.manual ? "uflag-manual" : "uflag-auto");
       uf.textContent = u.manual ? "entered" : "inherited";
     }
-    const bays = tr.cells[5];
+    const bays = tr.querySelector("[data-bays]");
+    if(!bays) return;
     bays.innerHTML = "";
     bays.appendChild(Object.assign(el("span"),
       {textContent: Number.isFinite(p.raw) ? fmt(p.raw,3) : "\u2014"}));
@@ -1489,49 +1515,54 @@ tbody tr:last-child td{border-bottom:0}
     SCHED.forEach(row => {
       const tr = el("tr");
 
-      // activity picker
+      // UAD activity. The list is the mapping sheet, not the ITC classes and not
+      // the DED list: the ITC class is a consequence of the UAD code, resolved
+      // below, so it is not what a user should be choosing here.
       const td0 = el("td", "act-cell");
-      const inp = el("input");
-      inp.type = "text";
-      inp.placeholder = "search DED activities\u2026";
-      inp.value = row.act ? row.act.name : (row.search || "");
-      td0.appendChild(inp);
-      if(row.act){
-        const meta = el("div");
-        meta.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.62rem; color:var(--ink-3); padding:0 5px";
-        meta.textContent = row.act.activity_id + "  \u00b7  ISIC " + (row.act.division || "?");
-        td0.appendChild(meta);
-      }
-      let box = null;
-      const closeBox = ()=>{ if(box){ box.remove(); box = null; } };
-      inp.addEventListener("input", ()=>{
-        row.search = inp.value;
-        row.act = null;
-        closeBox();
-        const hits = searchActivities(inp.value, 14);
-        if(!inp.value.trim() || inp.value.trim().length < 2) return;
-        box = el("div", "hits");
-        if(!hits.length){
-          const d = el("div", "none", "no activity matches that");
-          box.appendChild(d);
-        } else hits.forEach(h => {
-          const d = el("div");
-          d.appendChild(Object.assign(el("span","aid"), {textContent: h.activity_id}));
-          d.appendChild(document.createTextNode(h.name));
-          d.addEventListener("mousedown", ev => {
-            ev.preventDefault();
-            row.act = activityById(h.activity_id);
-            row.search = "";
-            row.itcOverride = null;
-            closeBox();
-            renderSched(); render();
-          });
-          box.appendChild(d);
-        });
-        td0.appendChild(box);
+      const usel = el("select");
+      usel.appendChild(Object.assign(el("option"),
+        { value:"", textContent: row.act ? row.act.name + "  (DED)" : "choose a UAD activity\u2026" }));
+      UADMAP.forEach(m => usel.appendChild(Object.assign(el("option"),
+        { value: m.uad_code,
+          textContent: m.uad_category + "  \u00b7  " + m.uad_code })));
+      usel.value = row.uadCode || "";
+      usel.addEventListener("change", ()=>{
+        row.uadCode = usel.value || null;
+        if(row.uadCode) row.act = null;   // the UAD code now decides the class
+        renderSched(); render();
       });
-      inp.addEventListener("blur", ()=> setTimeout(closeBox, 120));
+      td0.appendChild(usel);
+      const meta = el("div");
+      meta.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.62rem; "
+                         + "color:var(--ink-3); margin-top:3px";
+      if(row.uadName){
+        const nm = el("div");
+        nm.style.cssText = "font-size:.74rem; color:var(--ink-2); margin-top:2px";
+        nm.textContent = row.uadName;
+        td0.appendChild(nm);
+      }
+      const mp = uadByCode(row.uadCode);
+      meta.textContent = mp ? "LUC " + mp.uad_code + "  \u00b7  ITC " + mp.itc_class
+                              + "  \u00b7  " + mp.itc_equivalent
+                            : (row.act ? row.act.activity_id + "  \u00b7  ISIC "
+                                         + (row.act.division || "?")
+                                       : "no UAD code \u2014 choose an ITC class by hand");
+      td0.appendChild(meta);
       tr.appendChild(td0);
+
+      // priority
+      const tdp = el("td", "n");
+      const pri = el("input");
+      pri.type = "checkbox"; pri.checked = !!row.priority;
+      pri.title = "Mark this activity a priority for the plot";
+      pri.addEventListener("change", ()=>{
+        row.priority = pri.checked;
+        tr.classList.toggle("pri", pri.checked);
+        render();                          // no rebuild: keeps the row in place
+      });
+      tdp.appendChild(pri);
+      tr.appendChild(tdp);
+      if(row.priority) tr.classList.add("pri");
 
       // slots
       const td1 = el("td", "n");
@@ -1635,6 +1666,7 @@ tbody tr:last-child td{border-bottom:0}
       tr.appendChild(td3);
 
       const td4 = el("td", "n");
+      td4.dataset.bays = "1";      // found by name, not position: a column added
       td4.appendChild(Object.assign(el("span"),
         {textContent: Number.isFinite(p.raw) ? fmt(p.raw,3) : "\u2014"}));
       tr.appendChild(td4);
@@ -2225,6 +2257,28 @@ tbody tr:last-child td{border-bottom:0}
     if(p.devcode)     parts.push("code " + p.devcode);
     src.textContent = parts.join(" · ") || "from the register";
   }
+  /* The plot arrives with its activities already chosen: the workbook rows that
+     passed both filters. They are deduplicated by UAD code, because a plot lists
+     many DED activities sharing one code and the schedule charges per code.
+     Anything already scheduled is replaced -- a different plot means a different
+     set, and merging the two would be silently wrong. */
+  function fillScheduleFromPlot(plot){
+    const rows = plot ? uadFor(plot.sector_plot_id) : [];
+    if(!rows.length) return 0;
+    const seen = new Set();
+    SCHED.length = 0;
+    rows.forEach(r => {
+      const code = (r.luc_code || "").split(".")[0].trim();
+      const key = code || ("name:" + (r.activity_name || ""));
+      if(seen.has(key)) return;
+      seen.add(key);
+      SCHED.push({ id: ++schedSeq, act: null, uadCode: uadByCode(code) ? code : null,
+                   priority: false, slots: 1, itcOverride: null,
+                   unitArea: "", unitManual: false, qty: "", search: "",
+                   uadName: r.activity_name || null, uadCategory: r.category || null });
+    });
+    return SCHED.length;
+  }
   function applyPlotPick(){
     const p = currentPlot();
     if(p && Number.isFinite(Number(p.area))){
@@ -2233,6 +2287,8 @@ tbody tr:last-child td{border-bottom:0}
       // is already beyond what any of this is accurate to.
       inp.value = String(Math.round(Number(p.area) * 100) / 100);
     }
+    const filled = fillScheduleFromPlot(p);
+    if(filled) renderSched();
     paintPlotPick();
     render();
   }
@@ -2468,7 +2524,14 @@ tbody tr:last-child td{border-bottom:0}
       },
       activities: SCHED.map(r => {
         const pk = rowParking(r, c.unit);
-        return { activity: act(r.act), slots: num(r.slots) || 0,
+        const m = uadByCode(r.uadCode);
+        return { activity: act(r.act),
+                 uadCode: r.uadCode || null,
+                 uadName: r.uadName || null,
+                 uadCategory: m ? m.uad_category : (r.uadCategory || null),
+                 itcEquivalent: m ? m.itc_equivalent : null,
+                 priority: !!r.priority,
+                 slots: num(r.slots) || 0,
                  unitArea: rowUnit(r, c.unit).area,
                  unitAreaEntered: !!r.unitManual,
                  itcOverride: r.itcOverride || null,
@@ -2790,10 +2853,12 @@ tbody tr:last-child td{border-bottom:0}
     if(!SCHED.length){
       add("p", "", "No activities scheduled, so no parking demand is derived.");
     } else {
-      table("", ["Activity", "Slots", "Unit area", "ITC class", "Rate", "Charged per", "Bays"],
+      table("", ["Pri", "Activity", "Slots", "Unit area", "ITC class", "Rate", "Charged per", "Bays"],
         SCHED.map(r => {
           const pk = rowParking(r, c.unit), u = rowUnit(r, c.unit);
-          return [ r.act ? r.act.name : "—",
+          const m = uadByCode(r.uadCode);
+          return [ r.priority ? "\u2605" : "",
+                   r.uadName || (m ? m.uad_category : (r.act ? r.act.name : "—")),
                    n0(num(r.slots) || 0),
                    m2(u.area),
                    pk.code ? pk.code.code : "—",
@@ -3177,6 +3242,10 @@ tbody tr:last-child td{border-bottom:0}
         saved.form.sched.forEach((r,i)=>{
           if(!SCHED[i]) return;
           SCHED[i].qty = r.qty || "";
+        SCHED[i].uadCode = r.uadCode || null;
+        SCHED[i].priority = !!r.priority;
+        SCHED[i].uadName = r.uadName || null;
+        SCHED[i].uadCategory = r.uadCategory || null;
           SCHED[i].unitArea = r.unitArea || "";
           SCHED[i].unitManual = !!r.unitManual;
         });
