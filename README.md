@@ -186,7 +186,7 @@ workbook  ->  filtered UAD activities  ->  add / remove / prioritise  ->  UAD co
           ->  uad_map  ->  ITC class  ->  rate  ->  parking
 ```
 
-`uad.xlsx` supplies the middle step. Its sheet has two header rows and two `UADs Categories`
+`uad.xlsx` (currently the **v2** sheet) supplies the middle step. Its sheet has two header rows and two `UADs Categories`
 columns — one *According to Inspection*, one *According to LUC*. The **LUC** one is taken, because
 the plot workbooks report `UAD_LUC_Code` and `UAD_Category` on that same basis. 40 codes map.
 
@@ -207,7 +207,8 @@ name exactly, so `ITC_EQUIVALENT` in `build_db.py` records what each one means:
 `Sport Centre` could be 632 *Sports Club* or 634 *Special Sport Centre*. The rows carrying it are a
 fitness centre, indoor recreation and a jiu jitsu club — clubs rather than a special facility — so
 632. **This is the entry most worth a second opinion**, and the build fails loudly if a name
-appears that is not in the table, rather than guessing.
+appears that is not in the table, rather than guessing. **v2 widened that call**: it gave
+`Jiu Jitsu club` the code 7240, so 632 now covers four activity kinds rather than three.
 
 Selecting a plot **replaces** the schedule with **every** filtered activity, one row each — the
 same set, in the same order, as `uadActivities` in the exported JSON. `RD41_C1` gives 158 rows.
@@ -265,8 +266,13 @@ hand override still wins.
 **Priority** is a per-row flag. It marks the row and reaches both the export (`priority` on each
 activity) and the printed report (a star column). It does not affect any calculation.
 
-18 rows across the plots have a **blank** `UAD_LUC_Code`, category *Roastery*. They are kept and
-shown, but no mapping can reach them, so they need an ITC class chosen by hand.
+**A blank LUC code is matched on its category name.** 18 rows across the plots arrive with no
+code at all, all of them `Jiu Jitsu club` — v2 of the mapping gave that a code, but the plot
+workbooks still carry a blank. Where the row's category names a mapping row exactly, the build
+fills the code in. All 2,061 activities now resolve; none needs an ITC class chosen by hand.
+
+The match is on an exact category name, so it stays narrow: a category the sheet does not name is
+left alone rather than being guessed at, and the build reports how many rows it filled in.
 
 ## The exported calculation report
 

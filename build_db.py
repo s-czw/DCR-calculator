@@ -688,6 +688,28 @@ def uad_only(folder, map_path=None):
         for r in rows:
             c = (r["luc_code"] or "").split(".")[0].strip()
             used[c] = used.get(c, 0) + 1
+        # A workbook row can arrive with no LUC code at all. Where its category
+        # names a mapping row exactly, that is the code it meant -- the v2 sheet
+        # gave Jiu Jitsu club the code 7240 while the plot workbooks still carry a
+        # blank for it. Filled in here so the schedule resolves rather than asking
+        # for an ITC class by hand.
+        by_cat = {m["uad_category"].strip().lower(): m["uad_code"] for m in mapping}
+        healed = 0
+        for r in rows:
+            if (r["luc_code"] or "").strip():
+                continue
+            hit = by_cat.get((r["category"] or "").strip().lower())
+            if hit:
+                r["luc_code"] = hit
+                healed += 1
+        if healed:
+            print(f"  {healed} rows had no LUC code and were matched on their category")
+            con.executescript("DELETE FROM plot_uad;")
+            con.executemany(UAD_INSERT, rows)
+            used = {}
+            for r in rows:
+                c = (r["luc_code"] or "").split(".")[0].strip()
+                used[c] = used.get(c, 0) + 1
         gaps = {c: n for c, n in used.items() if c not in codes}
         if gaps:
             total = sum(gaps.values())
