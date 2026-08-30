@@ -188,7 +188,14 @@ CREATE INDEX idx_plot_sector ON plot (sector_plot_id);
 -- The UAD code/category the user picks from, and the ITC class whose rate applies.
 CREATE TABLE uad_map (
     uad_code       TEXT PRIMARY KEY,
+    -- Column C, "According to LUC". This is the category the tool shows and
+    -- exports: it is the one tied to the code that decides the ITC class.
     uad_category   TEXT NOT NULL,
+    -- Column A, "According to Inspection_UNITTYPE". This is what the plot
+    -- workbooks report in UAD_Category -- 31 of 34 match it exactly. Kept so the
+    -- two can be reconciled; the three that differ are codes covering several
+    -- inspection categories, where the sheet records only one.
+    uad_category_inspection TEXT,
     itc_equivalent TEXT NOT NULL,
     itc_class      TEXT NOT NULL,
     note           TEXT
@@ -499,8 +506,10 @@ def load_uad_map(path):
                          f"{seen[code]} and {(cat, itc)}")
             continue
         seen[code] = (cat, itc)
-        out.append(dict(uad_code=code, uad_category=cat, itc_equivalent=equiv,
-                        itc_class=itc, note=r[4].strip() if len(r) > 4 else None))
+        out.append(dict(uad_code=code, uad_category=cat,
+                        uad_category_inspection=r[0].strip() or None,
+                        itc_equivalent=equiv, itc_class=itc,
+                        note=r[4].strip() if len(r) > 4 else None))
     return out
 
 
@@ -609,15 +618,23 @@ def load_plots(path):
 UAD_MAP_DDL = """
 CREATE TABLE uad_map (
     uad_code       TEXT PRIMARY KEY,
+    -- Column C, "According to LUC". This is the category the tool shows and
+    -- exports: it is the one tied to the code that decides the ITC class.
     uad_category   TEXT NOT NULL,
+    -- Column A, "According to Inspection_UNITTYPE". This is what the plot
+    -- workbooks report in UAD_Category -- 31 of 34 match it exactly. Kept so the
+    -- two can be reconciled; the three that differ are codes covering several
+    -- inspection categories, where the sheet records only one.
+    uad_category_inspection TEXT,
     itc_equivalent TEXT NOT NULL,
     itc_class      TEXT NOT NULL,
     note           TEXT
 );
 """
 
-UAD_MAP_INSERT = ("INSERT INTO uad_map (uad_code, uad_category, itc_equivalent, itc_class, "
-                  "note) VALUES (:uad_code,:uad_category,:itc_equivalent,:itc_class,:note)")
+UAD_MAP_INSERT = ("INSERT INTO uad_map (uad_code, uad_category, uad_category_inspection, "
+                  "itc_equivalent, itc_class, note) VALUES (:uad_code,:uad_category,"
+                  ":uad_category_inspection,:itc_equivalent,:itc_class,:note)")
 
 UAD_DDL = """
 CREATE TABLE plot_uad (

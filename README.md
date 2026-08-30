@@ -171,8 +171,25 @@ loaded under the filename id but the plot cannot be selected until it is added t
 
 Each scheduled row exports its `uadCode` and the **mapped** `uadCategory` alongside `uadName`,
 `itcEquivalent`, `itcCode` and `priority`. The plot's full filtered list stays under
-`uadActivities` with the workbook's own fields verbatim, and `uadFilters` records what was applied,
-so both readings of a category are available and it is clear which is which. Both are **additions** — every block that was
+`uadActivities`, and **every row there is linked through the mapping too**:
+
+```json
+{ "activityName": "Cooperative Societies", "lucCode": "2782",
+  "category":              "Co-op",                          // the workbook's own word
+  "uadCategoryInspection": "Co-op",                          // sheet column A
+  "uadCategory":           "Department and Variety Store",   // sheet column C, the LUC one
+  "itcClass": "114", "itcEquivalent": "Supermarkets" }
+```
+
+**The sheet holds two `UADs Categories` columns and they are not the same thing.** Column A is
+*According to Inspection_UNITTYPE* and column C *According to LUC*. The workbooks report the
+Inspection one — 31 of 34 distinct pairs match it exactly — while the LUC one is tied to the code
+that decides the ITC class. Both are exported so the two can be reconciled without the sheet.
+
+The three that differ are codes covering several inspection categories, where the sheet records
+only one: 2719 spans Roastery, Spice and Herbs and Food Retailing; 2714 butchery and Poultry Shop;
+2741 Pharmacy and Perfumes and Cosmetics. Nothing downstream depends on the inspection name, so
+this costs nothing — but it is why the two columns cannot simply be treated as synonyms. Both are **additions** — every block that was
 there before is unchanged.
 
 ## UAD activities drive the schedule

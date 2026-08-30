@@ -1006,8 +1006,8 @@ tbody tr:last-child td{border-bottom:0}
     q("SELECT period, days FROM weighting").forEach(r=>{
       if(r.period === "weekday" || r.period === "weekend") WEEK[r.period] = r.days;
     });
-    UADMAP = q("SELECT uad_code, uad_category, itc_equivalent, itc_class, note "
-               + "FROM uad_map ORDER BY uad_category");
+    UADMAP = q("SELECT uad_code, uad_category, uad_category_inspection, itc_equivalent, "
+               + "itc_class, note FROM uad_map ORDER BY uad_category");
     UAD = q("SELECT sector_plot_id, activity_code, activity_name, variant_en, variant_ar, "
             + "licence_type, luc_code, category, transport_mode, found_walk_700m, "
             + "found_drive_10m, inclusion, proposed, rational, identifier, identifier_logic "
@@ -2664,15 +2664,24 @@ tbody tr:last-child td{border-bottom:0}
       // block above is unchanged, so a consumer reading the old shape still works.
       uadActivities: (function(){
         const p = currentPlot();
-        return p ? uadFor(p.sector_plot_id).map(r => ({
+        return p ? uadFor(p.sector_plot_id).map(r => {
+          // What this row links to through the mapping sheet. category is the
+          // workbook's own word, which is the sheet's Inspection column; uadCategory
+          // is the LUC one, and it is the LUC code that decides the ITC class.
+          const m = uadByCode((r.luc_code || "").split(".")[0].trim());
+          return {
           activityCode: r.activity_code, activityName: r.activity_name,
           variantEn: r.variant_en, variantAr: r.variant_ar,
           licenceType: r.licence_type, lucCode: r.luc_code, category: r.category,
+          uadCategory: m ? m.uad_category : null,
+          uadCategoryInspection: m ? m.uad_category_inspection : null,
+          itcClass: m ? m.itc_class : null,
+          itcEquivalent: m ? m.itc_equivalent : null,
           transportMode: r.transport_mode,
           foundWalking700m: r.found_walk_700m, foundDriving10min: r.found_drive_10m,
           inclusion: r.inclusion, proposedUAD: r.proposed,
           rational: r.rational, identifier: r.identifier,
-          identifierLogic: r.identifier_logic })) : [];
+          identifierLogic: r.identifier_logic }; }) : [];
       })(),
       uadFilters: { Plot_Proposed_UAD: "Yes",
                     UAD_Activity_Inclusion_Exclusion: "Include" },
