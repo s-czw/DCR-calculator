@@ -1469,6 +1469,25 @@ tbody tr:last-child td{border-bottom:0}
     }
     return _itcOpts.cloneNode(true);
   }
+  /* The selected plot's own activities, and an option list built from them. Cached
+     per plot, because the list is rebuilt for every row. */
+  let _plotOptsFor = null, _plotOpts = null;
+  function plotUadRows(){
+    const p = currentPlot();
+    return p ? uadFor(p.sector_plot_id) : [];
+  }
+  function plotOptionList(){
+    const p = currentPlot(), key = p ? p.sector_plot_id : "";
+    if(_plotOptsFor !== key){
+      _plotOptsFor = key;
+      _plotOpts = document.createDocumentFragment();
+      plotUadRows().forEach(r => _plotOpts.appendChild(Object.assign(el("option"), {
+        value: r.activity_code,
+        textContent: (r.activity_name || "?")
+                   + (r.category ? "  \u00b7  " + r.category : "") })));
+    }
+    return _plotOpts.cloneNode(true);
+  }
   function uadByCode(code){
     return code ? UADMAP.find(m => String(m.uad_code) === String(code)) || null : null;
   }
@@ -1591,13 +1610,37 @@ tbody tr:last-child td{border-bottom:0}
       // below, so it is not what a user should be choosing here.
       const td0 = el("td", "act-cell");
       const usel = el("select");
+      const own = plotUadRows();
       usel.appendChild(Object.assign(el("option"),
-        { value:"", textContent: row.act ? row.act.name + "  (DED)" : "choose a UAD activity\u2026" }));
-      usel.appendChild(uadOptionList());
-      usel.value = row.uadCode || "";
+        { value:"", textContent: row.act ? row.act.name + "  (DED)" : "choose an activity\u2026" }));
+      if(own.length){
+        // The plot's own activities, from its Liveability workbook. The generic
+        // mapping categories are not offered here: this plot's list is the set the
+        // user is choosing within, and the mapping category often differs from the
+        // activity's own (Nuts Roasting is a Roastery, mapped through 2719 Food
+        // Retailing), so offering the mapping name would rename the activity.
+        usel.appendChild(plotOptionList());
+        usel.value = row.uadActivityCode || "";
+      } else {
+        usel.appendChild(uadOptionList());
+        usel.value = row.uadCode || "";
+      }
       usel.addEventListener("change", ()=>{
-        row.uadCode = usel.value || null;
-        if(row.uadCode) row.act = null;   // the UAD code now decides the class
+        const v = usel.value || null;
+        if(own.length){
+          const hit = v ? own.find(r => String(r.activity_code) === String(v)) : null;
+          row.uadActivityCode = hit ? hit.activity_code : null;
+          row.uadCode  = hit ? (hit.luc_code || "").split(".")[0].trim() || null : null;
+          row.uadName  = hit ? hit.activity_name : null;
+          row.uadCategory = hit ? hit.category : null;
+        } else {
+          row.uadCode = v;
+          row.uadActivityCode = null;
+          row.uadName = null;
+          const m = uadByCode(v);
+          row.uadCategory = m ? m.uad_category : null;
+        }
+        if(row.uadCode || row.uadActivityCode) row.act = null;
         renderSched(); render();
       });
       td0.appendChild(usel);
@@ -1675,7 +1718,15 @@ tbody tr:last-child td{border-bottom:0}
       // ITC category, auto or overridden
       const td2 = el("td");
       const sel = el("select");
-      const autoCls = row.act ? row.act.itc_class : null;
+      // The class the row resolves to on its own -- from its UAD code, or from a
+      // DED activity on an older row. Without this the select read "pick a
+      // category" while the line above it already said ITC 112, which looked like
+      // nothing had been resolved.
+      const autoCls = (function(){
+        const m = uadByCode(row.uadCode);
+        if(m) return m.itc_class;
+        return row.act ? row.act.itc_class : null;
+      })();
       const autoRow = autoCls ? (itcIndex(), (_byClass.get(autoCls) || [])[0] || null) : null;
       sel.appendChild(Object.assign(el("option", null,
         autoCls ? "auto \u2192 " + autoCls + " " + (autoRow ? autoRow.class_name : "")
@@ -2352,8 +2403,12 @@ tbody tr:last-child td{border-bottom:0}
       // is already beyond what any of this is accurate to.
       inp.value = String(Math.round(Number(p.area) * 100) / 100);
     }
-    const filled = fillScheduleFromPlot(p);
-    if(filled) renderSched();
+    // Rebuild whichever way it went. Clearing the plot keeps the rows -- the work
+    // is still the user's -- but the pickers have to stop offering the old plot's
+    // activities and go back to the full mapping list, and that only happens on a
+    // re-render.
+    fillScheduleFromPlot(p);
+    renderSched();
     paintPlotPick();
     render();
   }

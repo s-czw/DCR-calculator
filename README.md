@@ -237,6 +237,18 @@ space count.
 The option lists are built once and cloned. Creating them per row meant ~17,700 `<option>`
 elements on every re-render, which was most of the remaining time.
 
+**The picker offers the plot's own activities**, not the 40 mapping categories — those are the
+set the user is choosing within, and each carries its own name and category. This matters because
+**1,898 rows have a category that differs from the mapping's**: `Nuts Roasting` is a *Roastery*,
+mapped through LUC 2719 *Food Retailing*. Offering the mapping name would rename the activity on
+screen. With no plot selected the picker falls back to the 40 mapping categories, so a row can
+still be added by hand.
+
+**The ITC category select reflects what the row already resolved to** — `auto → 112 Local
+Shopping Centre` rather than *pick a category*, which read as though nothing had been resolved
+while the line beneath it already said `ITC 112`. Choosing a different activity re-resolves it; a
+hand override still wins.
+
 **Priority** is a per-row flag. It marks the row and reaches both the export (`priority` on each
 activity) and the printed report (a star column). It does not affect any calculation.
 
