@@ -83,6 +83,9 @@ def snapshot(db_path):
             "devcode, devcode_cat, area FROM plot ORDER BY sector_plot_id")],
         # 2,000-odd rows across 20 plots; the picker reads only the selected
         # plot's, but the snapshot has to carry them all.
+        "plot_approved": [dict(r) for r in con.execute(
+            "SELECT sector_plot_id, region, itc_loc, district, dev_code, planned_area, "
+            "area, gfa, far, coverage_pct FROM plot_approved ORDER BY area")],
         "uad_map": [dict(r) for r in con.execute(
             "SELECT uad_code, uad_category, uad_category_inspection, itc_equivalent, "
             "itc_class, note FROM uad_map ORDER BY uad_category")],

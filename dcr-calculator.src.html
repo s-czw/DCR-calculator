@@ -965,6 +965,7 @@ tbody tr:last-child td{border-bottom:0}
   let PLOTS = [];                     /* the plot register: pick instead of typing */
   let UAD = [];                       /* per-plot UAD activities, already filtered */
   let UADMAP = [];                    /* UAD code -> category -> ITC class */
+  let APPROVED = [];                  /* the approved 20: the only plots offered */
   const state = { basis:"combined", itcLoc:"AD-CBD", groupOrder:[] };
 
   /* ---------- helpers --------------------------------------------------- */
@@ -1012,6 +1013,9 @@ tbody tr:last-child td{border-bottom:0}
             + "licence_type, luc_code, category, transport_mode, found_walk_700m, "
             + "found_drive_10m, inclusion, proposed, rational, identifier, identifier_logic "
             + "FROM plot_uad ORDER BY sector_plot_id, id");
+    APPROVED = q("SELECT sector_plot_id, region, itc_loc, district, dev_code, "
+                 + "planned_area, area, gfa, far, coverage_pct FROM plot_approved "
+                 + "ORDER BY area");
     PLOTS = q("SELECT id, plot_number, sector_plot_id, district, primary_use, "
               + "devcode, devcode_cat, area FROM plot ORDER BY sector_plot_id");
     LU = q("SELECT id, category, designation, name, far, coverage, remarks, source "
@@ -1030,6 +1034,7 @@ tbody tr:last-child td{border-bottom:0}
     });
     LU = (SNAPSHOT.land_use || []).map(r=>Object.assign({},r));
     PLOTS = (SNAPSHOT.plot || []).map(r=>Object.assign({},r));
+    APPROVED = (SNAPSHOT.plot_approved || []).map(r=>Object.assign({},r));
     UAD = (SNAPSHOT.plot_uad || []).map(r=>Object.assign({},r));
     UADMAP = (SNAPSHOT.uad_map || []).map(r=>Object.assign({},r));
     META = Object.assign({}, SNAPSHOT.meta);
@@ -2327,8 +2332,27 @@ tbody tr:last-child td{border-bottom:0}
      silently moving the second would change FAR and coverage behind the user. The
      DevCode is shown in the option text so it can be matched by hand. */
   const MANUAL = "";
+  /* The offered plots are the approved 20, not the 66-plot register. Each is
+     enriched with whatever the register knows about it -- plot number, primary use
+     -- matched on the id with a trailing underscore ignored, because the two sheets
+     disagree on that for 65_3_16_5. TEMPORARY, with plot_approved. */
+  function offeredPlots(){
+    if(!APPROVED.length) return PLOTS;
+    const bare = s => String(s || "").trim().replace(/_+$/, "");
+    const byBare = new Map(PLOTS.map(p => [bare(p.sector_plot_id), p]));
+    return APPROVED.map(a => {
+      const reg = byBare.get(bare(a.sector_plot_id)) || {};
+      return Object.assign({}, reg, {
+        sector_plot_id: a.sector_plot_id,
+        district: a.district || reg.district || null,
+        devcode: a.dev_code || reg.devcode || null,
+        area: Number.isFinite(Number(a.area)) ? Number(a.area) : reg.area,
+        approved: a
+      });
+    });
+  }
   function plotById(id){
-    return PLOTS.find(p => String(p.sector_plot_id) === String(id)) || null;
+    return offeredPlots().find(p => String(p.sector_plot_id) === String(id)) || null;
   }
   /* The workbooks are already filtered at build time to Plot_Proposed_UAD = Yes and
      UAD_Activity_Inclusion_Exclusion = Include, so everything held here is included */
@@ -2348,7 +2372,7 @@ tbody tr:last-child td{border-bottom:0}
       { value: MANUAL, textContent: PLOTS.length
           ? "Manual entry — type an area below"
           : "Manual entry — no plot register in this build" }));
-    PLOTS.forEach(p => {
+    offeredPlots().forEach(p => {
       const bits = [p.district, p.devcode].filter(Boolean).join(" · ");
       sel.appendChild(Object.assign(el("option"), {
         value: p.sector_plot_id,
@@ -2391,6 +2415,37 @@ tbody tr:last-child td{border-bottom:0}
     });
     return SCHED.length;
   }
+  /* Everything the approved sheet says about a plot, applied when it is picked.
+     TEMPORARY: Dev Code, FAR and coverage come from that sheet rather than from the
+     designation schedule, which has no RE-7 or RE-10 and could not carry a FAR that
+     varies per plot inside one Dev Code anyway. FAR and coverage are set as
+     overrides, so the figures they change are annotated as overridden rather than
+     passing as published Code values. */
+  function applyApproved(p){
+    const a = p && p.approved;
+    if(!a) return;
+    if(a.dev_code){
+      const want = String(a.dev_code).trim().toUpperCase();
+      const row = LU.find(r => String(r.designation).trim().toUpperCase() === want);
+      const sel = document.getElementById("dedCode");
+      if(row && sel) sel.value = String(row.id);
+    }
+    if(a.itc_loc){
+      const loc = document.getElementById("itcLoc");
+      if(loc && [...loc.options].some(o => o.value === a.itc_loc)){
+        loc.value = a.itc_loc;
+        state.itcLoc = a.itc_loc;
+      }
+    }
+    const set = (id, v) => {
+      const e = document.getElementById(id);
+      if(e) e.value = (v === null || v === undefined || !Number.isFinite(Number(v)))
+                    ? "" : String(Math.round(Number(v) * 100) / 100);
+    };
+    set("farManual", a.far);
+    set("pcPct", a.coverage_pct);
+  }
+
   function applyPlotPick(){
     const p = currentPlot();
     if(p && Number.isFinite(Number(p.area))){
@@ -2403,6 +2458,7 @@ tbody tr:last-child td{border-bottom:0}
     // is still the user's -- but the pickers have to stop offering the old plot's
     // activities and go back to the full mapping list, and that only happens on a
     // re-render.
+    applyApproved(p);
     fillScheduleFromPlot(p);
     renderSched();
     paintPlotPick();
@@ -3338,7 +3394,13 @@ tbody tr:last-child td{border-bottom:0}
   function start(){
     const saved = loadSaved();
     if(saved && Array.isArray(saved.lu) && saved.lu.length){
-      LU = saved.lu.map((r,i)=>({
+      /* Merged onto the built-in table, not substituted for it. A stored copy used
+         to replace LU wholesale, so any designation added in a later build stayed
+         invisible to anyone whose browser already held one -- RE-7 and RE-10 were
+         in the build and in the database, and still could not be selected. Stored
+         rows win where they exist, because they may have been edited by hand; rows
+         the stored copy has never heard of are kept. */
+      const stored = saved.lu.map((r,i)=>({
         id: r.id || i+1, category: String(r.category||""),
         designation: String(r.designation==null?"":r.designation),
         name: String(r.name==null?"":r.name),
@@ -3346,6 +3408,11 @@ tbody tr:last-child td{border-bottom:0}
         coverage: Number.isFinite(num(r.coverage)) ? num(r.coverage) : null,
         remarks: r.remarks || null, source: r.source || "custom"
       }));
+      const byId = new Map(stored.map(r => [String(r.id), r]));
+      const merged = LU.map(r => byId.get(String(r.id)) || r);
+      const known = new Set(LU.map(r => String(r.id)));
+      stored.forEach(r => { if(!known.has(String(r.id))) merged.push(r); });
+      LU = merged;
       syncDed();
     }
 

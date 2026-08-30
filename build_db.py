@@ -34,6 +34,16 @@ DEFAULT_UAD = os.environ.get("DCR_UAD_DIR") or os.path.join(HERE, "data",
 # Row 5 onwards; rows 1-4 are a disclaimer and a blank.
 UAD_HEADER_ROW = 4
 DEFAULT_UAD_MAP = os.path.join(SRC, "uad.xlsx")
+DEFAULT_APPROVED = os.path.join(SRC, "approved_20.xlsx")
+
+# REGION in the approved sheet -> the ITC location the rates are read at. Nothing
+# in the sheet distinguishes CBD from non-CBD, so non-CBD is the stated default;
+# Al Dhafra has no variant of its own and falls to Other.
+REGION_TO_ITC = {
+    "alain":            "AA-Non-CBD",
+    "abudhabi":         "AD-Non-CBD",
+    "al dhafra region": "Other",
+}
 
 # The mapping sheet names ITC land uses in its own words. These are the classes it
 # means. Six differ only by plural or punctuation; two needed deciding:
@@ -476,6 +486,39 @@ def parse(grid):
     return out
 
 
+def load_approved(path):
+    """The approved 20: the plots the tool offers, with their Code values.
+
+    A temporary source. Dev Code, GFA, FAR and Coverage are taken from this sheet
+    rather than from the designation schedule, because the schedule does not carry
+    RE-7 or RE-10 at all and because FAR and coverage vary per plot within one Dev
+    Code -- RE-7 appears at FAR 1, 0.92 and 0.75 here. Replace this with the final
+    layer when it arrives.
+    """
+    from openpyxl import load_workbook
+    ws = load_workbook(path, data_only=True).worksheets[0]
+    out = []
+    for r in ws.iter_rows(min_row=3, values_only=True):
+        r = list(r) + [None] * 24
+        sector = norm(r[2])
+        if not sector:
+            continue
+        region = norm(r[1]) or ""
+        itc = REGION_TO_ITC.get(region.strip().lower())
+        if itc is None:
+            sys.exit(f"{os.path.basename(path)}: REGION {region!r} is not in "
+                     f"REGION_TO_ITC; add it with the ITC location it means")
+        cov = numeric(r[12])
+        out.append(dict(
+            sector_plot_id=sector, region=region, itc_loc=itc,
+            district=norm(r[7]), dev_code=norm(r[8]),
+            planned_area=numeric(r[5]), area=numeric(r[6]),
+            gfa=numeric(r[10]), far=numeric(r[11]),
+            # The sheet writes coverage as a fraction; the tool works in per cent.
+            coverage_pct=None if cov is None else cov * 100.0))
+    return out
+
+
 def load_uad_map(path):
     """UAD code -> UAD category -> the ITC class its rate comes from.
 
@@ -615,6 +658,31 @@ def load_plots(path):
     return out
 
 
+APPROVED_DDL = """
+-- The plots the tool offers, and the Code values it uses for them. TEMPORARY:
+-- these come from the approved-20 sheet rather than the designation schedule,
+-- because the schedule has no RE-7 or RE-10, and because FAR and coverage vary
+-- per plot inside one Dev Code. Retire this when the final layer lands.
+CREATE TABLE plot_approved (
+    sector_plot_id TEXT PRIMARY KEY,
+    region         TEXT,
+    itc_loc        TEXT,
+    district       TEXT,
+    dev_code       TEXT,
+    planned_area   REAL,
+    area           REAL,
+    gfa            REAL,
+    far            REAL,
+    coverage_pct   REAL
+);
+"""
+
+APPROVED_INSERT = (
+    "INSERT INTO plot_approved (sector_plot_id, region, itc_loc, district, dev_code, "
+    "planned_area, area, gfa, far, coverage_pct) VALUES (:sector_plot_id,:region,"
+    ":itc_loc,:district,:dev_code,:planned_area,:area,:gfa,:far,:coverage_pct)")
+
+
 UAD_MAP_DDL = """
 CREATE TABLE uad_map (
     uad_code       TEXT PRIMARY KEY,
@@ -752,7 +820,58 @@ def uad_only(folder, map_path=None):
     return len(rows)
 
 
+def approved_only(path):
+    """Refresh just plot_approved, and make sure its Dev Codes are selectable."""
+    if not os.path.exists(DB):
+        sys.exit(f"{DB} not found - a full build has to run first")
+    rows = load_approved(path)
+    if not rows:
+        sys.exit(f"no plots found in {path}")
+    con = sqlite3.connect(DB)
+    con.row_factory = sqlite3.Row
+    con.executescript("DROP TABLE IF EXISTS plot_approved;")
+    con.executescript(APPROVED_DDL)
+    con.executemany(APPROVED_INSERT, rows)
+
+    # The designation select is built from land_use, so a Dev Code missing from it
+    # could not be shown at all. FAR and coverage stay NULL: they vary per plot in
+    # this sheet, so the plot supplies them, not the designation.
+    have = {r["designation"].strip().upper()
+            for r in con.execute("SELECT designation FROM land_use")}
+    added = []
+    for d in sorted({r["dev_code"] for r in rows if r["dev_code"]}):
+        if d.strip().upper() in have:
+            continue
+        con.execute("INSERT INTO land_use (category, designation, name, far, coverage, "
+                    "remarks, source) VALUES (?,?,?,NULL,NULL,?,'approved-20')",
+                    ("(approved 20)", d, d,
+                     "From the approved-20 sheet; FAR and coverage come from the plot"))
+        added.append(d)
+
+    con.executemany("INSERT OR REPLACE INTO meta (key, value) VALUES (?,?)", [
+        ("approved_file", os.path.basename(path)),
+        ("approved_plots", str(len(rows))),
+    ])
+    con.commit()
+    print(f"  {len(rows)} approved plots loaded from {os.path.basename(path)}")
+    if added:
+        print(f"  designations added so they can be selected: {added}")
+    # GFA is given as well as FAR, and the two should agree.
+    odd = [r for r in rows
+           if r["area"] and r["far"] and r["gfa"]
+           and abs(r["area"] * r["far"] - r["gfa"]) > max(1.0, r["gfa"] * 0.01)]
+    for r in odd:
+        print(f"  ! {r['sector_plot_id']}: sheet GFA {r['gfa']:,.2f} but area x FAR is "
+              f"{r['area'] * r['far']:,.2f} ({r['area']:,.0f} x {r['far']}) - "
+              f"one of the three is wrong")
+    return len(rows)
+
+
 def main():
+    if "--approved-only" in sys.argv:
+        rest = [a for a in sys.argv[1:] if a != "--approved-only"]
+        approved_only(rest[0] if rest else DEFAULT_APPROVED)
+        return
     if "--uad-only" in sys.argv:
         rest = [a for a in sys.argv[1:] if a != "--uad-only"]
         uad_only(rest[0] if rest else DEFAULT_UAD,

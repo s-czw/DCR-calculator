@@ -192,6 +192,46 @@ only one: 2719 spans Roastery, Spice and Herbs and Food Retailing; 2714 butchery
 this costs nothing — but it is why the two columns cannot simply be treated as synonyms. Both are **additions** — every block that was
 there before is unchanged.
 
+## The approved 20 — a temporary plot source
+
+The plot picker offers **only the 20 approved plots**, and takes their Dev Code, GFA, FAR and
+coverage from `final 20 plot approved.xlsx` rather than from the designation schedule.
+
+```bash
+python3 build_db.py --approved-only            # refresh just plot_approved
+```
+
+**This is a stand-in until the final layer arrives.** Two things make the schedule unusable for
+these plots today:
+
+- It has **no RE-7 or RE-10 at all** — 12 of the 20 plots carry one of those Dev Codes. The build
+  adds them to `land_use` so they can at least be selected.
+- **FAR and coverage vary per plot inside a single Dev Code.** RE-7 appears at FAR 1, 0.92 and
+  0.75, at coverages of 100%, 75% and 57%. A designation cannot supply them, so the plot does, and
+  they are applied as **overrides** — the figures they change are annotated as overridden rather
+  than passing as published Code values.
+
+Picking a plot fills in its area, its designation from **Dev Code**, its FAR and coverage, and the
+ITC location from **REGION**:
+
+| REGION | ITC location |
+|---|---|
+| `ALAIN` | Al Ain — non-CBD |
+| `ABUDHABI` | Abu Dhabi — non-CBD |
+| `Al Dhafra Region` | Other |
+
+Nothing in the sheet distinguishes CBD from non-CBD, so non-CBD is the stated default; Al Dhafra
+has no variant of its own and falls to *Other*. An unrecognised REGION fails the build rather than
+being guessed at.
+
+**One plot's numbers disagree with themselves.** `29_5_32_10_B` gives GFA 290 on a 145 m² plot at
+FAR 1, where 145 × 1 = 145. The build prints this every run. The tool derives Max GFA from area ×
+FAR, so it shows 145; if 290 is right then the FAR should be 2. Worth settling before that plot is
+quoted.
+
+`65_3_16_5` appears here without the trailing underscore its UAD workbook uses, so plots are
+matched with trailing underscores ignored.
+
 ## UAD activities drive the schedule
 
 The activity schedule is **UAD-driven**. A plot arrives with its activities already chosen — the
