@@ -2764,7 +2764,8 @@ tbody tr:last-child td{border-bottom:0}
   async function deliver(store, name, verb, key, why){
     const text = JSON.stringify(store, null, 2);
     const count = Object.keys(store).length;
-    const tail = ", " + count + " " + plural(count,"plot","plots") + " in the file."
+    // One plot per file now, so the count is not worth reporting; the plot is.
+    const tail = ", one plot."
                + (why ? " Upload failed: " + why : "");
     try{
       const dl = (typeof claude !== "undefined" && claude && typeof claude.use === "function")
@@ -2799,12 +2800,31 @@ tbody tr:last-child td{border-bottom:0}
       saveMsg("Pick a plot before saving — the file is keyed by sector/plot address.", true);
       return;
     }
-    const store = readStore();
-    const isUpdate = Object.prototype.hasOwnProperty.call(store, key);
-    store[key] = configEntry();
-    writeStore(store);
-    const name = "DCR_" + key.replace(/[^A-Za-z0-9_.-]+/g, "_") + ".json";
-    const verb = isUpdate ? "Updated" : "Saved";
+    /* One save, one file, one plot. The document used to carry every plot saved
+       before it, so a file named for one plot opened on another -- and on entries
+       built by older versions of the tool, which is how a stale designation and
+       location ended up in a file whose name said otherwise. It is rebuilt from the
+       current calculation every time, so what is written is always what is on
+       screen. The key is kept so a consumer can still read it by address. */
+    const entry = configEntry();
+    /* The entry itself is the document. There is no plot-address key around it any
+       more: with one plot per file the key said nothing the filename and
+       plot.sectorPlotId did not already say, and it forced a consumer to look the
+       name up before reading anything. */
+    const store = entry;
+    // A local record of the latest save per plot. It never reaches the file.
+    try{
+      const seen = readStore();
+      seen[key] = { savedAt: entry.savedAt };
+      writeStore(seen);
+    }catch(e){}
+    const t = new Date(), z2 = v => String(v).padStart(2, "0");
+    const stamp = t.getFullYear() + z2(t.getMonth()+1) + z2(t.getDate())
+                + z2(t.getHours()) + z2(t.getMinutes()) + z2(t.getSeconds());
+    // Stamped, so two saves of one plot are two files rather than one overwriting
+    // the other -- each save is its own transaction.
+    const name = "DCR_" + key.replace(/[^A-Za-z0-9_.-]+/g, "_") + "_" + stamp + ".json";
+    const verb = "Saved";
     let upWhy = null;            // why the upload did not happen, if it did not
     try{
     // DISABLED: upload branch. upWhy stays null, so deliver() reports a plain local save.
@@ -2828,19 +2848,11 @@ tbody tr:last-child td{border-bottom:0}
 //        }
 //      }
       if(window.showSaveFilePicker){
-        if(!fileHandle){
+        {
           fileHandle = await window.showSaveFilePicker({ suggestedName: name,
             types:[{ description:"JSON", accept:{ "application/json":[".json"] } }] });
-          // Merge whatever the chosen file already holds, so picking an existing
-          // file updates it rather than replacing everything saved before.
-          try{
-            const existing = JSON.parse(await (await fileHandle.getFile()).text());
-            if(existing && typeof existing === "object" && !Array.isArray(existing)){
-              const merged = Object.assign({}, existing, store);
-              Object.assign(store, merged);
-              writeStore(store);
-            }
-          }catch(e){/* new or unparseable file: write ours */}
+          // Deliberately not merged with whatever the chosen file holds: one save
+          // is one plot, and merging is what put another plot's data in the file.
         }
         const w = await fileHandle.createWritable();
         await w.write(JSON.stringify(store, null, 2));

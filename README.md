@@ -331,6 +331,29 @@ fills the code in. All 2,061 activities now resolve; none needs an ITC class cho
 The match is on an exact category name, so it stays narrow: a category the sheet does not name is
 left alone rather than being guessed at, and the build reports how many rows it filled in.
 
+## Saved configurations
+
+**Each Save writes one file containing one plot.** The document is the entry itself — no
+plot-address key wrapping it — matching `sample_json_DCR_RD21_C409.json`:
+
+```json
+{ "savedAt": "…", "plot": {…}, "inputs": {…}, "overrides": […],
+  "derived": {…}, "activities": […], "uadActivities": […],
+  "uadFilters": {…}, "parking": {…} }
+```
+
+The filename carries the plot and a timestamp — `DCR_RD21_C409_20260830213540.json` — so two saves
+of one plot are two files rather than one overwriting the other. Each save is its own transaction.
+
+**This replaced an accumulating document**, which had two faults worth recording. It carried every
+plot saved before it, so a file named for one plot opened on another; and because old entries were
+never rebuilt, they kept values from earlier versions of the tool — a file could show a designation
+and ITC location that the site had since corrected. The document is now rebuilt from the current
+calculation on every save, so what is written is always what is on screen.
+
+`localStorage` keeps only a timestamp per plot, as a record of what has been saved. It never
+reaches the file.
+
 ## The exported calculation report
 
 **Export PDF**, beside Save, prints a record of the calculation currently on screen — one plot,
