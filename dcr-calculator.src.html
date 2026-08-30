@@ -450,7 +450,7 @@ tbody tr:last-child td{border-bottom:0}
 .dbtag{font-family:"IBM Plex Mono",monospace; font-size:.62rem; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3)}
 
 /* ---------- activity schedule ---------- */
-.sched{width:100%; border-collapse:collapse; font-size:.8rem}
+.sched{width:100%; min-width:820px; border-collapse:collapse; font-size:.8rem}
 .sched th{
   text-align:left; font-family:Manrope,sans-serif; font-size:.62rem; letter-spacing:.09em;
   text-transform:uppercase; color:var(--ink-3); font-weight:500; padding:11px 8px;
@@ -460,7 +460,13 @@ tbody tr:last-child td{border-bottom:0}
 .sched td{padding:5px 6px; border-bottom:1px solid var(--line); vertical-align:middle}
 .sched tr:last-child td{border-bottom:0}
 .sched td.n{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
-.sched .act-cell{position:relative; min-width:200px}
+/* Wide enough that the UAD name and the LUC/ITC line each stay on one line. At
+   200px they both wrapped, which is what made every row three lines tall and the
+   panel run down the page. Anything longer is clipped rather than wrapped. */
+.sched .act-cell{position:relative; min-width:310px; max-width:340px}
+.sched .act-cell select{width:100%}
+.sched .act-cell .uad-name,.sched .act-cell .uad-meta{
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .sched input[type=text],.sched input[type=number]{
   width:100%; min-width:44px; background:transparent; border:1px solid transparent;
   border-radius:3px; color:var(--ink); font-family:Manrope,sans-serif; font-size:.8rem; padding:5px;
@@ -503,6 +509,13 @@ tbody tr:last-child td{border-bottom:0}
 .hits div:hover{background:var(--accent-soft)}
 .hits .aid{font-family:"IBM Plex Mono",monospace; font-size:.63rem; color:var(--ink-3); margin-right:6px}
 .hits .none{color:var(--ink-3); cursor:default}
+/* A plot fills the schedule with everything its workbook proposed -- 27 rows for
+   RD41_C1 -- so the body scrolls rather than pushing the parking panel and the
+   footer far down the page. The header stays put while it does. */
+.tbl-scroll{max-height:min(58vh, 620px); overflow:auto}
+.sched thead th{position:sticky; top:0; z-index:1; background:var(--surface)}
+@media print{ .tbl-scroll{max-height:none; overflow:visible} }
+
 .sched-foot{
   display:flex; flex-wrap:wrap; gap:10px 22px; align-items:center;
   padding:13px 16px; border-top:1px solid var(--line-strong); background:var(--surface-2);
@@ -1532,11 +1545,11 @@ tbody tr:last-child td{border-bottom:0}
         renderSched(); render();
       });
       td0.appendChild(usel);
-      const meta = el("div");
+      const meta = el("div", "uad-meta");
       meta.style.cssText = "font-family:'IBM Plex Mono',monospace; font-size:.62rem; "
                          + "color:var(--ink-3); margin-top:3px";
       if(row.uadName){
-        const nm = el("div");
+        const nm = el("div", "uad-name");
         nm.style.cssText = "font-size:.74rem; color:var(--ink-2); margin-top:2px";
         nm.textContent = row.uadName;
         td0.appendChild(nm);
