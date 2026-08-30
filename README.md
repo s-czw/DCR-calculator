@@ -207,9 +207,35 @@ fitness centre, indoor recreation and a jiu jitsu club — clubs rather than a s
 632. **This is the entry most worth a second opinion**, and the build fails loudly if a name
 appears that is not in the table, rather than guessing.
 
-Selecting a plot **replaces** the schedule, deduplicated by UAD code: a plot lists many DED
-activities sharing one code, and the schedule charges per code, so `RD41_C1`'s 158 activities
-become 27 rows. Merging with whatever was already scheduled would be silently wrong.
+Selecting a plot **replaces** the schedule with **every** filtered activity, one row each — the
+same set, in the same order, as `uadActivities` in the exported JSON. `RD41_C1` gives 158 rows.
+They are deliberately not deduplicated by UAD code: four Bike Shop activities all sit under 2754,
+and each is a separate tenancy. Merging with whatever was already scheduled would be silently
+wrong, so the schedule is replaced.
+
+**A plot's full activity list will normally overrun its own GFA**, and that is the point of
+showing it. `RD41_C1` proposes 158 activities at 60 m² each — 9,480 m² against 5,834 m² of Max
+GFA — so the `GFA` restriction fires immediately. The list is what the workbook proposed, not a
+scheme that fits; removing rows and setting priorities is how it becomes one.
+
+### Rendering 158 rows
+
+Two changes were needed to keep that responsive, both measured on `RD41_C1`:
+
+| | before | after |
+|---|---|---|
+| Re-render | 940 ms | **42 ms** |
+| One keystroke in a slot field | 204 ms | **6 ms** |
+
+`base()` re-filtered all 282 rate rows on every call, and `resolveCode`/`effectiveRate` call it
+once per row per render — tens of thousands of array scans per keystroke. The weekday view, a
+by-class index and the weekend lookup are now built once, and both resolvers are memoised on keys
+that include the ITC location and the basis, so a change to either simply misses the cache rather
+than needing explicit invalidation. Verified that switching location still moves the rates and the
+space count.
+
+The option lists are built once and cloned. Creating them per row meant ~17,700 `<option>`
+elements on every re-render, which was most of the remaining time.
 
 **Priority** is a per-row flag. It marks the row and reaches both the export (`priority` on each
 activity) and the printed report (a star column). It does not affect any calculation.

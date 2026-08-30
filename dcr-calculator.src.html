@@ -1065,13 +1065,41 @@ tbody tr:last-child td{border-bottom:0}
     return COEF.coverageDefault;
   }
 
-  const base = () => ITC.filter(r=>r.period==="weekday");
-  const weekendRow = code => ITC.find(r=>r.period==="weekend" && r.code===code) || null;
+  /* ITC never changes after load, so the weekday view, the by-class index and the
+     weekend lookup are built once. base() used to re-filter all 282 rows on every
+     call, and resolveCode/effectiveRate call it once per schedule row per render:
+     a plot with 158 activities turned one keystroke into tens of thousands of
+     array scans. */
+  let _base = null, _byClass = null, _byCodeWE = null;
+  function itcIndex(){
+    if(_base) return;
+    _base = ITC.filter(r=>r.period==="weekday");
+    _byClass = new Map();
+    _base.forEach(r => {
+      if(!_byClass.has(r.class_code)) _byClass.set(r.class_code, []);
+      _byClass.get(r.class_code).push(r);
+    });
+    _byCodeWE = new Map();
+    ITC.forEach(r => { if(r.period === "weekend") _byCodeWE.set(r.code, r); });
+  }
+  const base = () => { itcIndex(); return _base; };
+  const weekendRow = code => { itcIndex(); return _byCodeWE.get(code) || null; };
+  /* Keyed on everything that changes the answer, so no explicit invalidation is
+     needed: a different location or basis simply misses the cache. */
+  const _codeCache = new Map(), _rateCache = new Map();
 
   /* Blend the two tabs for the active basis. Keeps both totals on the result so
      the panel can show what went in. */
   function effectiveRate(code){
-    const wd = base().find(r=>r.code===code);
+    const rk = code + "|" + state.basis;
+    if(_rateCache.has(rk)) return _rateCache.get(rk);
+    const out = effectiveRateUncached(code);
+    _rateCache.set(rk, out);
+    return out;
+  }
+  function effectiveRateUncached(code){
+    itcIndex();
+    const wd = _base.find(r=>r.code===code);
     if(!wd) return null;
     const we = weekendRow(code) || wd;
     const s = shares(), b = state.basis;
@@ -1117,7 +1145,7 @@ tbody tr:last-child td{border-bottom:0}
                 sched: SCHED.map(r=>({ act: r.act ? r.act.activity_id : null,
                                        slots: r.slots, itcOverride: r.itcOverride,
                                        unitArea: r.unitArea, unitManual: r.unitManual,
-                                       qty: r.qty, uadCode: r.uadCode,
+                                       qty: r.qty, uadCode: r.uadCode, uadActivityCode: r.uadActivityCode,
                                        priority: !!r.priority, uadName: r.uadName,
                                        uadCategory: r.uadCategory })) };
     ["plotSize","plotPick","dedCode","farManual","pcPct","glaPct",
@@ -1300,7 +1328,15 @@ tbody tr:last-child td{border-bottom:0}
      back progressively rather than assuming a class is split that finely. */
   const vnorm = v => String(v == null ? "" : v).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   function resolveCode(cls){
-    const rows = base().filter(r => r.class_code === cls);
+    const ck = cls + "|" + state.itcLoc;
+    if(_codeCache.has(ck)) return _codeCache.get(ck);
+    const out = resolveCodeUncached(cls);
+    _codeCache.set(ck, out);
+    return out;
+  }
+  function resolveCodeUncached(cls){
+    itcIndex();
+    const rows = _byClass.get(cls) || [];
     if(!rows.length) return null;
     if(rows.length === 1) return rows[0];
     const want = vnorm(state.itcLoc);
@@ -1410,6 +1446,28 @@ tbody tr:last-child td{border-bottom:0}
              overFloor: Number.isFinite(capGFA) && floor > capGFA + 1e-9,
              overGLA:   Number.isFinite(capGLA) && floor > capGLA + 1e-9,
              incomplete:incomplete, rows:SCHED.length };
+  }
+  /* The two long option lists are built once and cloned. Creating them per row
+     meant ~17,700 option elements for a 158-activity plot, which is where most of
+     a re-render went. The class list is fixed; the UAD list is fixed; only the
+     first option and the selected value differ per row. */
+  let _uadOpts = null, _itcOpts = null;
+  function uadOptionList(){
+    if(!_uadOpts){
+      _uadOpts = document.createDocumentFragment();
+      UADMAP.forEach(m => _uadOpts.appendChild(Object.assign(el("option"),
+        { value: m.uad_code, textContent: m.uad_category + "  \u00b7  " + m.uad_code })));
+    }
+    return _uadOpts.cloneNode(true);
+  }
+  function itcOptionList(){
+    if(!_itcOpts){
+      _itcOpts = document.createDocumentFragment();
+      classList().forEach(cl => _itcOpts.appendChild(Object.assign(
+        el("option", null, cl.class_code + " \u2014 " + cl.class_name),
+        { value: cl.class_code })));
+    }
+    return _itcOpts.cloneNode(true);
   }
   function uadByCode(code){
     return code ? UADMAP.find(m => String(m.uad_code) === String(code)) || null : null;
@@ -1535,9 +1593,7 @@ tbody tr:last-child td{border-bottom:0}
       const usel = el("select");
       usel.appendChild(Object.assign(el("option"),
         { value:"", textContent: row.act ? row.act.name + "  (DED)" : "choose a UAD activity\u2026" }));
-      UADMAP.forEach(m => usel.appendChild(Object.assign(el("option"),
-        { value: m.uad_code,
-          textContent: m.uad_category + "  \u00b7  " + m.uad_code })));
+      usel.appendChild(uadOptionList());
       usel.value = row.uadCode || "";
       usel.addEventListener("change", ()=>{
         row.uadCode = usel.value || null;
@@ -1620,15 +1676,11 @@ tbody tr:last-child td{border-bottom:0}
       const td2 = el("td");
       const sel = el("select");
       const autoCls = row.act ? row.act.itc_class : null;
-      const autoRow = autoCls ? base().find(r => r.class_code === autoCls) : null;
+      const autoRow = autoCls ? (itcIndex(), (_byClass.get(autoCls) || [])[0] || null) : null;
       sel.appendChild(Object.assign(el("option", null,
         autoCls ? "auto \u2192 " + autoCls + " " + (autoRow ? autoRow.class_name : "")
                 : "\u2014 pick a category \u2014"), { value: "" }));
-      classList().forEach(cl => {
-        sel.appendChild(Object.assign(
-          el("option", null, cl.class_code + " \u2014 " + cl.class_name),
-          { value: cl.class_code }));
-      });
+      sel.appendChild(itcOptionList());
       sel.value = row.itcOverride || "";
       sel.addEventListener("input", ()=>{
         row.itcOverride = sel.value || null;
@@ -2270,24 +2322,24 @@ tbody tr:last-child td{border-bottom:0}
     if(p.devcode)     parts.push("code " + p.devcode);
     src.textContent = parts.join(" · ") || "from the register";
   }
-  /* The plot arrives with its activities already chosen: the workbook rows that
-     passed both filters. They are deduplicated by UAD code, because a plot lists
-     many DED activities sharing one code and the schedule charges per code.
-     Anything already scheduled is replaced -- a different plot means a different
+  /* The plot arrives with its activities already chosen: every workbook row that
+     passed both filters, one row each. Not deduplicated by UAD code -- several
+     activities share a code (four Bike Shop activities all sit under 2754) and
+     each is a separate tenancy, so the schedule has to show them all. This is the
+     same set, in the same order, as uadActivities in the exported JSON.
+
+     Anything already scheduled is replaced: a different plot means a different
      set, and merging the two would be silently wrong. */
   function fillScheduleFromPlot(plot){
     const rows = plot ? uadFor(plot.sector_plot_id) : [];
     if(!rows.length) return 0;
-    const seen = new Set();
     SCHED.length = 0;
     rows.forEach(r => {
       const code = (r.luc_code || "").split(".")[0].trim();
-      const key = code || ("name:" + (r.activity_name || ""));
-      if(seen.has(key)) return;
-      seen.add(key);
       SCHED.push({ id: ++schedSeq, act: null, uadCode: uadByCode(code) ? code : null,
                    priority: false, slots: 1, itcOverride: null,
                    unitArea: "", unitManual: false, qty: "", search: "",
+                   uadActivityCode: r.activity_code || null,
                    uadName: r.activity_name || null, uadCategory: r.category || null });
     });
     return SCHED.length;
@@ -2540,6 +2592,7 @@ tbody tr:last-child td{border-bottom:0}
         const m = uadByCode(r.uadCode);
         return { activity: act(r.act),
                  uadCode: r.uadCode || null,
+                 uadActivityCode: r.uadActivityCode || null,
                  uadName: r.uadName || null,
                  uadCategory: m ? m.uad_category : (r.uadCategory || null),
                  itcEquivalent: m ? m.itc_equivalent : null,
@@ -3256,6 +3309,7 @@ tbody tr:last-child td{border-bottom:0}
           if(!SCHED[i]) return;
           SCHED[i].qty = r.qty || "";
         SCHED[i].uadCode = r.uadCode || null;
+        SCHED[i].uadActivityCode = r.uadActivityCode || null;
         SCHED[i].priority = !!r.priority;
         SCHED[i].uadName = r.uadName || null;
         SCHED[i].uadCategory = r.uadCategory || null;
