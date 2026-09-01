@@ -331,6 +331,44 @@ fills the code in. All 2,061 activities now resolve; none needs an ITC class cho
 The match is on an exact category name, so it stays narrow: a category the sheet does not name is
 left alone rather than being guessed at, and the build reports how many rows it filled in.
 
+## General notes and limitations
+
+Each plot shows the notes and limitations that apply to it, and they can be edited, added to and
+deleted before saving.
+
+```bash
+python3 build_db.py --notes-only         # refresh just notes_rule
+```
+
+**Applicability is by region and plot size, and both matter to both things** — the wording *and*
+which codes appear:
+
+| Region | Band | Notes | Limitations |
+|---|---|---|---|
+| ALAIN | `<=1200` / `>1200` | 14 | 4 |
+| ABUDHABI | `<=1200` / `>1200` | 14 | 4 |
+| Al Dhafra Region | `<=1000` | 13 | 4 |
+| Al Dhafra Region | `>1000` | 15 | 4 |
+
+**13 of the 19 codes carry more than one description.** N-1 names the Al Ain, Abu Dhabi or Al
+Dhafra Development Code depending on the region. The code set differs too: Al Ain carries N-15
+where Abu Dhabi carries N-5, and Al Dhafra picks up N-12 and N-13 only above 1,000 m². So a rule is
+keyed `(code, kind, region, band)`, and the code and its description travel as one object — never
+matched back up by position, because a lost pairing would put a wrong regulation on a report.
+
+The `AREA` band is parsed into an operator and a threshold at build time, so the app tests a plot
+area rather than re-reading the text. A band it cannot parse, or a `TYPE` it does not recognise,
+fails the build.
+
+Edits are held **per plot** in `localStorage`, so switching plots and coming back keeps them and no
+plot inherits another's wording. *Reset to the sheet* discards them for that plot. They reach the
+export as two objects keyed by code:
+
+```json
+"generalNotes": { "N-1": { "code": "N-1", "description": "…" } },
+"limitations":  { "L-1": { "code": "L-1", "description": "…" } }
+```
+
 ## Saved configurations
 
 **Each Save writes one file containing one plot.** The document is the entry itself — no

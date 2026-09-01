@@ -253,6 +253,28 @@ details.coef>div{padding-top:14px; display:flex; flex-direction:column; gap:14px
 #report h1{page-break-after:avoid}
 #report table{page-break-inside:auto}
 
+/* ---------- notes and limitations ---------- */
+/* Code and description sit on one row, so the pairing reads as a pairing. The code
+   box is narrow and monospaced: it is an identifier, and a wrong one silently
+   re-labels a regulation. */
+.rule-set{display:flex; flex-direction:column; gap:8px}
+.rule-set h3{font-family:Manrope,sans-serif; font-size:.68rem; letter-spacing:.1em;
+  text-transform:uppercase; font-weight:500; color:var(--ink-3); margin:0}
+.rule-set + .rule-set{margin-top:18px}
+.rule{display:grid; grid-template-columns:74px minmax(0,1fr) auto; gap:8px;
+  align-items:start}
+.rule-code{font-family:"IBM Plex Mono",monospace; font-size:.76rem; text-align:center}
+.rule-desc{font-family:Manrope,sans-serif; font-size:.78rem; line-height:1.45;
+  resize:vertical; min-height:2.6em}
+.rule input,.rule textarea{width:100%; padding:6px 8px; border-radius:6px;
+  border:1px solid var(--line-strong); background:var(--sunk); color:var(--ink);
+  box-sizing:border-box}
+.rule input:focus,.rule textarea:focus{border-color:var(--accent); outline:none}
+.rule-add{border-top:1px dotted var(--line-strong); padding-top:9px}
+.rule-add input,.rule-add textarea{background:transparent}
+#rulesBody{max-height:min(60vh,660px); overflow:auto}
+@media print{ #rulesBody{max-height:none; overflow:visible} }
+
 /* ---------- sign-in gate ---------- */
 /* Driven by a class on the root element set before the stylesheet loads, so the
    app is never painted first and then covered. display, not [hidden], because a
@@ -837,6 +859,12 @@ tbody tr:last-child td{border-bottom:0}
         <span class="io-msg" id="copyMsg" aria-live="polite"></span>
       </div>
 
+      <details class="panel fold" id="rulesPanel">
+        <summary class="panel-hd"><h2>Notes &amp; limitations</h2>
+          <span class="tag" id="rulesTag">no plot</span></summary>
+        <div class="panel-bd" id="rulesBody"></div>
+      </details>
+
       <!-- DISABLED: Google Drive upload panel. Save writes locally only.
            Re-enable together with the CSS, the plumbing and the wiring.
       <details class="panel fold" id="upPanel">
@@ -966,6 +994,7 @@ tbody tr:last-child td{border-bottom:0}
   let UAD = [];                       /* per-plot UAD activities, already filtered */
   let UADMAP = [];                    /* UAD code -> category -> ITC class */
   let APPROVED = [];                  /* the approved 20: the only plots offered */
+  let NOTES = [];                     /* general notes and limitations by region/band */
   const state = { basis:"combined", itcLoc:"AD-CBD", groupOrder:[] };
 
   /* ---------- helpers --------------------------------------------------- */
@@ -1013,6 +1042,8 @@ tbody tr:last-child td{border-bottom:0}
             + "licence_type, luc_code, category, transport_mode, found_walk_700m, "
             + "found_drive_10m, inclusion, proposed, rational, identifier, identifier_logic "
             + "FROM plot_uad ORDER BY sector_plot_id, id");
+    NOTES = q("SELECT code, kind, region, band, band_op, band_value, description "
+              + "FROM notes_rule ORDER BY region, band, kind, id");
     APPROVED = q("SELECT sector_plot_id, region, itc_loc, district, dev_code, "
                  + "planned_area, area, gfa, far, coverage_pct FROM plot_approved "
                  + "ORDER BY area");
@@ -1035,6 +1066,7 @@ tbody tr:last-child td{border-bottom:0}
     LU = (SNAPSHOT.land_use || []).map(r=>Object.assign({},r));
     PLOTS = (SNAPSHOT.plot || []).map(r=>Object.assign({},r));
     APPROVED = (SNAPSHOT.plot_approved || []).map(r=>Object.assign({},r));
+    NOTES = (SNAPSHOT.notes_rule || []).map(r=>Object.assign({},r));
     UAD = (SNAPSHOT.plot_uad || []).map(r=>Object.assign({},r));
     UADMAP = (SNAPSHOT.uad_map || []).map(r=>Object.assign({},r));
     META = Object.assign({}, SNAPSHOT.meta);
@@ -2459,6 +2491,8 @@ tbody tr:last-child td{border-bottom:0}
     // activities and go back to the full mapping list, and that only happens on a
     // re-render.
     applyApproved(p);
+    loadRulesFor(p, Number(document.getElementById("plotSize").value));
+    renderRules();
     fillScheduleFromPlot(p);
     renderSched();
     paintPlotPick();
@@ -2741,6 +2775,10 @@ tbody tr:last-child td{border-bottom:0}
       })(),
       uadFilters: { Plot_Proposed_UAD: "Yes",
                     UAD_Activity_Inclusion_Exclusion: "Include" },
+      // As edited, keyed by code. Seeded from the sheet for this plot's region and
+      // size band; every code keeps the description it was paired with.
+      generalNotes: rulesAsObjects().generalNotes,
+      limitations: rulesAsObjects().limitations,
       parking: {
         spacesRequired: c.parking.need, areaPerSpace: c.parking.per,
         totalArea: c.parking.needArea,
@@ -3148,8 +3186,172 @@ tbody tr:last-child td{border-bottom:0}
       + "the DED-to-ITC mapping are assumptions; see the project README.");
   }
 
+  /* ---------- general notes and limitations ------------------------------- */
+  /* Seeded from the sheet for the plot's region and size band, then the user's
+     own. Held per plot, so switching plots and coming back does not discard
+     edits, and a plot never inherits another's wording.
+
+     The code and its description travel together as one object and are never
+     matched up later by index: the same code carries different wording in each
+     region, so a pairing lost here would be a wrong regulation on a report. */
+  const RULES_KEY = "dcr.rules.v1";
+  let RULES = { notes: [], limits: [] };
+
+  function bandHolds(rule, area){
+    if(!Number.isFinite(area)) return true;    // no area yet: show everything
+    const v = Number(rule.band_value);
+    switch(rule.band_op){
+      case "<=": return area <= v;
+      case "<":  return area <  v;
+      case ">=": return area >= v;
+      case ">":  return area >  v;
+      default:   return true;
+    }
+  }
+  function rulesFromSheet(plot, area){
+    const region = plot && plot.approved ? plot.approved.region : null;
+    if(!region) return { notes: [], limits: [] };
+    const pick = kind => NOTES
+      .filter(r => r.region === region && r.kind === kind && bandHolds(r, area))
+      .map(r => ({ code: r.code, description: r.description }));
+    return { notes: pick("note"), limits: pick("limitation") };
+  }
+  function readRuleStore(){
+    try{ const o = JSON.parse(localStorage.getItem(RULES_KEY) || "{}");
+         return (o && typeof o === "object" && !Array.isArray(o)) ? o : {}; }
+    catch(e){ return {}; }
+  }
+  function writeRuleStore(o){
+    try{ localStorage.setItem(RULES_KEY, JSON.stringify(o)); }catch(e){}
+  }
+  function rulesPlotKey(){
+    const p = currentPlot();
+    return p ? String(p.sector_plot_id) : "__manual";
+  }
+  function saveRules(){
+    const all = readRuleStore();
+    all[rulesPlotKey()] = RULES;
+    writeRuleStore(all);
+  }
+  /* Reseed on a plot change, unless this plot already has edits stored. */
+  function loadRulesFor(plot, area){
+    const key = plot ? String(plot.sector_plot_id) : "__manual";
+    const stored = readRuleStore()[key];
+    if(stored && Array.isArray(stored.notes) && Array.isArray(stored.limits)){
+      RULES = { notes: stored.notes.map(r=>({code:r.code, description:r.description})),
+                limits: stored.limits.map(r=>({code:r.code, description:r.description})) };
+    } else {
+      RULES = rulesFromSheet(plot, area);
+    }
+  }
+  function resetRules(){
+    const p = currentPlot();
+    const all = readRuleStore();
+    delete all[rulesPlotKey()];
+    writeRuleStore(all);
+    RULES = rulesFromSheet(p, num($("#plotSize").value));
+    renderRules(); render();
+  }
+
+  function renderRules(){
+    const host = document.getElementById("rulesBody");
+    if(!host) return;
+    host.innerHTML = "";
+    const tag = document.getElementById("rulesTag");
+    if(tag) tag.textContent = (RULES.notes.length + RULES.limits.length) + " rules";
+
+    const section = (title, list, kind) => {
+      const wrap = el("div", "rule-set");
+      wrap.appendChild(el("h3", "", title));
+      if(!list.length) wrap.appendChild(el("p", "hint", "None for this plot."));
+      list.forEach((r, i) => {
+        const row = el("div", "rule");
+        const code = el("input", "rule-code");
+        code.value = r.code; code.setAttribute("aria-label", "Code");
+        code.addEventListener("input", ()=>{ r.code = code.value.trim(); saveRules(); render(); });
+        const desc = el("textarea", "rule-desc");
+        desc.value = r.description; desc.rows = 2;
+        desc.setAttribute("aria-label", "Description for " + r.code);
+        desc.addEventListener("input", ()=>{ r.description = desc.value; saveRules(); render(); });
+        const del = el("button", "btn mini icon", "×");
+        del.type = "button";
+        del.title = "Delete " + r.code;
+        del.addEventListener("click", ()=>{
+          list.splice(i, 1); saveRules(); renderRules(); render();
+        });
+        row.appendChild(code); row.appendChild(desc); row.appendChild(del);
+        wrap.appendChild(row);
+      });
+      const add = el("div", "rule rule-add");
+      const nc = el("input", "rule-code");
+      nc.placeholder = kind === "note" ? "N-16" : "L-5";
+      nc.setAttribute("aria-label", "New code");
+      const nd = el("textarea", "rule-desc");
+      nd.rows = 2; nd.placeholder = "description";
+      nd.setAttribute("aria-label", "New description");
+      const go = el("button", "btn mini", "Add");
+      go.type = "button";
+      const commit = ()=>{
+        const c = nc.value.trim(), d = nd.value.trim();
+        if(!c && !d) return;
+        if(!c){ nc.focus(); return; }          // a description with no code is unusable
+        list.push({ code: c, description: d });
+        saveRules(); renderRules(); render();
+      };
+      go.addEventListener("click", commit);
+      add.appendChild(nc); add.appendChild(nd); add.appendChild(go);
+      wrap.appendChild(add);
+      return wrap;
+    };
+    host.appendChild(section("General notes", RULES.notes, "note"));
+    host.appendChild(section("Limitations", RULES.limits, "limitation"));
+
+    const foot = el("div", "btnrow");
+    const rst = el("button", "btn mini", "Reset to the sheet");
+    rst.type = "button";
+    rst.addEventListener("click", resetRules);
+    foot.appendChild(rst);
+    const src = el("span", "io-msg");
+    const p = currentPlot();
+    src.textContent = p && p.approved
+      ? p.approved.region + "  ·  " + fmt(num($("#plotSize").value)) + " m²"
+      : "pick a plot to load its rules";
+    foot.appendChild(src);
+    host.appendChild(foot);
+  }
+
+  /* The shape the export asks for: an object per kind, keyed by code. A duplicated
+     code would silently drop one of the two, so it is reported rather than hidden. */
+  function rulesAsObjects(){
+    const pack = list => {
+      const out = {};
+      list.forEach(r => {
+        const c = String(r.code || "").trim();
+        if(!c) return;
+        out[c] = { code: c, description: String(r.description == null ? "" : r.description) };
+      });
+      return out;
+    };
+    return { generalNotes: pack(RULES.notes), limitations: pack(RULES.limits) };
+  }
+  function duplicateRuleCodes(){
+    const dup = [];
+    [["general note", RULES.notes], ["limitation", RULES.limits]].forEach(([what, list]) => {
+      const seen = new Set();
+      list.forEach(r => {
+        const c = String(r.code || "").trim();
+        if(!c) return;
+        if(seen.has(c)) dup.push(what + " " + c);
+        seen.add(c);
+      });
+    });
+    return dup;
+  }
+
   function wire(){
     wireTheme();
+    loadRulesFor(currentPlot(), num($("#plotSize").value));
+    renderRules();
     wireGate();
     // The print dialog is the PDF writer: "Save as PDF" is a destination in it on
     // every current browser, so no PDF library ships in the page. Browsers take the

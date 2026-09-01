@@ -35,6 +35,7 @@ DEFAULT_UAD = os.environ.get("DCR_UAD_DIR") or os.path.join(HERE, "data",
 UAD_HEADER_ROW = 4
 DEFAULT_UAD_MAP = os.path.join(SRC, "uad.xlsx")
 DEFAULT_APPROVED = os.path.join(SRC, "approved_20.xlsx")
+DEFAULT_NOTES = os.path.join(SRC, "notes.xlsx")
 
 # REGION in the approved sheet -> the ITC location the rates are read at. Nothing
 # in the sheet distinguishes CBD from non-CBD, so non-CBD is the stated default;
@@ -486,6 +487,51 @@ def parse(grid):
     return out
 
 
+def load_notes(path):
+    """General notes and limitations, by region and plot-size band.
+
+    Both the wording and the set of codes depend on the two: the description names
+    the region's own Development Code, Al Ain carries N-15 where Abu Dhabi carries
+    N-5, and Al Dhafra picks up N-12 and N-13 only above its threshold. So a row is
+    (code, type, region, band) -> description, and the code is never separated from
+    the description that belongs to that combination.
+    """
+    from openpyxl import load_workbook
+    ws = load_workbook(path, data_only=True).worksheets[0]
+    rows = list(ws.iter_rows(min_row=1, values_only=True))
+    if not rows:
+        return []
+    head = [norm(v).upper() if v is not None else "" for v in rows[0]]
+    want = ("CODE", "TYPE", "REGION", "AREA", "DESCRIPTION")
+    ix = {}
+    for w in want:
+        if w not in head:
+            sys.exit(f"{os.path.basename(path)}: no {w} column; headers were {head}")
+        ix[w] = head.index(w)
+
+    out = []
+    for r in rows[1:]:
+        code = norm(r[ix["CODE"]]) if ix["CODE"] < len(r) else None
+        if not code:
+            continue
+        band = norm(r[ix["AREA"]]) or ""
+        m = re.match(r"^\s*(<=|>=|<|>)\s*([0-9.]+)\s*$", band)
+        if not m:
+            sys.exit(f"{os.path.basename(path)}: cannot read the AREA band {band!r} "
+                     f"on {code}; expected something like '<=1200' or '>1200'")
+        kind = norm(r[ix["TYPE"]]).upper()
+        if "LIMIT" in kind:
+            typ = "limitation"
+        elif "NOTE" in kind:
+            typ = "note"
+        else:
+            sys.exit(f"{os.path.basename(path)}: unknown TYPE {kind!r} on {code}")
+        out.append(dict(code=code, kind=typ, region=norm(r[ix["REGION"]]),
+                        band=band, band_op=m.group(1), band_value=float(m.group(2)),
+                        description=norm(r[ix["DESCRIPTION"]])))
+    return out
+
+
 def load_approved(path):
     """The approved 20: the plots the tool offers, with their Code values.
 
@@ -658,6 +704,29 @@ def load_plots(path):
     return out
 
 
+NOTES_DDL = """
+-- General notes and limitations. Keyed by (code, region, band) rather than by code
+-- alone: the same code carries different wording per region, and which codes apply
+-- differs by region and plot size. band_op/band_value are the parsed AREA band, so
+-- the app can test a plot area without re-reading the text.
+CREATE TABLE notes_rule (
+    id          INTEGER PRIMARY KEY,
+    code        TEXT NOT NULL,
+    kind        TEXT NOT NULL CHECK (kind IN ('note','limitation')),
+    region      TEXT NOT NULL,
+    band        TEXT NOT NULL,
+    band_op     TEXT NOT NULL,
+    band_value  REAL NOT NULL,
+    description TEXT NOT NULL
+);
+CREATE INDEX idx_notes_region ON notes_rule (region, kind);
+"""
+
+NOTES_INSERT = ("INSERT INTO notes_rule (code, kind, region, band, band_op, band_value, "
+                "description) VALUES (:code,:kind,:region,:band,:band_op,:band_value,"
+                ":description)")
+
+
 APPROVED_DDL = """
 -- The plots the tool offers, and the Code values it uses for them. TEMPORARY:
 -- these come from the approved-20 sheet rather than the designation schedule,
@@ -820,6 +889,42 @@ def uad_only(folder, map_path=None):
     return len(rows)
 
 
+def notes_only(path):
+    """Refresh just notes_rule."""
+    if not os.path.exists(DB):
+        sys.exit(f"{DB} not found - a full build has to run first")
+    rows = load_notes(path)
+    if not rows:
+        sys.exit(f"no notes found in {path}")
+    con = sqlite3.connect(DB)
+    con.row_factory = sqlite3.Row
+    con.executescript("DROP TABLE IF EXISTS notes_rule;")
+    con.executescript(NOTES_DDL)
+    con.executemany(NOTES_INSERT, rows)
+    con.executemany("INSERT OR REPLACE INTO meta (key, value) VALUES (?,?)", [
+        ("notes_file", os.path.basename(path)),
+        ("notes_rows", str(len(rows))),
+    ])
+    con.commit()
+    notes = sum(1 for r in rows if r["kind"] == "note")
+    print(f"  {len(rows)} rules: {notes} general notes, {len(rows)-notes} limitations")
+    combos = sorted({(r["region"], r["band"]) for r in rows})
+    print(f"  across {len(combos)} region/band combinations:")
+    for reg, band in combos:
+        k = [r for r in rows if r["region"] == reg and r["band"] == band]
+        nn = sum(1 for r in k if r["kind"] == "note")
+        print(f"    {reg:18} {band:8} {nn:2} notes, {len(k)-nn} limitations")
+    # A region here that no plot uses, or the other way round, would show as silence
+    # in the app rather than an error, so say it now.
+    have = {r[0] for r in con.execute("SELECT DISTINCT region FROM plot_approved")}
+    mine = {r["region"] for r in rows}
+    if have - mine:
+        print(f"  ! plots use regions with no rules: {sorted(have - mine)}")
+    if mine - have:
+        print(f"  (rules for regions no plot uses: {sorted(mine - have)})")
+    return len(rows)
+
+
 def approved_only(path):
     """Refresh just plot_approved, and make sure its Dev Codes are selectable."""
     if not os.path.exists(DB):
@@ -868,6 +973,10 @@ def approved_only(path):
 
 
 def main():
+    if "--notes-only" in sys.argv:
+        rest = [a for a in sys.argv[1:] if a != "--notes-only"]
+        notes_only(rest[0] if rest else DEFAULT_NOTES)
+        return
     if "--approved-only" in sys.argv:
         rest = [a for a in sys.argv[1:] if a != "--approved-only"]
         approved_only(rest[0] if rest else DEFAULT_APPROVED)
