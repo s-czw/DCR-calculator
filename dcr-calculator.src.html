@@ -272,7 +272,13 @@ details.coef>div{padding-top:14px; display:flex; flex-direction:column; gap:14px
 .rule input:focus,.rule textarea:focus{border-color:var(--accent); outline:none}
 .rule-add{border-top:1px dotted var(--line-strong); padding-top:9px}
 .rule-add input,.rule-add textarea{background:transparent}
-#rulesBody{max-height:min(60vh,660px); overflow:auto}
+/* The body is a flex column (.panel-bd), so capping its height made every child
+   shrink to share the space -- rows collapsed to a few pixels and overlapped. The
+   children are told not to shrink; the box scrolls instead. */
+#rulesBody{max-height:min(58vh,620px); overflow-y:auto; overflow-x:hidden}
+#rulesBody > *{flex:0 0 auto}
+.rule-set > *{flex:0 0 auto}
+.rule{min-height:2.9em}
 @media print{ #rulesBody{max-height:none; overflow:visible} }
 
 /* ---------- sign-in gate ---------- */
@@ -821,6 +827,12 @@ tbody tr:last-child td{border-bottom:0}
         <div id="parkBody"></div>
       </section>
 
+      <details class="panel fold" id="rulesPanel">
+        <summary class="panel-hd"><h2>Notes &amp; limitations</h2>
+          <span class="tag" id="rulesTag">no plot</span></summary>
+        <div class="panel-bd" id="rulesBody"></div>
+      </details>
+
       <details class="panel fold">
         <summary class="panel-hd"><h2>Plot &amp; footprint</h2><span class="tag">indicative &#x00B7; click to show</span></summary>
         <div class="plan">
@@ -858,12 +870,6 @@ tbody tr:last-child td{border-bottom:0}
         <button type="button" class="btn" id="loadBoard">Load worked example</button>
         <span class="io-msg" id="copyMsg" aria-live="polite"></span>
       </div>
-
-      <details class="panel fold" id="rulesPanel">
-        <summary class="panel-hd"><h2>Notes &amp; limitations</h2>
-          <span class="tag" id="rulesTag">no plot</span></summary>
-        <div class="panel-bd" id="rulesBody"></div>
-      </details>
 
       <!-- DISABLED: Google Drive upload panel. Save writes locally only.
            Re-enable together with the CSS, the plumbing and the wiring.
