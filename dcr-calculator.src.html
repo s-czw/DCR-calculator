@@ -257,28 +257,28 @@ details.coef>div{padding-top:14px; display:flex; flex-direction:column; gap:14px
 /* Code and description sit on one row, so the pairing reads as a pairing. The code
    box is narrow and monospaced: it is an identifier, and a wrong one silently
    re-labels a regulation. */
-.rule-set{display:flex; flex-direction:column; gap:8px}
-.rule-set h3{font-family:Manrope,sans-serif; font-size:.68rem; letter-spacing:.1em;
+.nrule-set{display:flex; flex-direction:column; gap:8px}
+.nrule-set h3{font-family:Manrope,sans-serif; font-size:.68rem; letter-spacing:.1em;
   text-transform:uppercase; font-weight:500; color:var(--ink-3); margin:0}
-.rule-set + .rule-set{margin-top:18px}
-.rule{display:grid; grid-template-columns:74px minmax(0,1fr) auto; gap:8px;
+.nrule-set + .nrule-set{margin-top:18px}
+.nrule{display:grid; grid-template-columns:74px minmax(0,1fr) auto; gap:8px;
   align-items:start}
-.rule-code{font-family:"IBM Plex Mono",monospace; font-size:.76rem; text-align:center}
-.rule-desc{font-family:Manrope,sans-serif; font-size:.78rem; line-height:1.45;
+.nrule-code{font-family:"IBM Plex Mono",monospace; font-size:.76rem; text-align:center}
+.nrule-desc{font-family:Manrope,sans-serif; font-size:.78rem; line-height:1.45;
   resize:vertical; min-height:2.6em}
-.rule input,.rule textarea{width:100%; padding:6px 8px; border-radius:6px;
+.nrule input,.nrule textarea{width:100%; padding:6px 8px; border-radius:6px;
   border:1px solid var(--line-strong); background:var(--sunk); color:var(--ink);
   box-sizing:border-box}
-.rule input:focus,.rule textarea:focus{border-color:var(--accent); outline:none}
-.rule-add{border-top:1px dotted var(--line-strong); padding-top:9px}
-.rule-add input,.rule-add textarea{background:transparent}
+.nrule input:focus,.nrule textarea:focus{border-color:var(--accent); outline:none}
+.nrule-add{border-top:1px dotted var(--line-strong); padding-top:9px}
+.nrule-add input,.nrule-add textarea{background:transparent}
 /* The body is a flex column (.panel-bd), so capping its height made every child
    shrink to share the space -- rows collapsed to a few pixels and overlapped. The
    children are told not to shrink; the box scrolls instead. */
 #rulesBody{max-height:min(58vh,620px); overflow-y:auto; overflow-x:hidden}
 #rulesBody > *{flex:0 0 auto}
-.rule-set > *{flex:0 0 auto}
-.rule{min-height:2.9em}
+.nrule-set > *{flex:0 0 auto}
+.nrule{min-height:2.9em}
 @media print{ #rulesBody{max-height:none; overflow:visible} }
 
 /* ---------- sign-in gate ---------- */
@@ -3267,15 +3267,15 @@ tbody tr:last-child td{border-bottom:0}
     if(tag) tag.textContent = (RULES.notes.length + RULES.limits.length) + " rules";
 
     const section = (title, list, kind) => {
-      const wrap = el("div", "rule-set");
+      const wrap = el("div", "nrule-set");
       wrap.appendChild(el("h3", "", title));
       if(!list.length) wrap.appendChild(el("p", "hint", "None for this plot."));
       list.forEach((r, i) => {
-        const row = el("div", "rule");
-        const code = el("input", "rule-code");
+        const row = el("div", "nrule");
+        const code = el("input", "nrule-code");
         code.value = r.code; code.setAttribute("aria-label", "Code");
         code.addEventListener("input", ()=>{ r.code = code.value.trim(); saveRules(); render(); });
-        const desc = el("textarea", "rule-desc");
+        const desc = el("textarea", "nrule-desc");
         desc.value = r.description; desc.rows = 2;
         desc.setAttribute("aria-label", "Description for " + r.code);
         desc.addEventListener("input", ()=>{ r.description = desc.value; saveRules(); render(); });
@@ -3288,11 +3288,11 @@ tbody tr:last-child td{border-bottom:0}
         row.appendChild(code); row.appendChild(desc); row.appendChild(del);
         wrap.appendChild(row);
       });
-      const add = el("div", "rule rule-add");
-      const nc = el("input", "rule-code");
+      const add = el("div", "nrule nrule-add");
+      const nc = el("input", "nrule-code");
       nc.placeholder = kind === "note" ? "N-16" : "L-5";
       nc.setAttribute("aria-label", "New code");
-      const nd = el("textarea", "rule-desc");
+      const nd = el("textarea", "nrule-desc");
       nd.rows = 2; nd.placeholder = "description";
       nd.setAttribute("aria-label", "New description");
       const go = el("button", "btn mini", "Add");
