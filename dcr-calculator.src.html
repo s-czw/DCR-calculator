@@ -2394,8 +2394,17 @@ tbody tr:last-child td{border-bottom:0}
   }
   /* The workbooks are already filtered at build time to Plot_Proposed_UAD = Yes and
      UAD_Activity_Inclusion_Exclusion = Include, so everything held here is included */
+  /* Matched with trailing underscores and spaces normalised. The approved sheet
+     writes 65_3_16_5 where the UAD workbook is named 65_3_16_5_, and an exact
+     comparison silently returned nothing for that plot -- an empty uadActivities in
+     the export while the rest of the file looked populated. */
+  function samePlotId(a, b){
+    const bare = v => String(v == null ? "" : v).trim().replace(/\s+/g, "_")
+                        .replace(/_+$/, "").toUpperCase();
+    return bare(a) === bare(b);
+  }
   function uadFor(id){
-    return id ? UAD.filter(r => String(r.sector_plot_id) === String(id)) : [];
+    return id ? UAD.filter(r => samePlotId(r.sector_plot_id, id)) : [];
   }
   function currentPlot(){
     const sel = document.getElementById("plotPick");
@@ -2441,7 +2450,15 @@ tbody tr:last-child td{border-bottom:0}
      set, and merging the two would be silently wrong. */
   function fillScheduleFromPlot(plot){
     const rows = plot ? uadFor(plot.sector_plot_id) : [];
-    if(!rows.length) return 0;
+    /* A selected plot with no activities of its own clears the schedule. This used
+       to return early, leaving whatever the previous plot put there -- so 65_3_16_5
+       exported 136 activities belonging to GHAYATHI EAST 4_C98. Rows attributed to
+       the wrong plot are worse than no rows. Manual entry is left alone: there is no
+       plot for them to be wrong about. */
+    if(!rows.length){
+      if(plot) SCHED.length = 0;
+      return 0;
+    }
     SCHED.length = 0;
     rows.forEach(r => {
       const code = (r.luc_code || "").split(".")[0].trim();

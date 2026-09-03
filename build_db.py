@@ -882,11 +882,59 @@ def uad_only(folder, map_path=None):
                 ("uad_plots", str(n_plots)))
     con.commit()
     print(f"  {len(rows):,} UAD activities kept across {n_plots} plots")
+    check_plot_ids(con)
     print(f"  filters: Plot_Proposed_UAD = Yes and UAD_Activity_Inclusion_Exclusion = Include")
     if unmatched:
         print(f"  no register entry for {unmatched} - loaded under the filename id, but the "
               f"plot cannot be selected until it is added to DCR_plots.xlsx")
     return len(rows)
+
+
+def bare_id(v):
+    """A plot id with the spellings that differ between sheets rubbed out.
+
+    The approved sheet writes 65_3_16_5, its UAD workbook is named 65_3_16_5_, and
+    the register keeps spaces where filenames keep underscores. Compared literally,
+    that one plot found no activities: the export carried an empty uadActivities and
+    the schedule kept whatever plot was picked before it. Nothing warned, because
+    every table was individually consistent.
+    """
+    return re.sub(r"\s+", "_", str(v or "").strip()).rstrip("_").upper()
+
+
+def check_plot_ids(con):
+    """Report any approved plot whose id does not literally match its UAD rows.
+
+    A mismatch is survivable -- the page compares loosely -- but it is a sign the
+    sheets have drifted, and it is cheaper to read here than in an exported file.
+    """
+    try:
+        approved = [r[0] for r in con.execute("SELECT sector_plot_id FROM plot_approved")]
+        uad = [r[0] for r in con.execute("SELECT DISTINCT sector_plot_id FROM plot_uad")]
+    except sqlite3.OperationalError:
+        return                      # a table is not built yet; nothing to compare
+    if not approved or not uad:
+        return
+    by_bare = {}
+    for u in uad:
+        by_bare.setdefault(bare_id(u), []).append(u)
+    spelled, missing = [], []
+    for a in approved:
+        hit = by_bare.get(bare_id(a))
+        if not hit:
+            missing.append(a)
+        elif a not in hit:
+            spelled.append((a, hit[0]))
+    if spelled:
+        print("  ! the approved sheet and the UAD workbooks spell these differently:")
+        for a, u in spelled:
+            print(f"      approved {a!r}  vs  workbook {u!r}")
+        print("    the page matches them loosely, so this is a warning, not a break")
+    if missing:
+        print(f"  ! approved plots with NO UAD activities at all: {missing}")
+        print("    their schedules will be empty; check the workbook name")
+    if not spelled and not missing:
+        print(f"  every approved plot matches its UAD activities by name")
 
 
 def notes_only(path):
@@ -959,6 +1007,7 @@ def approved_only(path):
     ])
     con.commit()
     print(f"  {len(rows)} approved plots loaded from {os.path.basename(path)}")
+    check_plot_ids(con)
     if added:
         print(f"  designations added so they can be selected: {added}")
     # GFA is given as well as FAR, and the two should agree.

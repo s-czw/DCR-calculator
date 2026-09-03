@@ -229,8 +229,24 @@ FAR 1, where 145 × 1 = 145. The build prints this every run. The tool derives M
 FAR, so it shows 145; if 290 is right then the FAR should be 2. Worth settling before that plot is
 quoted.
 
-`65_3_16_5` appears here without the trailing underscore its UAD workbook uses, so plots are
-matched with trailing underscores ignored.
+### One plot id, two spellings
+
+`65_3_16_5` appears in the approved sheet without the trailing underscore its UAD workbook uses
+(`Plot_65_3_16_5_.xls`), and the register keeps spaces where filenames keep underscores. Plot ids
+are therefore compared with spaces normalised and trailing underscores ignored, in `samePlotId`.
+
+**This caused a real defect worth remembering.** Compared literally, that one plot matched no UAD
+rows, and two things followed:
+
+- `uadActivities` exported as `[]`, while the rest of the file looked populated.
+- `fillScheduleFromPlot` returned early **without clearing the schedule**, so the plot kept the
+  previously selected plot's activities — 96 expected, 158 or 136 exported depending on what had
+  been picked before. Rows attributed to the wrong plot, which is worse than none.
+
+Both are fixed: the comparison is tolerant, and a selected plot with no activities of its own now
+clears the schedule. `check_plot_ids` runs on every `--approved-only` and `--uad-only` build and
+prints both spellings when they differ, so the next drift is read at build time rather than found
+in an exported file. Nothing warned before, because each table was individually consistent.
 
 ## UAD activities drive the schedule
 
