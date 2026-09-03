@@ -2818,15 +2818,65 @@ tbody tr:last-child td{border-bottom:0}
       },
       overrides: activeOverrides(c.o).map(x => ({
         label: x.label, original: x.from, value: x.to })),
+      /* All eight parameters with their provenance, not just the overridden ones.
+         "overrides" lists what was typed over; this says what every figure in the
+         calculation actually resolved to and where it came from. */
+      parameters: OV.map(d => {
+        const x = c.o[d.key];
+        if(!x) return null;
+        return { key: d.key, label: d.label, value: x.value,
+                 original: x.original == null ? null : x.original,
+                 overridden: !!x.overridden,
+                 source: x.overridden ? "entered" : (d.base || "from the designation") };
+      }).filter(Boolean),
       derived: {
         maxGFA: c.maxGFA, plotCoverage: c.cover, gla: c.gla,
         maxActivities: c.act, unitArea: c.unit,
         maxNoWorkers: c.workers, workerArea: WORKER_AREA,
         floorAreaUsed: c.sched.floor,
         overGFA: !!c.sched.overFloor, overGLA: !!c.sched.overGLA,
-        overSlots: !!c.sched.overSlots
+        overSlots: !!c.sched.overSlots,
+        // The parameters the five steps actually resolved to, after any override,
+        // and the unfloored figures the two counts were floored from -- without
+        // these the derivation cannot be re-walked from the file.
+        far: c.far, plotCoveragePct: c.pcPct, glaPct: c.glaPct,
+        maxActivitiesRaw: c.actRaw, maxNoWorkersRaw: c.workRaw,
+        gfaCap: c.sched.capGFA, glaCap: c.sched.capGLA
       },
-      schedule: { basis: SCHED_BASIS },
+      /* The designation as the Code publishes it, so a reader can see what was
+         inherited and what was typed over. */
+      landUse: c.dRow ? {
+        designation: c.dRow.designation, name: c.dRow.name,
+        codeFAR: num(c.dRow.far), codeCoveragePct: codeCoveragePct(),
+        remarks: c.dRow.remarks || null
+      } : null,
+      /* Every rate in the file is a blend of the weekday and weekend matrices, so
+         the blend is part of the result, not a setting. */
+      rateModel: {
+        basis: state.basis, itcLocation: state.itcLoc,
+        weekdayDays: WEEK.weekday, weekendDays: WEEK.weekend,
+        weekdayShare: shares().wd, weekendShare: shares().we
+      },
+      /* The fixed figures behind the arithmetic. Recorded because they are
+         assumptions, and a file read in a year should not have to guess them. */
+      constants: {
+        areaPerSpace: SPACE_AREA, usablePerBasementFloor: FLOOR_USABLE,
+        workerArea: WORKER_AREA, glaShareDefault: COEF.glaPct,
+        unitAreaDefault: COEF.unitArea, coverageDefault: COEF.coverageDefault,
+        parkingCapPer100SqmGFA: PARK_CAP, smallPlotThreshold: SMALL_PLOT,
+        dcrPlus: { minPlotArea: PLUS_MIN_PLOT, areaPerSlot: PLUS_SLOT_AREA,
+                   areaPerSeat: PLUS_SEAT_AREA, coverageLimitPct: PLUS_COV_LIMIT,
+                   foldedIntoLocalShopping: PLUS_FOLD_INTO_LSC.slice() }
+      },
+      schedule: {
+        basis: SCHED_BASIS,
+        rows: c.sched.rows, slotsUsed: c.sched.slots, slotsAllowed: c.sched.allowed,
+        baysRaw: c.sched.raw, baysRequired: c.sched.baysCeil,
+        floorAreaUsed: c.sched.floor, manualUnitAreas: c.sched.manualUnits,
+        rowsIncomplete: c.sched.incomplete,
+        overSlots: !!c.sched.overSlots, overGFA: !!c.sched.overFloor,
+        overGLA: !!c.sched.overGLA
+      },
       activities: (function(){
         const plan = plusRowPlan({ plot: c.plot, far: c.far });
         return SCHED.map(r => {
@@ -2848,6 +2898,19 @@ tbody tr:last-child td{border-bottom:0}
                  itcOverride: r.itcOverride || null,
                  itcCode: pk.code ? pk.code.code : null,
                  rate: Number.isFinite(pk.rate) ? pk.rate : null,
+                 // The blended rate taken apart: its three components and the two
+                 // day totals it was blended from, so the figure can be checked
+                 // against the ITC matrix without this build.
+                 rateDetail: pk.eff ? {
+                   employee: pk.eff.rate_employee, visitor: pk.eff.rate_visitor,
+                   truck: pk.eff.rate_truck,
+                   weekdayTotal: pk.eff.weekday_total,
+                   weekendTotal: pk.eff.weekend_total,
+                   basis: pk.eff.basis
+                 } : null,
+                 conversion: pk.code ? pk.code.conversion : null,
+                 driverKind: pk.code ? pk.code.driver_kind : null,
+                 itcClassName: pk.code ? pk.code.class_name : null,
                  chargedPer: pk.code ? pk.code.unit_label : null,
                  quantity: r.qty === "" ? null : num(r.qty),
                  bays: Number.isFinite(pk.raw) ? pk.raw : null,
@@ -2895,8 +2958,49 @@ tbody tr:last-child td{border-bottom:0}
         openGroundArea: c.parking.open, onGround: c.parking.onGround,
         offsetSpaces: c.parking.basement, offsetArea: c.parking.basementArea,
         basementFloors: c.parking.floors,
-        basementFloorArea: c.parking.fArea, usablePerFloor: c.parking.useP
+        basementFloorArea: c.parking.fArea, usablePerFloor: c.parking.useP,
+        // What the ground could take before anything was placed, the area each
+        // tier actually consumes, and the unrounded floor count.
+        openGroundCapacity: c.parking.openCap,
+        onGroundArea: c.parking.groundArea,
+        areaPerBasementFloor: c.parking.perFloor,
+        basementFloorsRaw: c.parking.floorsRaw,
+        fitsOnGround: !!c.parking.fits,
+        coverageAtFullPlot: !!c.parking.isCR
       },
+      /* L-3 and L-4 of the issued report, evaluated rather than described: the
+         demand per 100 m2 of GFA, whether it clears the cap, and which limitation
+         bites at this plot size. */
+      limitationChecks: (function(){
+        const rate = c.sched && c.sched.raw > 0 && c.maxGFA > 0
+                   ? c.sched.raw / c.maxGFA * 100 : NaN;
+        const over = Number.isFinite(rate) && rate > PARK_CAP + 1e-9;
+        return { spacesPer100SqmGFA: Number.isFinite(rate) ? rate : null,
+                 cap: PARK_CAP, overCap: over,
+                 smallPlotThreshold: SMALL_PLOT,
+                 plotUnderThreshold: Number.isFinite(c.plot) && c.plot < SMALL_PLOT,
+                 applies: !over ? null
+                        : (c.plot < SMALL_PLOT ? "L-4" : "L-3"),
+                 effect: !over ? null
+                       : (c.plot < SMALL_PLOT
+                          ? "barred on a plot under " + SMALL_PLOT + " m2"
+                          : "permitted, but the excess is the developer's and earns no GFA") };
+      })(),
+      /* Exactly the advisories the page was showing, read off the panel so the
+         file and the screen cannot disagree about what was flagged. */
+      advisories: (function(){
+        const F = document.getElementById("flags");
+        if(!F) return [];
+        return [...F.children].map(n => ({
+          level: n.classList.contains("crit") ? "critical" : "note",
+          tag: (n.querySelector(".mark") || {}).textContent || null,
+          text: n.innerText.replace(/\s+/g, " ").trim()
+        }));
+      })(),
+      /* Where every number came from, for a file outliving this build. The whole
+         meta table rather than a chosen few keys: it is small, and a reader a year
+         from now should not have to ask which workbook a rate came out of. */
+      source: Object.assign({ generatedBy: "DCR Plot Yield Calculator" }, META),
       /* The optimisation is reported alongside the scheduled figures, never in
          place of them, so that a reader can see both what the Code asks for and
          what the plot can actually carry. */

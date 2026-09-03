@@ -391,10 +391,42 @@ export as two objects keyed by code:
 plot-address key wrapping it — matching `sample_json_DCR_RD21_C409.json`:
 
 ```json
-{ "savedAt": "…", "plot": {…}, "inputs": {…}, "overrides": […],
-  "derived": {…}, "activities": […], "uadActivities": […],
-  "uadFilters": {…}, "parking": {…} }
+{ "savedAt": "…", "plot": {…}, "inputs": {…}, "overrides": […], "parameters": […],
+  "derived": {…}, "landUse": {…}, "rateModel": {…}, "constants": {…},
+  "schedule": {…}, "activities": […], "uadActivities": […], "uadFilters": {…},
+  "generalNotes": {…}, "limitations": {…}, "parking": {…},
+  "limitationChecks": {…}, "advisories": […], "source": {…}, "dcrPlus": {…} }
 ```
+
+### What the file holds
+
+Everything the calculation produces, not a chosen summary of it. A test walks every field
+`calc()` returns and asserts it appears somewhere in the file; it currently reports **none
+missing**. Twenty blocks, around 375 KB on a 158-activity plot.
+
+| block | what it settles |
+| --- | --- |
+| `parameters` | all eight parameters with value, original and provenance — `overrides` lists only what was typed over, this says what every figure resolved to |
+| `derived` | the five steps, plus the **unfloored** `maxActivitiesRaw` / `maxNoWorkersRaw` and the resolved `far` / `plotCoveragePct` / `glaPct`, so the derivation can be re-walked |
+| `landUse` | the designation as the Code publishes it — `codeFAR`, `codeCoveragePct`, remarks — beside whatever was overridden |
+| `rateModel` | the weekday/weekend blend and ITC location. Every rate in the file depends on it, so it is a result, not a setting |
+| `constants` | the fixed assumptions — 32.5 m² a space, 75% per floor, 13 m² a worker, and the DCR Plus set. A file read in a year should not have to guess them |
+| `schedule` | the totals: rows, slots used against allowed, raw and rounded bays, floor area, and the three over-cap booleans |
+| `parking` | the whole plan, including what the open ground *could* hold (`openGroundCapacity`), the area each tier consumes, and the unrounded floor count |
+| `limitationChecks` | **L-3 / L-4 evaluated rather than described** — demand per 100 m² of GFA, whether it clears the cap of 2, and which limitation bites at this plot size |
+| `advisories` | the warnings the page was showing, read off the panel so the file and the screen cannot disagree about what was flagged |
+| `source` | the whole `meta` table — which workbook every rate, designation and activity came out of, and when the database was built |
+| `dcrPlus` | the optimisation: weighting rows, the fit, and `feasible` |
+
+Per activity, alongside the Code figures: `rateDetail` breaks the blended rate into its employee,
+visitor and truck components and the two day totals it was blended from — the whiteboard's "1.3"
+is 0.107 + 1.204 + 0.007 — plus `conversion`, `driverKind`, `itcClassName`, and the `weighted`
+block.
+
+Two things the file deliberately does not do. It is **rebuilt from the current calculation on
+every save**, so nothing in it can be stale. And it is written whichever basis is on screen: the
+optimisation is computed either way, so `schedule.basis` records only what was being looked at,
+never what was saved.
 
 The filename carries the plot and a timestamp — `DCR_RD21_C409_20260830213540.json` — so two saves
 of one plot are two files rather than one overwriting the other. Each save is its own transaction.
