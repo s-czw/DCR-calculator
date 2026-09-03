@@ -978,6 +978,47 @@ states the result against the open ground so the fit can be checked by eye.
 This strictness changes answers. `RD29_C3` and `RD21_C409` fit on fractional spaces but not once a
 whole extra space has to go somewhere, so both are reported infeasible.
 
+### The schedule on either basis
+
+The Code charges every activity a fixed unit area — 60 m² inherited, overridable per row. DCR Plus
+does not charge unit areas at all, so that figure has nothing to do with the number the
+optimisation reaches. **Charged on** above the schedule switches which basis the table reports:
+
+| | Code · unit area | DCR Plus · weighted |
+| --- | --- | --- |
+| area column | `Unit area`, editable, inherited or entered | `Weighted area`, reported |
+| what it holds | the fixed tenancy size | this row's share of its land use's allocation |
+| bays column | `Bays` | `Bays / Plus` |
+
+A group's allocation is spread across its own rows in proportion to their slot counts. Every row
+in a group resolves to the same ITC class and every rate is linear in the area it is charged on,
+so the row figures sum back to the group figure: on `RD41_C1` the 158 rows total **89.07 spaces**,
+which is the optimisation panel's own figure, and their weighted areas total **5,559 m²**, which is
+the GFA. The note beside the switch states that total and says so if it ever stops agreeing,
+rather than letting two totals sit side by side unremarked.
+
+The difference is not cosmetic. A Sport Centre row on `RD41_C1` is charged 60 m² by the Code but
+**13.43 m²** weighted — 4.35% of the 308.83 m² its land use holds across 3 codes — and its bays
+fall from 0.072 to 0.016. Hovering the cell names the group, its allocation and the row's share.
+
+### The weighting reads the schedule
+
+The weights count **distinct UAD codes in the schedule**, not in the register, so adding, removing
+or recategorising an activity moves them. On an untouched plot the two are identical — the
+schedule is built one row per filtered activity, so it carries every distinct code the register
+holds — and all 16 weighted plots reproduce their register-derived figures exactly. Removing all
+23 Sport Centre rows from `RD41_C1` drops the class, takes the count 27 → 24 and moves parking
+90 → 96, because that class's weight had been earning almost nothing (a 0.001 conversion) and now
+goes to classes that charge.
+
+Counting stays on distinct codes rather than rows. That is what reproduces the client's sheet: 27
+for `RD41_C1`, not its 158 rows.
+
+The saved file carries both. Each activity keeps its Code `unitArea` and `bays` untouched and
+gains a `weighted` block — area, share of group, group, group GFA, code count, ITC code, what it
+was charged on, bays. It is written **whichever basis is on screen**, since the optimisation is
+computed either way; `schedule.basis` records only what was being looked at.
+
 ### FAR follows coverage
 
 `FAR_new = FAR x cov_new / cov0`, so the GFA falls in the same proportion as the footprint and the

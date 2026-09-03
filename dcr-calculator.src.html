@@ -584,7 +584,17 @@ tbody tr:last-child td{border-bottom:0}
 .park .pv.ug{color:var(--brass)}
 /* An absence, not a measurement: the dash is muted so it does not read as data. */
 .park .pv.none{color:var(--ink-3); font-weight:500}
-.park .pv.bad{color:var(--crit)}
+.basis-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:0 20px 14px}
+.basis-lbl{font-family:"IBM Plex Mono",monospace; font-size:.62rem;
+  letter-spacing:.11em; text-transform:uppercase; color:var(--ink-2)}
+.basis-pick{display:inline-flex; border:1px solid var(--line-strong); border-radius:3px;
+  overflow:hidden}
+.basis-pick .btn.mini{border:0; border-radius:0; margin:0}
+.basis-pick .btn.mini + .btn.mini{border-left:1px solid var(--line-strong)}
+.basis-pick .btn.mini.on{background:var(--accent-solid); color:#FFFFFF}
+.basis-note{font-size:.76rem; color:var(--ink-2)}
+.warea{font-variant-numeric:tabular-nums; color:var(--ink)}
 #plusBody{display:flex; flex-direction:column; gap:14px}
 #plusBody .park{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media (max-width:620px){ #plusBody .park{grid-template-columns:repeat(2,minmax(0,1fr))} }
@@ -820,11 +830,23 @@ tbody tr:last-child td{border-bottom:0}
           <h2>Activity schedule</h2>
           <span class="tag" id="schedTag">per-activity parking</span>
         </div>
+        <div class="basis-row">
+          <span class="basis-lbl">Charged on</span>
+          <div class="basis-pick" role="group" aria-label="Charging basis">
+            <button type="button" class="btn mini on" id="basisCode"
+              aria-pressed="true">Code &#183; unit area</button>
+            <button type="button" class="btn mini" id="basisPlus"
+              aria-pressed="false">DCR Plus &#183; weighted</button>
+          </div>
+          <span class="basis-note" id="basisNote"></span>
+        </div>
         <div class="tbl-scroll">
           <table class="sched">
             <thead><tr>
-              <th>UAD activity</th><th class="n">Pri</th><th class="n">Slots</th><th class="n">Unit area</th>
-              <th>ITC category</th><th class="n">Rate / units</th><th class="n">Bays</th>
+              <th>UAD activity</th><th class="n">Pri</th><th class="n">Slots</th>
+              <th class="n" id="thArea">Unit area</th>
+              <th>ITC category</th><th class="n">Rate / units</th>
+              <th class="n" id="thBays">Bays</th>
               <th><span class="sr">Remove</span></th>
             </tr></thead>
             <tbody id="schedBody"></tbody>
@@ -1644,15 +1666,28 @@ tbody tr:last-child td{border-bottom:0}
   /* Repaint one row's derived cells without rebuilding the row, so the field
      being typed into keeps focus. Cell order: activity, slots, unit area,
      ITC category, rate/qty, bays, remove. */
+  /* Whichever basis is showing, the bays a row reports come from here, so the cell
+     and its live repaint cannot drift apart. */
+  function rowBays(row, p){
+    if(SCHED_BASIS === "plus"){
+      const w = ROWPLAN ? ROWPLAN.byRow.get(row.id) : null;
+      return w ? w.bays : NaN;
+    }
+    return p.raw;
+  }
+
   function paintRowDerived(tr, row){
     const unit = pick("unit", COEF.unitArea).value || 60;
     const u = rowUnit(row, unit);
     const p = rowParking(row, unit);
+    if(SCHED_BASIS === "plus"){ refreshRowPlan(); renderBasis(); }
 
     // Queried, not indexed. These used to be tr.cells[2] and tr.cells[5], which
     // silently pointed at the wrong cells the moment a column was inserted.
     const uf = tr.querySelector(".uflag");
-    if(uf){
+    // On the weighted basis the cell is a reported figure, not an input, and its
+    // flag already reads "weighted" -- leave it alone.
+    if(uf && SCHED_BASIS !== "plus"){
       uf.className = "uflag " + (u.manual ? "uflag-manual" : "uflag-auto");
       uf.textContent = u.manual ? "entered" : "inherited";
     }
@@ -1660,11 +1695,13 @@ tbody tr:last-child td{border-bottom:0}
     if(!bays) return;
     bays.innerHTML = "";
     bays.appendChild(Object.assign(el("span"),
-      {textContent: Number.isFinite(p.raw) ? fmt(p.raw,3) : "\u2014"}));
+      {textContent: fmt(rowBays(row, p), 3)}));
   }
 
   function renderSched(){
     const c = calcLite();
+    refreshRowPlan();
+    renderBasis();
     const tb = $("#schedBody");
     tb.innerHTML = "";
     const unit = pick("unit", COEF.unitArea).value || 60;
@@ -1752,11 +1789,22 @@ tbody tr:last-child td{border-bottom:0}
       td1.appendChild(sl);
       tr.appendChild(td1);
 
-      // unit area: always shows the effective figure, so the spinner nudges it
-      // from there. Clearing the field hands the row back to the fixed value.
+      // On the weighted basis there is nothing to type: the area is this row's
+      // share of its land use's allocation, so the cell reports it instead.
       const gu = pick("unit", COEF.unitArea).value || 60;
       const u = rowUnit(row, gu);
       const tdU = el("td", "n");
+      if(SCHED_BASIS === "plus"){
+        const w = ROWPLAN ? ROWPLAN.byRow.get(row.id) : null;
+        tdU.appendChild(Object.assign(el("span", "warea"),
+          { textContent: w ? fmt(w.area, 2) : "\u2014" }));
+        tdU.appendChild(el("div", "uflag uflag-auto",
+          w ? "weighted" : "not weighted"));
+        if(w) tdU.title = w.group + " holds " + fmt(w.groupGfa,2) + " m\u00b2 across "
+          + fmt(w.groupCount) + " " + plural(w.groupCount,"code","codes")
+          + "; this row takes " + fmt(w.share*100,2) + "% of it";
+        tr.appendChild(tdU);
+      } else {
       const ui = el("input");
       ui.type = "number"; ui.min = "1"; ui.step = "1";
       ui.value = u.area;
@@ -1778,6 +1826,7 @@ tbody tr:last-child td{border-bottom:0}
       tdU.appendChild(el("div", "uflag " + (u.manual ? "uflag-manual" : "uflag-auto"),
                          u.manual ? "entered" : "inherited"));
       tr.appendChild(tdU);
+      }
 
       // ITC category, auto or overridden
       const td2 = el("td");
@@ -1848,7 +1897,7 @@ tbody tr:last-child td{border-bottom:0}
       const td4 = el("td", "n");
       td4.dataset.bays = "1";      // found by name, not position: a column added
       td4.appendChild(Object.assign(el("span"),
-        {textContent: Number.isFinite(p.raw) ? fmt(p.raw,3) : "\u2014"}));
+        {textContent: fmt(rowBays(row, p), 3)}));
       tr.appendChild(td4);
 
       const td5 = el("td", "n");
@@ -2777,8 +2826,12 @@ tbody tr:last-child td{border-bottom:0}
         overGFA: !!c.sched.overFloor, overGLA: !!c.sched.overGLA,
         overSlots: !!c.sched.overSlots
       },
-      activities: SCHED.map(r => {
+      schedule: { basis: SCHED_BASIS },
+      activities: (function(){
+        const plan = plusRowPlan({ plot: c.plot, far: c.far });
+        return SCHED.map(r => {
         const pk = rowParking(r, c.unit);
+        const w = plan ? plan.byRow.get(r.id) : null;
         const m = uadByCode(r.uadCode);
         return { activity: act(r.act),
                  uadCode: r.uadCode || null,
@@ -2797,8 +2850,16 @@ tbody tr:last-child td{border-bottom:0}
                  rate: Number.isFinite(pk.rate) ? pk.rate : null,
                  chargedPer: pk.code ? pk.code.unit_label : null,
                  quantity: r.qty === "" ? null : num(r.qty),
-                 bays: Number.isFinite(pk.raw) ? pk.raw : null };
-      }),
+                 bays: Number.isFinite(pk.raw) ? pk.raw : null,
+                 weighted: w ? { area: w.area, shareOfGroup: w.share,
+                                 group: w.group, groupGFA: w.groupGfa,
+                                 groupCodeCount: w.groupCount,
+                                 itcCode: w.code ? w.code.code : null,
+                                 chargedOn: w.basis,
+                                 bays: Number.isFinite(w.bays) ? w.bays : null }
+                             : null };
+        });
+      })(),
       // The plot's UAD activities, as filtered from its workbook. Additive: every
       // block above is unchanged, so a consumer reading the old shape still works.
       uadActivities: (function(){
@@ -3424,37 +3485,6 @@ tbody tr:last-child td{border-bottom:0}
   const PLUS_LSC        = "Local Shopping Centre";
   const PLUS_FOLD_INTO_LSC = ["Private Clinics", "Nurseries/Child Care"];
 
-  function plusGroups(plot){
-    const rows = plot ? uadFor(plot.sector_plot_id) : [];
-    if(!rows.length) return null;
-    // Distinct UAD codes, grouped by the ITC land use they map to.
-    const seen = new Map();
-    rows.forEach(r => {
-      const code = (r.luc_code || "").split(".")[0].trim();
-      const m = uadByCode(code);
-      if(!m || seen.has(code)) return;
-      seen.set(code, m);
-    });
-    const g = new Map();
-    seen.forEach(m => {
-      const key = PLUS_FOLD_INTO_LSC.indexOf(m.itc_equivalent) >= 0
-                ? PLUS_LSC : m.itc_equivalent;
-      if(!g.has(key)) g.set(key, { equivalent:key, count:0, itcClass:null, folded:[] });
-      const e = g.get(key);
-      e.count++;
-      if(m.itc_equivalent === key) e.itcClass = m.itc_class;
-      else if(e.folded.indexOf(m.itc_equivalent) < 0) e.folded.push(m.itc_equivalent);
-    });
-    // A group that exists only because things were folded into it still charges at
-    // the Local Shopping Centre rate.
-    const lsc = g.get(PLUS_LSC);
-    if(lsc && !lsc.itcClass){
-      const any = [...seen.values()].find(m => m.itc_equivalent === PLUS_LSC);
-      lsc.itcClass = any ? any.itc_class : "112";
-    }
-    return [...g.values()];
-  }
-
   /* Slots for one allocation. Seat-driven classes convert their floor area to seats
      first; everything else is charged against the area directly. */
   function plusSlotsFor(group, gfa){
@@ -3496,8 +3526,8 @@ tbody tr:last-child td{border-bottom:0}
   function dcrPlus(c){
     const plot = currentPlot();
     const area = c.plot;
-    if(!plot || !Number.isFinite(area)) return null;
-    const out = { plot: plot.sector_plot_id, area,
+    if(!Number.isFinite(area)) return null;
+    const out = { plot: plot ? plot.sector_plot_id : null, area,
                   slotArea: PLUS_SLOT_AREA, seatArea: PLUS_SEAT_AREA,
                   coverageLimitPct: PLUS_COV_LIMIT };
     if(area < PLUS_MIN_PLOT){
@@ -3511,8 +3541,8 @@ tbody tr:last-child td{border-bottom:0}
       out.feasible = true;
       return out;
     }
-    const groups = plusGroups(plot);
-    if(!groups || !groups.length){ out.mode = "no activities"; return out; }
+    const groups = plusGroupsFromSched();
+    if(!groups.length){ out.mode = "no activities"; return out; }
 
     out.mode = "weighted";
     const far0 = c.far, cov0Pct = c.pcPct;
@@ -3574,6 +3604,115 @@ tbody tr:last-child td{border-bottom:0}
     return out;
   }
 
+  /* ---------- the schedule on a weighted basis ---------------------------- */
+  /* The Code charges each activity a fixed unit area. DCR Plus does not: it hands
+     every activity a share of the GFA set by its land use's weight, so a fixed
+     60 m2 has nothing to do with the figure the optimisation reaches. This lets the
+     schedule be read on either basis. */
+  let SCHED_BASIS = "code";                    // "code" | "plus"
+
+  /* The weighting reads the SCHEDULE rather than the register, so adding, removing
+     or recategorising an activity moves the weights. On an untouched plot the two
+     agree exactly: the schedule is built one row per filtered activity, so it
+     carries every distinct UAD code the register holds. Counting stays on distinct
+     codes -- 27 for RD41_C1, not its 158 rows -- which is what reproduces the
+     client's sheet. */
+  function plusGroupsFromSched(){
+    const g = new Map(), seen = new Map();
+    SCHED.forEach(row => {
+      const cls = rowClass(row);
+      if(!cls) return;
+      const m = uadByCode(row.uadCode);
+      // The mapping supplies the land-use name, unless the row's ITC category was
+      // overridden away from what its own UAD code maps to.
+      let name = (m && m.itc_class === cls) ? m.itc_equivalent : null;
+      if(!name){ itcIndex();
+                 const r = (_byClass.get(cls) || [])[0];
+                 name = r ? r.class_name : cls; }
+      const key = PLUS_FOLD_INTO_LSC.indexOf(name) >= 0 ? PLUS_LSC : name;
+      if(!g.has(key)){ g.set(key, { equivalent:key, count:0, itcClass:null,
+                                    folded:[], rows:[] });
+                       seen.set(key, new Set()); }
+      const e = g.get(key);
+      const id = row.uadCode || ("row:" + row.id);   // a row with no code counts once
+      if(!seen.get(key).has(id)){ seen.get(key).add(id); e.count++; }
+      e.rows.push(row);
+      if(name === key){ if(!e.itcClass) e.itcClass = cls; }
+      else if(e.folded.indexOf(name) < 0) e.folded.push(name);
+    });
+    const lsc = g.get(PLUS_LSC);
+    if(lsc && !lsc.itcClass) lsc.itcClass = "112";
+    return [...g.values()];
+  }
+
+  /* Each group's allocation spread across its own rows in proportion to their slot
+     counts. Every row in a group resolves to the same ITC class and every rate is
+     linear in the area it is charged on, so the row figures sum back to the group
+     figure: the schedule reconciles with the panel instead of offering a second
+     opinion on the same plot. */
+  function plusRowPlan(c){
+    if(!Number.isFinite(c.plot) || c.plot < PLUS_MIN_PLOT) return null;
+    const groups = plusGroupsFromSched();
+    if(!groups.length) return null;
+    const gfa = c.plot * c.far;
+    if(!Number.isFinite(gfa)) return null;
+    const alloc = plusAllocate(groups, gfa);
+    const byRow = new Map();
+    alloc.rows.forEach(g => {
+      const tot = g.rows.reduce((a,r) => a + Math.max(0, num(r.slots) || 0), 0);
+      g.rows.forEach(r => {
+        const s = Math.max(0, num(r.slots) || 0);
+        const share = tot > 0 ? s / tot
+                              : (g.rows.length ? 1 / g.rows.length : 0);
+        const one = plusSlotsFor(g, g.gfa * share);
+        byRow.set(r.id, { area: g.gfa * share, share, group: g.equivalent,
+                          itcClass: g.itcClass, bays: one.slots,
+                          basis: one.basis, code: one.code, rate: one.rate,
+                          groupGfa: g.gfa, groupCount: g.count, weight: g.weight });
+      });
+    });
+    return { alloc, byRow, gfa, slotsRaw: alloc.slots };
+  }
+  let ROWPLAN = null;                 // rebuilt once a render, not once a row
+
+  /* Reads the form rather than a passed-in calc object, so every caller -- a full
+     render, a rebuild, a single row repainting after a keystroke -- gets the same
+     plan without having to have one to hand. */
+  function refreshRowPlan(){
+    if(SCHED_BASIS !== "plus"){ ROWPLAN = null; return; }
+    const dRow = luRow();
+    ROWPLAN = plusRowPlan({ plot: num($("#plotSize").value),
+                            far: pick("far", dRow ? num(dRow.far) : null).value });
+  }
+
+  function renderBasis(){
+    const plus = SCHED_BASIS === "plus";
+    const bc = $("#basisCode"), bp = $("#basisPlus");
+    bc.classList.toggle("on", !plus); bc.setAttribute("aria-pressed", String(!plus));
+    bp.classList.toggle("on",  plus); bp.setAttribute("aria-pressed", String(plus));
+    const ta = $("#thArea"), tb = $("#thBays"), note = $("#basisNote");
+    ta.textContent = plus ? "Weighted area" : "Unit area";
+    tb.textContent = plus ? "Bays / Plus"   : "Bays";
+    if(!plus){
+      note.textContent = "Each activity charged on a fixed unit area.";
+      return;
+    }
+    if(!ROWPLAN){
+      note.textContent = SCHED.length
+        ? "No weighting: the plot is under " + fmt(PLUS_MIN_PLOT) + " m\u00b2."
+        : "No activities to weight.";
+      return;
+    }
+    // The rows are the panel's own figure taken apart, so say so -- and say if it
+    // ever stops adding up rather than letting two totals sit side by side.
+    let sum = 0; ROWPLAN.byRow.forEach(w => { if(Number.isFinite(w.bays)) sum += w.bays; });
+    const ok = Math.abs(sum - ROWPLAN.slotsRaw) < 1e-6;
+    note.textContent = "Each activity charged on its share of the weighted GFA. "
+      + "Rows total " + fmt(sum,2) + " "
+      + plural(sum,"space","spaces")
+      + (ok ? ", the optimisation panel's figure."
+            : " against the panel's " + fmt(ROWPLAN.slotsRaw,2) + " \u2014 they should agree.");
+  }
   /* The saved form of the optimisation. Kept separate from dcrPlus() so the panel
      and the file cannot drift apart: both read the same computed object. */
   function plusAsObject(c){
@@ -3802,6 +3941,12 @@ tbody tr:last-child td{border-bottom:0}
 //    });
 //    paintUpSetup();
     const svBtn = document.getElementById("saveConfig");
+    const setBasis = b => { if(SCHED_BASIS === b) return;
+                            SCHED_BASIS = b; renderSched(); render(); };
+    const bc = document.getElementById("basisCode");
+    const bp = document.getElementById("basisPlus");
+    if(bc) bc.addEventListener("click", ()=>{ setBasis("code"); });
+    if(bp) bp.addEventListener("click", ()=>{ setBasis("plus"); });
     if(svBtn) svBtn.addEventListener("click", ()=>{ doSave(); });
     ["plotSize","farManual","pcPct","glaPct"].forEach(id=>{
       document.getElementById(id).addEventListener("input", render);
