@@ -443,7 +443,7 @@ app and the sign-in screen do not print. `beforeprint` regenerates it, so printi
 browser's own menu gives the same sheet as the button. No PDF library ships in the page — the
 print dialog is the PDF writer.
 
-## The sign-in gate## The sign-in gate
+## The sign-in gate
 
 One account: username `dmtdcr`. The password is not in this repository — it is compared as a
 salted SHA-256 digest, and only the digest is committed.
@@ -901,6 +901,104 @@ space (32.5 m²) and the 75% floor efficiency come from the standard, so the two
 flagged in earlier versions are now closed.
 
 
+## DCR Plus parking optimisation
+
+A second, separate calculation, reported alongside the scheduled figures and never in place of
+them. The Code figures answer "what may be built here"; this one answers "what can be built here
+once the parking has to fit inside the plot".
+
+**Under 800 m², nothing parks on the plot.** The Code parameters stand as given and the panel says
+so. Four of the approved 20 fall here.
+
+**At or above 800 m², the weighted method applies.** The plot's activities are grouped by the ITC
+land use their UAD code maps to, and each group's share of the count sets its share of half the
+GFA:
+
+| step | rule |
+| --- | --- |
+| 1 | count **distinct UAD codes** per ITC land use — 27 for `RD41_C1`, not its 158 activity rows |
+| 2 | `weight = count / total count` |
+| 3 | each class is allocated `weight x GFA / 2` |
+| 4 | the remaining `GFA / 2` goes to **Local Shopping Centre**, on top of its own share |
+| 5 | charge each allocation at its ITC rate, sum, round up once |
+
+Step 4 is why Local Shopping Centre carries 70.4% of the weight but 85.2% of the area on
+`RD41_C1`. The allocation reproduces the client's own weight summary to the cent:
+
+```
+Local Shopping Centre   19   70.4%   4,735.44   (includes Private Clinics)
+Sport Centre             3   11.1%     308.83
+On-Street Shopping       2    7.4%     205.89
+Quality/High Turnover    2    7.4%     205.89
+Supermarkets             1    3.7%     102.94
+                        27  100.0%   5,559.00
+```
+
+### Two classes that a floor area cannot pay for
+
+Five of the eight ITC classes the mapping targets are charged against GFA, so an area allocation
+prices them directly. Three are charged per **unit**: Nurseries/Child Care per student, Private
+Clinics per doctor, Quality/High Turnover Restaurants per seat. An allocation in m² cannot supply
+a student or a doctor.
+
+The fold rule closes two of them: Private Clinics and Nurseries are counted as Local Shopping
+Centre and charged at its rate. This is confirmed by the client's sheet, which shows Local
+Shopping Centre 19 and Private Clinics 0 where the plot data has 18 and 1.
+
+Seats were the open question, because the sheet keeps that class as its own row with its own GFA.
+**Confirmed: convert the allocation to seats at 12 m² a seat**, then charge per seat. On
+`RD41_C1` that is `205.89 / 12 = 17.16 seats`, 12.25 spaces. The panel prints the division so the
+conversion is visible rather than implied. Left unconverted it would have charged 224 spaces
+against the same area — a 3x error, which is why this was asked rather than assumed.
+
+Any count-driven class that ever escapes both rules is reported as unpriced and excluded from the
+total, not silently guessed at.
+
+### The test fit
+
+Spaces become area at **35 m² a space** — deliberately not the 32.5 m² used above; the optimisation
+is a planning test fit, not a bay layout. Coverage is capped at **50% of the plot**, so a Code
+coverage of 75% is reduced to 50% before anything else.
+
+The fit is circular: parking follows GFA, GFA follows coverage, and coverage has to leave room for
+the parking. Because every rate is linear in the allocated area, spaces per m² of GFA is a
+constant and the balancing coverage solves in closed form:
+
+```
+parking(cov) = plot - cov,  GFA(cov) = plot x FAR x cov / cov0
+cov = plot / (1 + plot x FAR x R x 35 / cov0)      R = spaces per m2 of GFA
+```
+
+No iteration, no drift. But the closed form balances on *fractional* spaces, and spaces are whole:
+rounding up can overshoot the very ground it was solved against — by 1.14 m² on `RD41_C1`. A short
+descent on the integer figure tightens it, and since shrinking coverage shrinks GFA which shrinks
+the requirement, it only ever descends and settles in a few passes. The panel's closing line
+states the result against the open ground so the fit can be checked by eye.
+
+This strictness changes answers. `RD29_C3` and `RD21_C409` fit on fractional spaces but not once a
+whole extra space has to go somewhere, so both are reported infeasible.
+
+### FAR follows coverage
+
+`FAR_new = FAR x cov_new / cov0`, so the GFA falls in the same proportion as the footprint and the
+storey count is unchanged. **Assumed, not sourced** — "this will adjust the FAR accordingly" does
+not say by what relation, and the alternative reading (FAR untouched, the building simply taller)
+gives different numbers. Worth confirming.
+
+### Feasibility
+
+Reducing coverage below half the plot to make room for cars is not a scheme worth having, so it is
+reported rather than quietly returned: the panel shows a **Not feasible** alert naming the coverage
+that would be needed, and the saved JSON carries `dcrPlus.feasible: false` with an
+`infeasibleReason`. Of the approved 20 — four under 800 m², ten feasible, six not
+(`RD29_C3`, `RD14_C5`, `RD21_C409`, `RD16_C3`, `65_1_2_10_`, `RD41_C1`).
+
+The saved block appends after `parking` and leaves every existing block untouched. Each weighting
+row carries its count, weight, allocated GFA, the resolved ITC code including its location
+variant, the rate, the basis string shown in the panel, and its spaces — enough to re-derive the
+total without the app.
+
+
 ## Folded by default
 
 **Plot & footprint** starts collapsed — it is a sanity check on the geometry rather than an
@@ -953,6 +1051,10 @@ Confirmed from source:
 
 Still needs sign-off:
 
+0. **DCR Plus: how FAR follows a reduced coverage.** Implemented as
+   `FAR x cov_new / cov0` — the footprint shrinks and the storey count holds. The instruction
+   said only "this will adjust the FAR accordingly". The alternative, FAR untouched and the
+   building taller, gives different numbers.
 1. **An issued DCR report gave `AVG. REQUIRED PARKING = 0`** for a small commercial plot, where
    the ITC rate for that land use implies 3 spaces. Not a rounding artefact. The most important
    one — it decides whether that report field can be trusted at all.
@@ -976,3 +1078,8 @@ Closed since earlier versions:
   a 16%-of-coverage trigger for going below.
 - **Which parking figure governs** — the activity schedule; the whole-plot single-category basis
   was removed.
+- **DCR Plus, restaurant seats** — the Quality/High Turnover allocation converts at **12 m² a
+  seat** before being charged per seat. It was the one figure the weighted method could not
+  supply, and getting it wrong cost 3x on parking.
+- **DCR Plus, sub-50% coverage** — reported as infeasible with a flag in the JSON, rather than
+  returned as if it were a viable scheme.

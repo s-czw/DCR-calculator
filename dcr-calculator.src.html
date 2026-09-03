@@ -584,6 +584,25 @@ tbody tr:last-child td{border-bottom:0}
 .park .pv.ug{color:var(--brass)}
 /* An absence, not a measurement: the dash is muted so it does not read as data. */
 .park .pv.none{color:var(--ink-3); font-weight:500}
+.park .pv.bad{color:var(--crit)}
+#plusBody{display:flex; flex-direction:column; gap:14px}
+#plusBody .park{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:620px){ #plusBody .park{grid-template-columns:repeat(2,minmax(0,1fr))} }
+#plusBody>*{flex:0 0 auto}
+.plus-alert{border:1px solid var(--crit); border-left-width:3px; border-radius:3px;
+  padding:9px 12px; color:var(--ink); background:var(--sunk); line-height:1.5}
+.plus-table{width:100%; border-collapse:collapse; font-size:.86rem}
+.plus-table th{text-align:left; font-weight:600; color:var(--ink-2);
+  font-size:.72rem; letter-spacing:.06em; text-transform:uppercase;
+  border-bottom:1px solid var(--line-strong); padding:0 10px 5px 0; white-space:nowrap}
+.plus-table td{border-bottom:1px solid var(--line); padding:6px 10px 6px 0;
+  vertical-align:top}
+.plus-table th.n, .plus-table td.n{text-align:right;
+  font-variant-numeric:tabular-nums}
+.plus-table th:last-child, .plus-table td:last-child{padding-right:0}
+.plus-table .plus-fold{color:var(--ink-3); font-size:.76rem; margin-top:2px}
+.plus-table tr.plus-total td{border-bottom:none; border-top:1px solid var(--line-strong);
+  font-weight:700; color:var(--ink)}
 .ugnote{
   display:flex; gap:10px; align-items:flex-start; padding:13px 16px; font-size:.81rem;
   background:var(--brass-soft); color:var(--brass); border-top:1px solid var(--line);
@@ -826,6 +845,12 @@ tbody tr:last-child td{border-bottom:0}
         </div>
         <div id="parkBody"></div>
       </section>
+
+      <details class="panel fold" id="plusPanel" open>
+        <summary class="panel-hd"><h2>DCR Plus parking optimisation</h2>
+          <span class="tag" id="plusTag">no plot</span></summary>
+        <div class="panel-bd" id="plusBody"></div>
+      </details>
 
       <details class="panel fold" id="rulesPanel">
         <summary class="panel-hd"><h2>Notes &amp; limitations</h2>
@@ -1966,6 +1991,7 @@ tbody tr:last-child td{border-bottom:0}
 
     renderSchedFoot(c.act, c.maxGFA, c.gla);
     renderPark(c);
+    renderPlus(c);
     renderOverrides(c);
     renderFlags(c);
     renderPlan(c);
@@ -2809,7 +2835,11 @@ tbody tr:last-child td{border-bottom:0}
         offsetSpaces: c.parking.basement, offsetArea: c.parking.basementArea,
         basementFloors: c.parking.floors,
         basementFloorArea: c.parking.fArea, usablePerFloor: c.parking.useP
-      }
+      },
+      /* The optimisation is reported alongside the scheduled figures, never in
+         place of them, so that a reader can see both what the Code asks for and
+         what the plot can actually carry. */
+      dcrPlus: plusAsObject(c)
     };
   }
   function saveMsg(text, bad){
@@ -3369,6 +3399,325 @@ tbody tr:last-child td{border-bottom:0}
       });
     });
     return dup;
+  }
+
+  /* ---------- DCR Plus parking optimisation ------------------------------- */
+  /* A second, separate calculation. It does not touch the figures above: those
+     follow the Code as scheduled, this one asks what the plot can carry once its
+     own parking has to fit inside it.
+
+     The weighted method, as supplied and checked against the client's own sheet:
+       - group the plot's activities by the ITC land use their UAD code maps to,
+         counting DISTINCT UAD codes rather than activities (27 for RD41_C1, not 158)
+       - weight = count / total count
+       - allocate each class weight x (GFA / 2)
+       - the remaining GFA / 2 goes to Local Shopping Centre, on top of its share
+       - Private Clinics and Nurseries/Child Care are counted as Local Shopping
+         Centre, which is also what makes them computable: both are charged per
+         doctor and per student, and neither can take a floor-area allocation
+       - Quality/High Turnover Restaurants is charged per seat, so its allocation is
+         divided by PLUS_SEAT_AREA to get a seat count first                        */
+  const PLUS_MIN_PLOT   = 800;    // below this, no parking is accommodated on plot
+  const PLUS_SLOT_AREA  = 35;     // m2 per slot, and deliberately not the 32.5 above
+  const PLUS_SEAT_AREA  = 12;     // m2 of allocated GFA per restaurant seat
+  const PLUS_COV_LIMIT  = 50;     // % of plot: both the ceiling and the viable floor
+  const PLUS_LSC        = "Local Shopping Centre";
+  const PLUS_FOLD_INTO_LSC = ["Private Clinics", "Nurseries/Child Care"];
+
+  function plusGroups(plot){
+    const rows = plot ? uadFor(plot.sector_plot_id) : [];
+    if(!rows.length) return null;
+    // Distinct UAD codes, grouped by the ITC land use they map to.
+    const seen = new Map();
+    rows.forEach(r => {
+      const code = (r.luc_code || "").split(".")[0].trim();
+      const m = uadByCode(code);
+      if(!m || seen.has(code)) return;
+      seen.set(code, m);
+    });
+    const g = new Map();
+    seen.forEach(m => {
+      const key = PLUS_FOLD_INTO_LSC.indexOf(m.itc_equivalent) >= 0
+                ? PLUS_LSC : m.itc_equivalent;
+      if(!g.has(key)) g.set(key, { equivalent:key, count:0, itcClass:null, folded:[] });
+      const e = g.get(key);
+      e.count++;
+      if(m.itc_equivalent === key) e.itcClass = m.itc_class;
+      else if(e.folded.indexOf(m.itc_equivalent) < 0) e.folded.push(m.itc_equivalent);
+    });
+    // A group that exists only because things were folded into it still charges at
+    // the Local Shopping Centre rate.
+    const lsc = g.get(PLUS_LSC);
+    if(lsc && !lsc.itcClass){
+      const any = [...seen.values()].find(m => m.itc_equivalent === PLUS_LSC);
+      lsc.itcClass = any ? any.itc_class : "112";
+    }
+    return [...g.values()];
+  }
+
+  /* Slots for one allocation. Seat-driven classes convert their floor area to seats
+     first; everything else is charged against the area directly. */
+  function plusSlotsFor(group, gfa){
+    const code = group.itcClass ? resolveCode(group.itcClass) : null;
+    if(!code) return { slots:NaN, code:null, basis:"no ITC rate" };
+    const eff = effectiveRate(code.code);
+    const rate = eff ? eff.rate_total : code.rate_total;
+    if(code.driver_kind === "count" && /seat/i.test(code.unit_label || "")){
+      const seats = gfa / PLUS_SEAT_AREA;
+      return { slots: seats * code.conversion * rate, code, rate, seats,
+               basis: fmt(gfa,2) + " m² ÷ " + fmt(PLUS_SEAT_AREA)
+                      + " = " + fmt(seats,2) + " seats" };
+    }
+    if(code.driver_kind === "count"){
+      // Nothing should reach here: the count-driven classes are folded into Local
+      // Shopping Centre, and seats are handled above. Say so rather than invent one.
+      return { slots:NaN, code, rate,
+               basis: "charged per " + (code.unit_label || "unit").toLowerCase()
+                      + ", which a floor area cannot supply" };
+    }
+    return { slots: gfa * code.conversion * rate, code, rate,
+             basis: fmt(gfa,2) + " m²" };
+  }
+
+  function plusAllocate(groups, gfa){
+    const total = groups.reduce((a,g) => a + g.count, 0);
+    const half = gfa / 2;
+    let slots = 0, unpriced = 0;
+    const out = groups.map(g => {
+      const weight = total ? g.count / total : 0;
+      const alloc = weight * half + (g.equivalent === PLUS_LSC ? half : 0);
+      const s = plusSlotsFor(g, alloc);
+      if(Number.isFinite(s.slots)) slots += s.slots; else unpriced++;
+      return Object.assign({}, g, { weight, gfa: alloc }, s);
+    });
+    return { rows: out.sort((a,b) => b.gfa - a.gfa), total, slots, unpriced, gfa };
+  }
+
+  function dcrPlus(c){
+    const plot = currentPlot();
+    const area = c.plot;
+    if(!plot || !Number.isFinite(area)) return null;
+    const out = { plot: plot.sector_plot_id, area,
+                  slotArea: PLUS_SLOT_AREA, seatArea: PLUS_SEAT_AREA,
+                  coverageLimitPct: PLUS_COV_LIMIT };
+    if(area < PLUS_MIN_PLOT){
+      /* Under the threshold nothing is parked on the plot, so there is nothing to
+         fit and the Code parameters stand as given. */
+      out.mode = "no on-plot parking";
+      out.reason = "the plot is under " + fmt(PLUS_MIN_PLOT) + " m²";
+      out.farApplied = c.far;
+      out.coveragePctApplied = c.pcPct;
+      out.gfaApplied = c.maxGFA;
+      out.feasible = true;
+      return out;
+    }
+    const groups = plusGroups(plot);
+    if(!groups || !groups.length){ out.mode = "no activities"; return out; }
+
+    out.mode = "weighted";
+    const far0 = c.far, cov0Pct = c.pcPct;
+    const gfa0 = area * far0, cov0 = area * cov0Pct / 100;
+    const a0 = plusAllocate(groups, gfa0);
+    out.summary = a0.rows.map(r => ({
+      itcEquivalent: r.equivalent, itcClass: r.itcClass,
+      foldedIn: r.folded.slice(), count: r.count, weight: r.weight,
+      gfa: r.gfa, basis: r.basis,
+      rate: Number.isFinite(r.rate) ? r.rate : null,
+      itcCode: r.code ? r.code.code : null,
+      slots: Number.isFinite(r.slots) ? r.slots : null
+    }));
+    out.activityCount = a0.total;
+    out.gfaAtCode = gfa0;
+    out.slotsRaw = a0.slots;
+    out.slots = Math.max(0, Math.ceil(a0.slots - 1e-9));
+    out.parkingArea = out.slots * PLUS_SLOT_AREA;
+    out.unpriced = a0.unpriced;
+
+    /* The fit is circular: the parking follows the GFA, the GFA follows the
+       coverage, and the coverage has to leave room for the parking. Because every
+       rate is linear in the allocated area, slots per m2 of GFA is a constant and
+       the coverage that exactly fits solves directly -- no iteration, no drift.
+
+           parking(cov) = plot - cov,  where GFA(cov) = plot x FAR x cov / cov0
+       =>  cov = plot / (1 + plot x FAR x R x slotArea / cov0)                     */
+    const R = gfa0 > 0 ? a0.slots / gfa0 : 0;
+    out.slotsPerSqm = R;
+    let covFit = cov0 > 0 ? area / (1 + area * far0 * R * PLUS_SLOT_AREA / cov0) : 0;
+    /* The closed form balances on fractional slots, but slots are whole, so the
+       rounded-up requirement can overshoot the ground it was solved against -- by
+       1.14 m2 on RD41_C1. Tighten it on the integer figure: shrinking the coverage
+       shrinks the GFA, which shrinks the requirement, so this only ever descends
+       and settles within a few passes. */
+    for(let i = 0; i < 40 && covFit > 0; i++){
+      const g = cov0 > 0 ? area * far0 * covFit / cov0 : 0;
+      const want = Math.max(0, Math.ceil(plusAllocate(groups, g).slots - 1e-9))
+                 * PLUS_SLOT_AREA;
+      if(want <= area - covFit + 1e-9) break;
+      covFit = Math.max(0, area - want);
+    }
+    const covCap = area * PLUS_COV_LIMIT / 100;
+    out.coverageThatFits = covFit;
+    out.coverageCap = covCap;
+    const cov = Math.min(cov0, covCap, covFit);
+    out.coverage = cov;
+    out.coveragePctApplied = area > 0 ? cov / area * 100 : NaN;
+    out.farApplied = cov0 > 0 ? far0 * cov / cov0 : NaN;
+    out.gfaApplied = cov0 > 0 ? area * far0 * cov / cov0 : NaN;
+    /* Fitting the parking by dropping below half the plot is not a scheme worth
+       having, so it is reported as infeasible rather than quietly returned. */
+    out.feasible = covFit >= covCap - 1e-9;
+    // What the parking becomes once the coverage has been reduced.
+    const a1 = plusAllocate(groups, out.gfaApplied);
+    out.slotsAtApplied = Math.max(0, Math.ceil(a1.slots - 1e-9));
+    out.parkingAreaAtApplied = out.slotsAtApplied * PLUS_SLOT_AREA;
+    out.openGroundAtApplied = area - cov;
+    return out;
+  }
+
+  /* The saved form of the optimisation. Kept separate from dcrPlus() so the panel
+     and the file cannot drift apart: both read the same computed object. */
+  function plusAsObject(c){
+    const d = dcrPlus(c);
+    if(!d) return null;
+    const out = {
+      mode: d.mode,
+      feasible: d.feasible === undefined ? null : !!d.feasible,
+      plot: d.plot, plotArea: d.area,
+      areaPerSlot: d.slotArea, areaPerSeat: d.seatArea,
+      coverageLimitPct: d.coverageLimitPct,
+      minPlotArea: PLUS_MIN_PLOT
+    };
+    if(d.mode === "no on-plot parking"){
+      out.reason = d.reason;
+      out.farApplied = d.farApplied;
+      out.coveragePctApplied = d.coveragePctApplied;
+      out.maxGFAApplied = d.gfaApplied;
+      return out;
+    }
+    if(d.mode !== "weighted") return out;
+    Object.assign(out, {
+      activityCount: d.activityCount,
+      maxGFAAtCode: d.gfaAtCode,
+      weighting: d.summary,
+      slotsRaw: d.slotsRaw, slotsRequired: d.slots, parkingArea: d.parkingArea,
+      slotsPerSqmGFA: d.slotsPerSqm, unpricedClasses: d.unpriced,
+      coverageThatFits: d.coverageThatFits,
+      coverageThatFitsPct: d.area > 0 ? d.coverageThatFits / d.area * 100 : null,
+      coverageCap: d.coverageCap,
+      coverageApplied: d.coverage, coveragePctApplied: d.coveragePctApplied,
+      farApplied: d.farApplied, maxGFAApplied: d.gfaApplied,
+      slotsAtApplied: d.slotsAtApplied, parkingAreaAtApplied: d.parkingAreaAtApplied,
+      openGroundAtApplied: d.openGroundAtApplied
+    });
+    if(!d.feasible)
+      out.infeasibleReason = "the parking fits only below the "
+        + PLUS_COV_LIMIT + "% coverage limit";
+    return out;
+  }
+
+  function renderPlus(c){
+    const host = $("#plusBody"), tag = $("#plusTag");
+    host.innerHTML = "";
+    const d = dcrPlus(c);
+    if(!d){
+      if(tag) tag.textContent = "no plot";
+      host.appendChild(el("p", "hint", "Pick a plot to run the optimisation."));
+      return;
+    }
+    if(d.mode === "no activities"){
+      if(tag) tag.textContent = "no activities";
+      host.appendChild(el("p", "hint", "This plot has no UAD activities, so there is "
+        + "nothing to weight."));
+      return;
+    }
+    if(d.mode === "no on-plot parking"){
+      if(tag) tag.textContent = "under " + fmt(PLUS_MIN_PLOT) + " m²";
+      const p = el("p");
+      p.innerHTML = "No parking is accommodated on this plot because " + d.reason
+        + ". The Code parameters stand as given: FAR <b>" + fmt(d.farApplied,3)
+        + "</b>, coverage <b>" + fmt(d.coveragePctApplied,2) + "%</b>, Max GFA <b>"
+        + area(d.gfaApplied) + "</b>.";
+      host.appendChild(p);
+      return;
+    }
+    if(tag) tag.textContent = d.feasible ? "feasible" : "not feasible";
+
+    if(!d.feasible){
+      const al = el("div", "plus-alert");
+      al.innerHTML = "<b>Not feasible.</b> Fitting " + fmt(d.slots) + " "
+        + plural(d.slots,"space","spaces") + " needs the coverage down to <b>"
+        + fmt(d.coverageThatFits/d.area*100,2) + "%</b> of the plot, below the "
+        + fmt(PLUS_COV_LIMIT) + "% limit.";
+      host.appendChild(al);
+    }
+
+    const t = el("table", "plus-table");
+    const th = el("thead"), hr = el("tr");
+    const COLS = ["", "n", "n", "n", "", "n"];
+    ["ITC class","Count","Weight","GFA","Charged on","Slots"]
+      .forEach((h,i) => hr.appendChild(el("th", COLS[i], h)));
+    th.appendChild(hr); t.appendChild(th);
+    const tb = el("tbody");
+    d.summary.forEach(r => {
+      const tr = el("tr");
+      const name = el("td");
+      name.textContent = r.itcEquivalent;
+      if(r.foldedIn.length){
+        const f = el("div", "plus-fold", "includes " + r.foldedIn.join(", "));
+        name.appendChild(f);
+      }
+      tr.appendChild(name);
+      [fmt(r.count), fmt(r.weight*100,1) + "%", area(r.gfa), r.basis,
+       r.slots == null ? "—" : fmt(r.slots,2)]
+        .forEach((v,i) => { const td = el("td", COLS[i+1]); td.textContent = v;
+                            tr.appendChild(td); });
+      tb.appendChild(tr);
+    });
+    const tot = el("tr", "plus-total");
+    [ "Total", fmt(d.activityCount), "100.0%", area(d.gfaAtCode), "",
+      fmt(d.slotsRaw,2) ].forEach((v,i) => {
+        const td = el("td", COLS[i]); td.textContent = v; tot.appendChild(td); });
+    tb.appendChild(tot);
+    t.appendChild(tb);
+    host.appendChild(t);
+
+    const grid = el("div", "park");
+    const cell = (label, value, sub, cls) => {
+      const dv = el("div");
+      dv.appendChild(el("span","pk",label));
+      dv.appendChild(el("span","pv" + (cls?" "+cls:""), value));
+      if(sub) dv.appendChild(el("span","ps",sub));
+      grid.appendChild(dv);
+    };
+    cell("Parking required", fmt(d.slots),
+         plural(d.slots,"space","spaces") + ", from " + fmt(d.slotsRaw,2), "hi");
+    cell("Parking area", fmt(d.parkingArea),
+         "m² at " + fmt(PLUS_SLOT_AREA) + " m² a space", "");
+    cell("Coverage that fits", fmt(d.coverageThatFits,2),
+         "m² · " + fmt(d.coverageThatFits/d.area*100,2) + "% of the plot",
+         d.feasible ? "" : "bad");
+    cell("Coverage applied", fmt(d.coveragePctApplied,2) + "%",
+         area(d.coverage), d.feasible ? "" : "bad");
+    cell("FAR applied", fmt(d.farApplied,4),
+         "was " + fmt(c.far,3), "");
+    cell("Max GFA applied", fmt(d.gfaApplied),
+         "m² · was " + fmt(d.gfaAtCode) + " m²", "");
+    host.appendChild(grid);
+
+    const note = el("p", "hint");
+    note.innerHTML = "The weighted parking above is charged on the Code's GFA of <b>"
+      + area(d.gfaAtCode) + "</b>. At the reduced coverage the GFA is <b>"
+      + area(d.gfaApplied) + "</b>, which asks for <b>" + fmt(d.slotsAtApplied)
+      + "</b> " + plural(d.slotsAtApplied,"space","spaces") + " (<b>"
+      + area(d.parkingAreaAtApplied) + "</b>) against <b>"
+      + area(d.openGroundAtApplied) + "</b> of open ground.";
+    host.appendChild(note);
+    if(d.unpriced){
+      const w = el("p", "hint");
+      w.innerHTML = "<b>" + fmt(d.unpriced) + "</b> class(es) could not be priced "
+        + "against a floor area; their slots are excluded from the total.";
+      host.appendChild(w);
+    }
   }
 
   function wire(){
