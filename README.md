@@ -423,6 +423,82 @@ visitor and truck components and the two day totals it was blended from — the 
 is 0.107 + 1.204 + 0.007 — plus `conversion`, `driverKind`, `itcClassName`, and the `weighted`
 block.
 
+### Original beside modified
+
+Anything a user can change is stored twice — as the source gave it and as it now stands:
+
+| | source | current |
+| --- | --- | --- |
+| plot attributes | `plot.register`, `plot.approved` — both rows column for column | `inputs`, `parameters` |
+| parameters | `parameters[].original` | `parameters[].value`, with `overridden` and `source` |
+| designation | `referenceData.designation` — the `land_use` row | `landUse`, `derived` |
+| notes and limitations | `notesAudit.*.fromSheet` | `generalNotes`, `limitations` |
+| activity rows | `origin`, `unitAreaEntered`, `itcOverride` | the row's own values |
+
+`notesAudit` also carries the diff: `added`, `deleted`, `edited` (each with `from` and `to`),
+`unchanged`, and a `modified` flag — so a report can show what a reviewer changed without
+holding the original alongside.
+
+### The source rows themselves
+
+`referenceData` carries the rows the calculation touched, column for column, deduplicated and
+confined to what was used — a handful of rows, not the whole matrix:
+
+- `itcRates` — every ITC code charged, with its three rate components, the weekday and weekend
+  totals, the blended total, conversion, driver kind and unit label
+- `uadMap` — every UAD code used, with both category columns, the ITC class and the mapping note
+- `designation`, `coefficients`, `weighting`
+- `notesRules` — every `notes_rule` row the region and area band selected, before editing
+
+The point is that the result can be re-derived, or handed to the GP tool, without this database.
+
+### Parking, taken apart
+
+`parking.distribution` groups the plan the way it is read rather than by internal key names:
+`outside` (open ground beyond the footprint — spaces, area, available area, capacity, spare) and
+`inside` (basement or podium — spaces, area, floors, unrounded floors, floor area, usable share),
+plus `allInside` / `allOutside` and the share each way.
+
+`parking.ratios` states every threshold a reader might mean, computed rather than left to them:
+parking area as a share of the plot and of the GFA, open ground as a share of the plot, whether
+the parking area is over half the plot, and whether it exceeds the open ground.
+
+`dcrPlus.thresholds` answers the 50% coverage question outright — `belowCoverageLimit`,
+`coverageCappedFromCode`, the coverage that fits, the coverage applied, and whether the parking
+fits the open ground — rather than leaving it to be inferred from `feasible`.
+
+### Two L-number spaces, and a 50% that was never checked
+
+Reading the limitation rows back exposed something. The **notes workbook** numbers its
+limitations:
+
+| | |
+| --- | --- |
+| L-1 | GFA to all permitted uses shall **not exceed 50%** of the maximum allowable GFA |
+| L-2 | GFA to all permitted uses shall **not be less than 50%** of it |
+| L-3 | per the schedule of approved DED activities |
+| L-4 | a minimum of **13 m² of GFA per worker**, capping licensed workers |
+
+Two consequences.
+
+**The page's parking-cap advisory is labelled L-3 / L-4 and means something else.** Those came
+from the issued DCR report — 2 spaces per 100 m² of GFA, barred under 1,600 m² — which uses the
+same L-number space for different rules. Both are now in the file and both say where their codes
+come from (`limitationChecks.codesFrom`), but the collision is in the client's own documents and
+is not ours to resolve.
+
+**L-4 confirms the 13 m² a worker figure**, which step 5 had been applying as an assumption. It is
+sourced.
+
+**L-1 and L-2 are numeric and were never evaluated.** They are now, in
+`limitationChecks.notesWorkbook`, against the scheduled floor area — with the sheet's own wording
+carried beside each test. A caveat on reading them: the schedule auto-fills every filtered
+activity at the default 60 m² unit area, so on all 20 approved plots the scheduled floor area
+starts well above Max GFA (RD41_C1: 158 activities x 60 m² = 9,480 m² against 5,559 m²) and L-1
+therefore reads as breached by 6,700.5 m² before anyone has trimmed anything. The check is right;
+its input is the untrimmed default. L-1 and L-2 also contradict each other as written — one caps
+the share at 50%, the other floors it at 50% — which pins it at exactly 50% and is worth raising.
+
 Two things the file deliberately does not do. It is **rebuilt from the current calculation on
 every save**, so nothing in it can be stale. And it is written whichever basis is on screen: the
 optimisation is computed either way, so `schedule.basis` records only what was being looked at,

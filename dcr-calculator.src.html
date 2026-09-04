@@ -1591,7 +1591,7 @@ tbody tr:last-child td{border-bottom:0}
   }
   function addSchedRow(actId, slots, override){
     SCHED.push({ id: ++schedSeq, act: actId ? activityById(actId) : null,
-                 uadCode: null, priority: false,
+                 uadCode: null, priority: false, fromPlot: false,
                  slots: slots == null ? 1 : slots, itcOverride: override || null,
                  unitArea: "", unitManual: false, qty: "", search: "" });
   }
@@ -2538,7 +2538,7 @@ tbody tr:last-child td{border-bottom:0}
     rows.forEach(r => {
       const code = (r.luc_code || "").split(".")[0].trim();
       SCHED.push({ id: ++schedSeq, act: null, uadCode: uadByCode(code) ? code : null,
-                   priority: false, slots: 1, itcOverride: null,
+                   priority: false, fromPlot: true, slots: 1, itcOverride: null,
                    unitArea: "", unitManual: false, qty: "", search: "",
                    uadActivityCode: r.activity_code || null,
                    uadName: r.activity_name || null, uadCategory: r.category || null });
@@ -2807,8 +2807,23 @@ tbody tr:last-child td{border-bottom:0}
       plot: p ? { sectorPlotId: p.sector_plot_id, plotNumber: p.plot_number,
                   district: p.district, primaryUse: p.primary_use,
                   devCode: p.devcode, devCodeCategory: p.devcode_cat,
-                  registerArea: p.area }
-              : { sectorPlotId: null, source: "manual entry" },
+                  registerArea: p.area,
+                  /* Both source rows verbatim, column for column. The keys above are
+                     this tool's names for a chosen few; these are the tables as they
+                     stand, so a later reader is not reverse-engineering a rename. */
+                  register: { id: p.id, plot_number: p.plot_number,
+                              sector_plot_id: p.sector_plot_id, district: p.district,
+                              primary_use: p.primary_use, devcode: p.devcode,
+                              devcode_cat: p.devcode_cat, area: p.area },
+                  approved: p.approved ? {
+                    sector_plot_id: p.approved.sector_plot_id,
+                    region: p.approved.region, itc_loc: p.approved.itc_loc,
+                    district: p.approved.district, dev_code: p.approved.dev_code,
+                    planned_area: p.approved.planned_area, area: p.approved.area,
+                    gfa: p.approved.gfa, far: p.approved.far,
+                    coverage_pct: p.approved.coverage_pct } : null }
+              : { sectorPlotId: null, source: "manual entry",
+                  register: null, approved: null },
       inputs: {
         plotArea: c.plot,
         designation: c.dRow ? c.dRow.designation : null,
@@ -2892,6 +2907,7 @@ tbody tr:last-child td{border-bottom:0}
                  uadCategory: m ? m.uad_category : null,
                  itcEquivalent: m ? m.itc_equivalent : null,
                  priority: !!r.priority,
+                 origin: r.fromPlot ? "plot workbook" : "added by user",
                  slots: num(r.slots) || 0,
                  unitArea: rowUnit(r, c.unit).area,
                  unitAreaEntered: !!r.unitManual,
@@ -2966,7 +2982,47 @@ tbody tr:last-child td{border-bottom:0}
         areaPerBasementFloor: c.parking.perFloor,
         basementFloorsRaw: c.parking.floorsRaw,
         fitsOnGround: !!c.parking.fits,
-        coverageAtFullPlot: !!c.parking.isCR
+        coverageAtFullPlot: !!c.parking.isCR,
+        /* The same plan grouped the way it is read -- what parks outside the
+           building and what has to go inside it -- so nothing has to be inferred
+           from which key means which tier. */
+        distribution: {
+          outside: { where: "open ground outside the footprint",
+                     spaces: c.parking.onGround, area: c.parking.groundArea,
+                     availableArea: c.parking.open,
+                     capacitySpaces: c.parking.openCap,
+                     spareArea: Number.isFinite(c.parking.open)
+                              && Number.isFinite(c.parking.groundArea)
+                              ? c.parking.open - c.parking.groundArea : null },
+          inside:  { where: "basement or podium",
+                     spaces: c.parking.basement, area: c.parking.basementArea,
+                     floors: c.parking.floors, floorsRaw: c.parking.floorsRaw,
+                     floorArea: c.parking.fArea,
+                     usablePerFloorPct: c.parking.useP,
+                     usableAreaPerFloor: c.parking.perFloor },
+          allOutside: c.parking.basement === 0,
+          allInside: c.parking.onGround === 0,
+          shareOutside: Number.isFinite(c.parking.need) && c.parking.need > 0
+                      ? c.parking.onGround / c.parking.need : null,
+          shareInside: Number.isFinite(c.parking.need) && c.parking.need > 0
+                     ? c.parking.basement / c.parking.need : null
+        },
+        /* Every ratio a threshold might be asked about, computed rather than left
+           to the reader. The 50% one that governs is the DCR Plus coverage limit,
+           in dcrPlus below; these are the plot-level ones. */
+        ratios: {
+          parkingAreaAsPctOfPlot: Number.isFinite(c.parking.needArea)
+            && c.plot > 0 ? c.parking.needArea / c.plot * 100 : null,
+          parkingAreaAsPctOfGFA: Number.isFinite(c.parking.needArea)
+            && c.maxGFA > 0 ? c.parking.needArea / c.maxGFA * 100 : null,
+          openGroundAsPctOfPlot: Number.isFinite(c.parking.open)
+            && c.plot > 0 ? c.parking.open / c.plot * 100 : null,
+          parkingAreaOverHalfThePlot: Number.isFinite(c.parking.needArea)
+            && c.plot > 0 ? c.parking.needArea > c.plot / 2 : null,
+          parkingAreaExceedsOpenGround: Number.isFinite(c.parking.needArea)
+            && Number.isFinite(c.parking.open)
+            ? c.parking.needArea > c.parking.open + 1e-9 : null
+        }
       },
       /* L-3 and L-4 of the issued report, evaluated rather than described: the
          demand per 100 m2 of GFA, whether it clears the cap, and which limitation
@@ -2984,7 +3040,60 @@ tbody tr:last-child td{border-bottom:0}
                  effect: !over ? null
                        : (c.plot < SMALL_PLOT
                           ? "barred on a plot under " + SMALL_PLOT + " m2"
-                          : "permitted, but the excess is the developer's and earns no GFA") };
+                          : "permitted, but the excess is the developer's and earns no GFA"),
+                 /* These two L-numbers come from the issued DCR report, which uses
+                    the same L-1..L-4 space as the notes workbook for different
+                    rules. The workbook's own limitations are evaluated separately
+                    below; do not read one set's codes against the other. */
+                 codesFrom: "issued DCR report",
+                 codesNote: "the notes workbook numbers L-1..L-4 differently",
+                 /* The workbook's limitations, evaluated where they are numeric.
+                    Matched by code, with the sheet's own wording carried alongside
+                    so a reader can see what was tested. */
+                 notesWorkbook: (function(){
+                   const reg = p && p.approved ? p.approved.region : null;
+                   if(!reg) return [];
+                   const half = Number.isFinite(c.maxGFA) ? c.maxGFA / 2 : NaN;
+                   const used = c.sched ? c.sched.floor : NaN;
+                   const seen = new Set();
+                   return NOTES.filter(r => r.region === reg && r.kind === "limitation"
+                                         && bandHolds(r, c.plot))
+                     .filter(r => { const k = r.code; if(seen.has(k)) return false;
+                                    seen.add(k); return true; })
+                     .map(r => {
+                       const out = { code: r.code, band: r.band,
+                                     description: r.description, evaluated: false };
+                       if(r.code === "L-1"){
+                         out.evaluated = true;
+                         out.test = "scheduled floor area must not exceed 50% of Max GFA";
+                         out.value = used; out.threshold = half;
+                         out.passes = Number.isFinite(used) && Number.isFinite(half)
+                                    ? used <= half + 1e-9 : null;
+                         out.exceededBy = Number.isFinite(used) && Number.isFinite(half)
+                                        && used > half ? used - half : 0;
+                       } else if(r.code === "L-2"){
+                         out.evaluated = true;
+                         out.test = "scheduled floor area must be at least 50% of Max GFA";
+                         out.value = used; out.threshold = half;
+                         out.passes = Number.isFinite(used) && Number.isFinite(half)
+                                    ? used >= half - 1e-9 : null;
+                         out.shortBy = Number.isFinite(used) && Number.isFinite(half)
+                                     && used < half ? half - used : 0;
+                       } else if(r.code === "L-4"){
+                         out.evaluated = true;
+                         out.test = "a minimum of " + WORKER_AREA
+                                  + " m2 of GFA per worker, capping licensed workers";
+                         out.value = c.workers; out.threshold = WORKER_AREA;
+                         out.passes = true;   // it sets the cap rather than failing
+                         out.note = "this is the source of step 5's "
+                                  + WORKER_AREA + " m2 a worker";
+                       } else {
+                         out.test = "narrative, not a numeric threshold";
+                         out.passes = null;
+                       }
+                       return out;
+                     });
+                 })() };
       })(),
       /* Exactly the advisories the page was showing, read off the panel so the
          file and the screen cannot disagree about what was flagged. */
@@ -3001,6 +3110,93 @@ tbody tr:last-child td{border-bottom:0}
          meta table rather than a chosen few keys: it is small, and a reader a year
          from now should not have to ask which workbook a rate came out of. */
       source: Object.assign({ generatedBy: "DCR Plot Yield Calculator" }, META),
+      /* The source rows themselves, not just their names. Every ITC rate, mapping
+         and rule this calculation touched, column for column, so the result can be
+         re-derived -- or fed to a GP tool -- without this database. Deduplicated
+         and confined to what was used: a handful of rows, not the whole matrix. */
+      referenceData: (function(){
+        const usedCodes = new Set(), usedUad = new Set();
+        SCHED.forEach(r => {
+          const cls = rowClass(r);
+          const code = cls ? resolveCode(cls) : null;
+          if(code) usedCodes.add(code.code);
+          const u = (r.uadCode || "").trim();
+          if(u) usedUad.add(u);
+        });
+        itcIndex();
+        const rateRow = code => {
+          const base = ITC.find(x => x.code === code && x.period === "weekday")
+                    || ITC.find(x => x.code === code);
+          if(!base) return null;
+          const eff = effectiveRate(code);
+          return { code: base.code, class_code: base.class_code,
+                   class_name: base.class_name, class_group: base.class_group,
+                   variant: base.variant || null,
+                   unit_label: base.unit_label, driver_label: base.driver_label,
+                   driver_kind: base.driver_kind, conversion: base.conversion,
+                   rate_employee: base.rate_employee, rate_visitor: base.rate_visitor,
+                   rate_truck: base.rate_truck, rate_total: base.rate_total,
+                   weekday_total: eff ? eff.weekday_total : base.rate_total,
+                   weekend_total: eff ? eff.weekend_total : null,
+                   blended_total: eff ? eff.rate_total : base.rate_total };
+        };
+        const d = c.dRow;
+        return {
+          designation: d ? { id: d.id, category: d.category,
+                             designation: d.designation, name: d.name,
+                             far: num(d.far), coverage: d.coverage,
+                             remarks: d.remarks || null, source: d.source || null }
+                        : null,
+          itcRates: [...usedCodes].sort().map(rateRow).filter(Boolean),
+          uadMap: [...usedUad].sort().map(code => {
+            const m = uadByCode(code);
+            return m ? { uad_code: m.uad_code, uad_category: m.uad_category,
+                         uad_category_inspection: m.uad_category_inspection,
+                         itc_equivalent: m.itc_equivalent, itc_class: m.itc_class,
+                         note: m.note || null } : null;
+          }).filter(Boolean),
+          coefficients: [
+            { key: "gla_pct",              value: COEF.glaPct },
+            { key: "unit_area_sqm",        value: COEF.unitArea },
+            { key: "coverage_pct_default", value: COEF.coverageDefault }
+          ],
+          weighting: [{ period: "weekday", days: WEEK.weekday, share: shares().wd },
+                      { period: "weekend", days: WEEK.weekend, share: shares().we }],
+          /* Every notes_rule row the region and area band selected, before any
+             editing -- the raw rows the two objects below were seeded from. */
+          notesRules: (function(){
+            const reg = p && p.approved ? p.approved.region : null;
+            if(!reg) return [];
+            return NOTES.filter(r => r.region === reg && bandHolds(r, c.plot))
+              .map(r => ({ id: r.id, code: r.code, kind: r.kind, region: r.region,
+                           band: r.band, band_op: r.band_op,
+                           band_value: r.band_value, description: r.description }));
+          })()
+        };
+      })(),
+      /* The notes as the sheet gave them, the notes as they now stand, and what
+         happened in between. The two objects above are the final values; this is
+         the audit trail behind them. */
+      notesAudit: (function(){
+        const seed = rulesFromSheet(p, c.plot);
+        const pack = list => { const o = {};
+          (list || []).forEach(r => { const k = String(r.code || "").trim();
+            if(k) o[k] = String(r.description == null ? "" : r.description); });
+          return o; };
+        const diff = (was, now) => {
+          const added = Object.keys(now).filter(k => !(k in was));
+          const deleted = Object.keys(was).filter(k => !(k in now));
+          const edited = Object.keys(now).filter(k => k in was && was[k] !== now[k])
+            .map(k => ({ code: k, from: was[k], to: now[k] }));
+          return { added, deleted, edited,
+                   unchanged: Object.keys(now).filter(k => k in was && was[k] === now[k]),
+                   modified: !!(added.length || deleted.length || edited.length) };
+        };
+        const nWas = pack(seed.notes),  nNow = pack(RULES.notes);
+        const lWas = pack(seed.limits), lNow = pack(RULES.limits);
+        return { generalNotes: { fromSheet: nWas, current: nNow, changes: diff(nWas, nNow) },
+                 limitations:  { fromSheet: lWas, current: lNow, changes: diff(lWas, lNow) } };
+      })(),
       /* The optimisation is reported alongside the scheduled figures, never in
          place of them, so that a reader can see both what the Code asks for and
          what the plot can actually carry. */
@@ -3852,6 +4048,24 @@ tbody tr:last-child td{border-bottom:0}
       slotsAtApplied: d.slotsAtApplied, parkingAreaAtApplied: d.parkingAreaAtApplied,
       openGroundAtApplied: d.openGroundAtApplied
     });
+    /* "Has the 50% threshold been exceeded" should not require reading feasible
+       and knowing what it means, so each side of it is stated. */
+    out.thresholds = {
+      coverageLimitPct: PLUS_COV_LIMIT,
+      coverageLimitArea: d.coverageCap,
+      coverageThatFitsPct: d.area > 0 ? d.coverageThatFits / d.area * 100 : null,
+      coverageAppliedPct: d.coveragePctApplied,
+      // The parking cannot be fitted while holding the 50% coverage limit.
+      belowCoverageLimit: !d.feasible,
+      // The Code's own coverage was above the limit and was cut back to it.
+      coverageCappedFromCode: Number.isFinite(d.coveragePctApplied)
+        && c.pcPct > PLUS_COV_LIMIT + 1e-9,
+      codeCoveragePct: c.pcPct,
+      parkingAreaAsPctOfPlot: d.area > 0 ? d.parkingArea / d.area * 100 : null,
+      parkingFitsInOpenGround: Number.isFinite(d.parkingAreaAtApplied)
+        && Number.isFinite(d.openGroundAtApplied)
+        ? d.parkingAreaAtApplied <= d.openGroundAtApplied + 1e-6 : null
+    };
     if(!d.feasible)
       out.infeasibleReason = "the parking fits only below the "
         + PLUS_COV_LIMIT + "% coverage limit";
