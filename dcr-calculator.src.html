@@ -595,6 +595,10 @@ tbody tr:last-child td{border-bottom:0}
 .basis-pick .btn.mini.on{background:var(--accent-solid); color:#FFFFFF}
 .basis-note{font-size:.76rem; color:var(--ink-2)}
 .warea{font-variant-numeric:tabular-nums; color:var(--ink)}
+.adj-cap{font-family:"IBM Plex Mono",monospace; font-size:.62rem; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--ink-2); margin:2px 0 -6px}
+.adj-table tr.adj-moved td{background:var(--accent-soft)}
+.adj-table td.adj-delta{color:var(--accent-ink); font-weight:600}
 #plusBody{display:flex; flex-direction:column; gap:14px}
 #plusBody .park{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media (max-width:620px){ #plusBody .park{grid-template-columns:repeat(2,minmax(0,1fr))} }
@@ -2867,7 +2871,13 @@ tbody tr:last-child td{border-bottom:0}
         parkingCapPer100SqmGFA: PARK_CAP, smallPlotThreshold: SMALL_PLOT,
         dcrPlus: { minPlotArea: PLUS_MIN_PLOT, areaPerSlot: PLUS_SLOT_AREA,
                    areaPerSeat: PLUS_SEAT_AREA, coverageLimitPct: PLUS_COV_LIMIT,
-                   foldedIntoLocalShopping: PLUS_FOLD_INTO_LSC.slice() }
+                   foldedIntoLocalShopping: PLUS_FOLD_INTO_LSC.slice() },
+        livability: { walkingCatchmentM: LIV_WALK_M,
+                      drivingCatchmentMin: LIV_DRIVE_MIN,
+                      minimumAreas: Object.assign({}, LIV_MIN_AREA),
+                      minimumAreasLoaded: Object.keys(LIV_MIN_AREA).length,
+                      minimumAreaSource: "Livability Report -- not present in any "
+                        + "workbook loaded here; empty until supplied" }
       },
       schedule: {
         basis: "weighted",
@@ -2922,12 +2932,24 @@ tbody tr:last-child td{border-bottom:0}
                  chargedPer: pk.code ? pk.code.unit_label : null,
                  quantity: r.qty === "" ? null : num(r.qty),
                  bays: Number.isFinite(pk.raw) ? pk.raw : null,
+                 /* What the Livability Report says about this activity: the mode
+                    that governs it, whether the catchment already provides it --
+                    which is what makes it a priority -- and the Report's own
+                    identifier fields. */
+                 livability: (function(){
+                   const l = livFor(r), m = livMinArea(r);
+                   if(!l && m.area == null) return null;
+                   return Object.assign({}, l || {},
+                     { minimumArea: m.area, minimumFrom: m.from });
+                 })(),
                  weighted: w ? { area: w.area, shareOfGroup: w.share,
                                  group: w.group, groupGFA: w.groupGfa,
                                  groupCodeCount: w.groupCount,
                                  itcCode: w.code ? w.code.code : null,
                                  chargedOn: w.basis,
-                                 bays: Number.isFinite(w.bays) ? w.bays : null }
+                                 bays: Number.isFinite(w.bays) ? w.bays : null,
+                                 permittedArea: w.permittedArea,
+                                 topUpArea: w.topUpArea }
                              : null };
         });
       })(),
@@ -3763,6 +3785,142 @@ tbody tr:last-child td{border-bottom:0}
     return dup;
   }
 
+  /* ---------- livability: which activities the plot is there to provide ------
+     The workbook carries no priority column, but it carries the catchment test the
+     Livability Report ran, and that is what a priority is: an activity the
+     surrounding area does not already provide. Each row names the mode that governs
+     it -- walking or driving -- and whether it was found within that mode's
+     catchment, 700 m on foot or 10 minutes by car. Not found in the governing
+     catchment is a gap this plot can fill.
+
+     LIV_MIN_AREA is empty on purpose. The Report's minimum space requirements are
+     not in any workbook loaded here -- neither the 20 per-plot sheets nor the UAD
+     mapping carries an area column -- so nothing is invented for them. Fill this
+     from the Report, by UAD code or category, and the checks downstream start
+     applying; until then they report that no minimum is known rather than passing
+     an activity that was never tested. */
+  const LIV_WALK_M = 700, LIV_DRIVE_MIN = 10;
+  const LIV_MIN_AREA = {};          // uad code or category -> m2, from the Report
+
+  /* Looked up rather than copied onto the row: the workbook row is the source of
+     truth, and a copy in the schedule would be persisted to localStorage and go
+     stale against it. Indexed once per plot. */
+  let _livIdx = null, _livIdxFor = null;
+  function livIndex(){
+    const p = currentPlot();
+    const key = p ? String(p.sector_plot_id) : "";
+    if(_livIdx && _livIdxFor === key) return _livIdx;
+    _livIdx = new Map(); _livIdxFor = key;
+    if(p) uadFor(p.sector_plot_id).forEach(r => {
+      const k = String(r.activity_code || "").trim();
+      if(k && !_livIdx.has(k)) _livIdx.set(k, r);
+    });
+    return _livIdx;
+  }
+
+  function livFor(row){
+    const code = row ? String(row.uadActivityCode || "").trim() : "";
+    const src = code ? livIndex().get(code) : null;
+    if(!src) return null;
+    const mode = String(src.transport_mode || "");
+    const walking = /walk/i.test(mode);
+    const found = walking ? src.found_walk_700m : src.found_drive_10m;
+    const known = found === 0 || found === 1 || found === "0" || found === "1";
+    const provided = String(found) === "1";
+    return {
+      mode: walking ? "walking" : "driving",
+      catchment: walking ? LIV_WALK_M + " m on foot"
+                         : LIV_DRIVE_MIN + " minutes by car",
+      foundInCatchment: known ? provided : null,
+      // A gap in the governing catchment is what makes an activity a priority.
+      priority: known ? !provided : null,
+      identifier: src.identifier == null ? null : src.identifier,
+      identifierLogic: src.identifier_logic || null,
+      rational: src.rational || null,
+      foundWalking700m: src.found_walk_700m == null ? null : src.found_walk_700m,
+      foundDriving10min: src.found_drive_10m == null ? null : src.found_drive_10m
+    };
+  }
+
+  function livMinArea(row){
+    const code = (row.uadCode || "").trim();
+    if(code && LIV_MIN_AREA[code] != null)
+      return { area: LIV_MIN_AREA[code], from: "UAD code " + code };
+    const m = uadByCode(code);
+    const cat = m ? m.uad_category : null;
+    if(cat && LIV_MIN_AREA[cat] != null)
+      return { area: LIV_MIN_AREA[cat], from: "category " + cat };
+    return { area: null, from: null };
+  }
+
+  /* After the test fit the development area is smaller than the Code allowed, so
+     not every proposed activity still has room. Each is checked against its minimum
+     space requirement and the area is filled priority first -- the Livability
+     Report's gaps before the rest, and a user's own Priority flag ahead of both.
+
+     Where no minimum is known the activity is neither admitted on a test it passed
+     nor dropped on one it failed: it is carried as untested and counted separately.
+     With LIV_MIN_AREA empty that is every activity, which is the honest result
+     until the Report's figures are loaded. */
+  function plusActivityFit(c, d){
+    if(!d || !Number.isFinite(d.gfaApplied)) return null;
+    const budget = d.gfaApplied;
+    /* Re-weighted at the ADJUSTED FAR. ROWPLAN holds the areas at the Code's GFA,
+       and checking those against the reduced budget would compare 8,238 m2 of
+       activity against 5,492 m2 of room and read as an overrun that the
+       optimisation had already resolved. */
+    const plan = plusRowPlan({ plot: c.plot, far: d.farApplied }) || ROWPLAN;
+    const rank = r => {
+      const l = livFor(r);
+      if(r.priority) return 0;                    // flagged by the user
+      if(l && l.priority === true) return 1;      // a gap in its catchment
+      if(l && l.priority === false) return 2;     // already provided nearby
+      return 3;                                   // no catchment result
+    };
+    const ordered = SCHED.map((r, i) => ({ r, i, rank: rank(r) }))
+      .sort((a, b) => a.rank - b.rank || a.i - b.i);
+    let used = 0, included = 0, excluded = 0, untested = 0;
+    const rows = ordered.map(({ r, rank }) => {
+      const w = plan ? plan.byRow.get(r.id) : null;
+      const min = livMinArea(r);
+      const l = livFor(r);
+      const out = { rowId: r.id, uadCode: r.uadCode || null,
+                    uadActivityCode: r.uadActivityCode || null,
+                    name: r.uadName || (r.act ? r.act.name : null),
+                    priorityRank: rank,
+                    userPriority: !!r.priority,
+                    livabilityPriority: l ? l.priority : null,
+                    weightedArea: w ? w.area : null,
+                    minimumArea: min.area, minimumFrom: min.from };
+      if(min.area == null){
+        out.verdict = "untested"; out.reason = "no minimum space requirement known";
+        untested++;
+        if(w && Number.isFinite(w.area)) used += w.area;
+        return out;
+      }
+      const room = budget - used;
+      if(min.area <= room + 1e-9){
+        out.verdict = "included"; out.roomBefore = room;
+        used += Math.max(min.area, w && Number.isFinite(w.area) ? w.area : 0);
+        included++;
+      } else {
+        out.verdict = "excluded";
+        out.reason = "needs " + fmt(min.area,2) + " m\u00b2 of the "
+                   + fmt(room,2) + " m\u00b2 left";
+        out.roomBefore = room; excluded++;
+      }
+      return out;
+    });
+    return { budget, areaUsed: used, areaLeft: budget - used,
+             weightedAtAdjusted: plan ? plan.gfa : null,
+             included, excluded, untested, rows,
+             minimumsLoaded: Object.keys(LIV_MIN_AREA).length,
+             note: Object.keys(LIV_MIN_AREA).length === 0
+                 ? "No minimum space requirements are loaded, so no activity was "
+                   + "excluded on one. Load them from the Livability Report."
+                 : null };
+  }
+
   /* ---------- DCR Plus parking optimisation ------------------------------- */
   /* A second, separate calculation. It does not touch the figures above: those
      follow the Code as scheduled, this one asks what the plot can carry once its
@@ -3836,6 +3994,41 @@ tbody tr:last-child td{border-bottom:0}
              permittedArea: permitted, topUpArea: topUp, halfGFA: half };
   }
 
+  /* Every parameter the optimisation moves, reported as the pair it is: what the
+     Code gave and what the plot can actually carry. Reducing coverage does not stop
+     at coverage -- it takes the GFA with it, and the GFA takes the leasable area,
+     the permitted activity count and the worker cap with it. Reporting only the
+     coverage would leave four figures on the page that no longer follow from it. */
+  function plusAdjusted(c, o){
+    const pair = (was, now, dp) => ({
+      original: Number.isFinite(was) ? was : null,
+      adjusted: Number.isFinite(now) ? now : null,
+      delta: Number.isFinite(was) && Number.isFinite(now) ? now - was : null,
+      changed: Number.isFinite(was) && Number.isFinite(now)
+             && Math.abs(now - was) > (dp == null ? 1e-9 : dp)
+    });
+    const gfa1 = o.gfaApplied;
+    const gla1 = Number.isFinite(gfa1) && Number.isFinite(c.glaPct)
+               ? gfa1 * (c.glaPct / 100) : NaN;
+    const act1 = Number.isFinite(gla1) && c.unit > 0 ? Math.floor(gla1 / c.unit) : NaN;
+    const wrk1 = Number.isFinite(gfa1) && WORKER_AREA > 0
+               ? Math.floor(gfa1 / WORKER_AREA) : NaN;
+    return {
+      far:            pair(c.far,    o.farApplied),
+      coveragePct:    pair(c.pcPct,  o.coveragePctApplied),
+      coverageArea:   pair(c.cover,  o.coverage),
+      maxGFA:         pair(c.maxGFA, gfa1),
+      gla:            pair(c.gla,    gla1),
+      maxActivities:  pair(c.act,    act1),
+      maxNoWorkers:   pair(c.workers, wrk1),
+      parkingSpaces:  pair(o.slots,  o.slotsAtApplied),
+      parkingArea:    pair(o.parkingArea, o.parkingAreaAtApplied),
+      openGroundArea: pair(Number.isFinite(c.plot) && Number.isFinite(c.cover)
+                            ? c.plot - c.cover : NaN, o.openGroundAtApplied),
+      glaPct: c.glaPct, unitArea: c.unit, workerArea: WORKER_AREA
+    };
+  }
+
   function dcrPlus(c){
     const plot = currentPlot();
     const area = c.plot;
@@ -3851,7 +4044,13 @@ tbody tr:last-child td{border-bottom:0}
       out.farApplied = c.far;
       out.coveragePctApplied = c.pcPct;
       out.gfaApplied = c.maxGFA;
+      out.coverage = c.cover;
+      out.slots = null; out.slotsAtApplied = null;
+      out.parkingArea = null; out.parkingAreaAtApplied = null;
+      out.openGroundAtApplied = Number.isFinite(c.plot) && Number.isFinite(c.cover)
+                              ? c.plot - c.cover : NaN;
       out.feasible = true;
+      out.adjusted = plusAdjusted(c, out);
       return out;
     }
     const groups = plusGroupsFromSched();
@@ -3912,8 +4111,12 @@ tbody tr:last-child td{border-bottom:0}
     // What the parking becomes once the coverage has been reduced.
     const a1 = plusAllocate(groups, out.gfaApplied);
     out.slotsAtApplied = Math.max(0, Math.ceil(a1.slots - 1e-9));
+    out.slotsRawAtApplied = a1.slots;
     out.parkingAreaAtApplied = out.slotsAtApplied * PLUS_SLOT_AREA;
     out.openGroundAtApplied = area - cov;
+    out.permittedAreaAtApplied = a1.permittedArea;
+    out.topUpAreaAtApplied = a1.topUpArea;
+    out.adjusted = plusAdjusted(c, out);
     return out;
   }
 
@@ -4036,14 +4239,21 @@ tbody tr:last-child td{border-bottom:0}
       out.farApplied = d.farApplied;
       out.coveragePctApplied = d.coveragePctApplied;
       out.maxGFAApplied = d.gfaApplied;
+      out.adjusted = d.adjusted || null;
+      out.activityFit = plusActivityFit(c, d);
       return out;
     }
     if(d.mode !== "weighted") return out;
+    out.adjusted = d.adjusted || null;
+    out.activityFit = plusActivityFit(c, d);
     Object.assign(out, {
       activityCount: d.activityCount,
       maxGFAAtCode: d.gfaAtCode,
       weighting: d.summary,
       slotsRaw: d.slotsRaw, slotsRequired: d.slots, parkingArea: d.parkingArea,
+      slotsRawAtApplied: d.slotsRawAtApplied,
+      permittedAreaAtApplied: d.permittedAreaAtApplied,
+      topUpAreaAtApplied: d.topUpAreaAtApplied,
       slotsPerSqmGFA: d.slotsPerSqm, unpricedClasses: d.unpriced,
       coverageThatFits: d.coverageThatFits,
       coverageThatFitsPct: d.area > 0 ? d.coverageThatFits / d.area * 100 : null,
@@ -4166,6 +4376,51 @@ tbody tr:last-child td{border-bottom:0}
          "m² · was " + fmt(d.gfaAtCode) + " m²", "");
     host.appendChild(grid);
 
+    /* What the optimisation actually moved. Reducing coverage takes the GFA with it,
+       and the GFA takes the leasable area, the activity count and the worker cap, so
+       showing only the coverage would leave four figures on the page that no longer
+       follow from it. */
+    if(d.adjusted){
+      const A = d.adjusted;
+      const moved = [
+        ["Plot coverage", "pct", A.coveragePct], ["Coverage area", "area", A.coverageArea],
+        ["FAR", "far", A.far], ["Max GFA", "area", A.maxGFA],
+        ["Gross leasable area", "area", A.gla],
+        ["Max allowed activities", "count", A.maxActivities],
+        ["Max number of workers", "count", A.maxNoWorkers],
+        ["Parking spaces", "count", A.parkingSpaces],
+        ["Parking area", "area", A.parkingArea],
+        ["Open ground", "area", A.openGroundArea]
+      ].filter(([,,x]) => x && (x.original != null || x.adjusted != null));
+      if(moved.length){
+        const show = (kind, v) => v == null ? "\u2014"
+          : kind === "pct"  ? fmt(v,2) + "%"
+          : kind === "far"  ? fmt(v,4)
+          : kind === "area" ? area(v) : fmt(v);
+        const t = el("table", "plus-table adj-table");
+        const th = el("thead"), hr = el("tr");
+        ["Parameter","From the Code","After optimisation","Change"]
+          .forEach((h,i) => hr.appendChild(el("th", i ? "n" : "", h)));
+        th.appendChild(hr); t.appendChild(th);
+        const tb = el("tbody");
+        moved.forEach(([label, kind, x]) => {
+          const tr = el("tr", x.changed ? "adj-moved" : "");
+          tr.appendChild(el("td", "", label));
+          tr.appendChild(el("td", "n", show(kind, x.original)));
+          tr.appendChild(el("td", "n", show(kind, x.adjusted)));
+          const dl = el("td", "n");
+          dl.textContent = !x.changed ? "unchanged"
+            : (x.delta > 0 ? "+" : "") + show(kind, x.delta);
+          if(x.changed) dl.className = "n adj-delta";
+          tr.appendChild(dl);
+          tb.appendChild(tr);
+        });
+        t.appendChild(tb);
+        host.appendChild(el("p", "adj-cap", "What the optimisation moved"));
+        host.appendChild(t);
+      }
+    }
+
     const note = el("p", "hint");
     note.innerHTML = "The weighted parking above is charged on the Code's GFA of <b>"
       + area(d.gfaAtCode) + "</b>. At the reduced coverage the GFA is <b>"
@@ -4174,6 +4429,20 @@ tbody tr:last-child td{border-bottom:0}
       + area(d.parkingAreaAtApplied) + "</b>) against <b>"
       + area(d.openGroundAtApplied) + "</b> of open ground.";
     host.appendChild(note);
+    const fit = plusActivityFit(c, d);
+    if(fit){
+      const p2 = el("p", "hint");
+      const prio = fit.rows.filter(r => r.livabilityPriority === true).length;
+      p2.innerHTML = "Activities checked against the adjusted <b>" + area(fit.budget)
+        + "</b>: <b>" + fmt(fit.included) + "</b> included, <b>"
+        + fmt(fit.excluded) + "</b> excluded, <b>" + fmt(fit.untested)
+        + "</b> untested. <b>" + fmt(prio) + "</b> "
+        + plural(prio,"activity","activities")
+        + " the Livability Report found no provision for nearby, so "
+        + (prio === 1 ? "it is" : "they are") + " taken first."
+        + (fit.note ? " " + fit.note : "");
+      host.appendChild(p2);
+    }
     if(d.unpriced){
       const w = el("p", "hint");
       w.innerHTML = "<b>" + fmt(d.unpriced) + "</b> class(es) could not be priced "

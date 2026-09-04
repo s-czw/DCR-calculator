@@ -467,6 +467,69 @@ the parking area is over half the plot, and whether it exceeds the open ground.
 `coverageCappedFromCode`, the coverage that fits, the coverage applied, and whether the parking
 fits the open ground — rather than leaving it to be inferred from `feasible`.
 
+### What the optimisation moves
+
+Reducing coverage does not stop at coverage. It takes the GFA with it, and the GFA takes the
+leasable area, the permitted activity count and the worker cap. Reporting only the coverage would
+leave four figures on the page that no longer follow from it, so the panel carries a table of
+every parameter the optimisation moved, from the Code's value to the adjusted one, with the
+changed rows marked. `65_3_48_9_`:
+
+| parameter | from the Code | after optimisation | change |
+| --- | --- | --- | --- |
+| Plot coverage | 75% | 50% | −25% |
+| Coverage area | 4,119 m² | 2,746 m² | −1,373 m² |
+| FAR | 1.5 | 1 | −0.5 |
+| Max GFA | 8,238 m² | 5,492 m² | −2,746 m² |
+| Gross leasable area | 6,178.5 m² | 4,119 m² | −2,059.5 m² |
+| Max allowed activities | 102 | 68 | −34 |
+| Max number of workers | 633 | 422 | −211 |
+| Parking spaces | 111 | 74 | −37 |
+| Parking area | 3,885 m² | 2,590 m² | −1,295 m² |
+| Open ground | 1,373 m² | 2,746 m² | +1,373 m² |
+
+The same pairs are in the file under `dcrPlus.adjusted`, each as `{original, adjusted, delta,
+changed}`. On a plot the optimisation does not touch — `GHAYATHI EAST 4_C98`, whose Code coverage
+is already at or under the limit and whose parking fits — every row reads unchanged.
+
+### Livability: priorities are derived, minimum areas are missing
+
+The Report's two inputs are not equally available.
+
+**Priorities are derivable, and the derivation is verified.** No workbook carries a priority
+column, but each activity row names the mode that governs it — walking or driving — and whether it
+was found within that mode's catchment, 700 m on foot or 10 minutes by car. An activity the
+catchment does not already provide is a gap this plot can fill, which is what a priority is.
+
+That reading is confirmed against the source: across all 20 plots, **all 2,061** rows that pass
+`Plot_Proposed_UAD = Yes` and `Inclusion = Include` are catchment gaps, with **no plot differing**.
+The derivation reproduces the Report's own proposal logic exactly.
+
+It also means the prioritisation cannot currently change an outcome. Every activity in a
+schedule is already a priority, because the Report's filter has restricted the schedule to gaps
+before we see it. Ordering has nothing to order. It would begin to bite if a schedule ever held a
+non-gap activity — one a user adds by hand, or a future dataset carrying `Proposed = No` rows —
+so the ordering is implemented and ranks the user's own Priority flag first, the Report's gaps
+second, activities already provided nearby third, and anything with no catchment result last.
+
+**Minimum space requirements are not in any data loaded here.** The 20 per-plot workbooks carry
+16 columns and none is an area; the UAD mapping carries 5 and none is an area. `LIV_MIN_AREA` is
+therefore an empty table, deliberately, and nothing is invented to fill it. The consequence is
+visible rather than hidden: every activity is reported as **untested** rather than as passing a
+check that was never run, the panel says no minimums are loaded, and `dcrPlus.activityFit` carries
+`minimumsLoaded: 0` with the same note.
+
+**To make it live, supply the minimums** — by UAD code or by category — and the fit begins
+excluding on them with no code change. That is the one outstanding dependency in this workstream.
+
+### The activity test-fit
+
+After the fit, each activity is checked against the room the adjusted development area leaves,
+taken in priority order. The areas are **re-weighted at the adjusted FAR**: `ROWPLAN` holds them at
+the Code's GFA, and checking those against the reduced budget would compare 8,238 m² of activity
+against 5,492 m² of room and read as an overrun the optimisation had already resolved. Verified on
+all 20 plots — the re-weighted areas balance against the adjusted budget to the last decimal.
+
 ### Two L-number spaces, and a 50% that was never checked
 
 Reading the limitation rows back exposed something. The **notes workbook** numbers its
