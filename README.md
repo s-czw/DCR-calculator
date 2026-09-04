@@ -411,7 +411,7 @@ missing**. Twenty blocks, around 375 KB on a 158-activity plot.
 | `landUse` | the designation as the Code publishes it — `codeFAR`, `codeCoveragePct`, remarks — beside whatever was overridden |
 | `rateModel` | the weekday/weekend blend and ITC location. Every rate in the file depends on it, so it is a result, not a setting |
 | `constants` | the fixed assumptions — 32.5 m² a space, 75% per floor, 13 m² a worker, and the DCR Plus set. A file read in a year should not have to guess them |
-| `schedule` | the totals: rows, slots used against allowed, raw and rounded bays, floor area, and the three over-cap booleans |
+| `schedule` | the totals: rows, slots used against allowed, raw and rounded bays, floor area, and **both halves of the allocation** — `permittedArea` (the plot's own land uses, what L-1 and L-2 bound) and `topUpArea` (the Local Shopping Centre remainder) |
 | `parking` | the whole plan, including what the open ground *could* hold (`openGroundCapacity`), the area each tier consumes, and the unrounded floor count |
 | `limitationChecks` | **L-3 / L-4 evaluated rather than described** — demand per 100 m² of GFA, whether it clears the cap of 2, and which limitation bites at this plot size |
 | `advisories` | the warnings the page was showing, read off the panel so the file and the screen cannot disagree about what was flagged |
@@ -491,13 +491,17 @@ is not ours to resolve.
 sourced.
 
 **L-1 and L-2 are numeric and were never evaluated.** They are now, in
-`limitationChecks.notesWorkbook`, against the scheduled floor area — with the sheet's own wording
-carried beside each test. A caveat on reading them: the schedule auto-fills every filtered
-activity at the default 60 m² unit area, so on all 20 approved plots the scheduled floor area
-starts well above Max GFA (RD41_C1: 158 activities x 60 m² = 9,480 m² against 5,559 m²) and L-1
-therefore reads as breached by 6,700.5 m² before anyone has trimmed anything. The check is right;
-its input is the untrimmed default. L-1 and L-2 also contradict each other as written — one caps
-the share at 50%, the other floors it at 50% — which pins it at exactly 50% and is worth raising.
+`limitationChecks.notesWorkbook`, with the sheet's own wording beside each test.
+
+They are also not the contradiction they first look like. L-1 caps the floor area given to the
+permitted uses at 50% of Max GFA and L-2 floors it at 50%, which together pin it at **exactly
+50%** — and that is precisely the split the weighted methodology implements: the weights divide
+half the GFA between the plot's own land uses and the other half is treated as Local Shopping
+Centre. The two documents agree. Measured on all 20 approved plots, the permitted half comes to
+exactly half the GFA and both limitations are met to the last decimal.
+
+So the check is structural rather than discriminating — it confirms the methodology complies
+rather than catching a plot that does not. Worth knowing which it is.
 
 Two things the file deliberately does not do. It is **rebuilt from the current calculation on
 every save**, so nothing in it can be stale. And it is written whichever basis is on screen: the
@@ -1086,28 +1090,34 @@ states the result against the open ground so the fit can be checked by eye.
 This strictness changes answers. `RD29_C3` and `RD21_C409` fit on fractional spaces but not once a
 whole extra space has to go somewhere, so both are reported infeasible.
 
-### The schedule on either basis
+### The weighting is the basis — there is no unit area any more
 
-The Code charges every activity a fixed unit area — 60 m² inherited, overridable per row. DCR Plus
-does not charge unit areas at all, so that figure has nothing to do with the number the
-optimisation reaches. **Charged on** above the schedule switches which basis the table reports:
+The schedule used to charge every activity a fixed 60 m², inherited from a coefficient and
+overridable per row. **That figure is gone.** It had nothing behind it — the loader looked for a
+`unit_area_sqm` coefficient that was never written, so a hardcoded fallback stood in as though it
+were sourced — and it bore no relation to the area the weighted methodology actually allocates.
 
-| | Code · unit area | DCR Plus · weighted |
-| --- | --- | --- |
-| area column | `Unit area`, editable, inherited or entered | `Weighted area`, reported |
-| what it holds | the fixed tenancy size | this row's share of its land use's allocation |
-| bays column | `Bays` | `Bays / Plus` |
+An activity is now charged on its share of what its land use holds under the weighting. The area
+column reports that figure instead of offering one to type. A group's allocation spreads across
+its own rows in proportion to their slot counts; every row in a group resolves to the same ITC
+class and every rate is linear in the area charged, so the rows sum back to the group and the
+group back to the GFA.
 
-A group's allocation is spread across its own rows in proportion to their slot counts. Every row
-in a group resolves to the same ITC class and every rate is linear in the area it is charged on,
-so the row figures sum back to the group figure: on `RD41_C1` the 158 rows total **89.07 spaces**,
-which is the optimisation panel's own figure, and their weighted areas total **5,559 m²**, which is
-the GFA. The note beside the switch states that total and says so if it ever stops agreeing,
-rather than letting two totals sit side by side unremarked.
+**There is one parking demand now, not two.** The parking requirement and the DCR Plus
+optimisation read the same weighted areas, so they no longer disagree: on `RD41_C1` both give
+**90 spaces**, where the unit-area basis gave 108. Every one of the 20 approved plots moved.
 
-The difference is not cosmetic. A Sport Centre row on `RD41_C1` is charged 60 m² by the Code but
-**13.43 m²** weighted — 4.35% of the 308.83 m² its land use holds across 3 codes — and its bays
-fall from 0.072 to 0.016. Hovering the cell names the group, its allocation and the row's share.
+The weighting is not gated on the 800 m² threshold. That rule decides whether parking is
+accommodated *on the plot*, not whether the demand exists — a small plot still generates parking,
+it just cannot hold it — so the four plots under 800 m² now carry weighted areas and a demand
+figure where before they had neither.
+
+Two consequences worth stating. A hover on the area cell names the group, its allocation and the
+row's share. And the old GFA and GLA overrun advisories are gone: both compared the scheduled
+floor area against a cap, which meant something while that area was a sum of hand-set tenancy
+sizes, but the weights partition the GFA, so the scheduled area is the whole of it by construction
+— the GFA check could never fire and the GLA one always would. Neither carried information. The
+L-1 / L-2 split is reported in their place.
 
 ### The weighting reads the schedule
 

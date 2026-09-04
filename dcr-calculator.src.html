@@ -832,19 +832,13 @@ tbody tr:last-child td{border-bottom:0}
         </div>
         <div class="basis-row">
           <span class="basis-lbl">Charged on</span>
-          <div class="basis-pick" role="group" aria-label="Charging basis">
-            <button type="button" class="btn mini on" id="basisCode"
-              aria-pressed="true">Code &#183; unit area</button>
-            <button type="button" class="btn mini" id="basisPlus"
-              aria-pressed="false">DCR Plus &#183; weighted</button>
-          </div>
           <span class="basis-note" id="basisNote"></span>
         </div>
         <div class="tbl-scroll">
           <table class="sched">
             <thead><tr>
               <th>UAD activity</th><th class="n">Pri</th><th class="n">Slots</th>
-              <th class="n" id="thArea">Unit area</th>
+              <th class="n" id="thArea">Weighted area</th>
               <th>ITC category</th><th class="n">Rate / units</th>
               <th class="n" id="thBays">Bays</th>
               <th><span class="sr">Remove</span></th>
@@ -1358,6 +1352,9 @@ tbody tr:last-child td{border-bottom:0}
     const workRaw = Number.isFinite(maxGFA) && WORKER_AREA > 0 ? maxGFA/WORKER_AREA : NaN;
     const workers = Number.isFinite(workRaw) ? Math.floor(workRaw) : NaN;
 
+    /* Built here, before schedTotals reads it: every row's charged area comes from
+       the weighting now, so the plan has to exist before the totals are taken. */
+    ROWPLAN = plusRowPlan({ plot, far });
     const sched  = schedTotals(act, maxGFA, gla);
     o.spaces     = pick("spaces", sched.baysCeil);
     const parking = parkingPlan(plot, cover, o, dRow);
@@ -1484,21 +1481,34 @@ tbody tr:last-child td{border-bottom:0}
     return { area: own > 0 ? own : unit, manual:true };
   }
 
+  /* The floor area an activity is charged on comes from the weighting -- its share
+     of what its land use holds -- not from a fixed unit area multiplied by slots.
+     A fixed 60 m2 had nothing behind it and bore no relation to the figure the
+     weighted methodology reaches; the weights are what divide the GFA up. The unit
+     area survives only as the divisor for the permitted-activity count in step 4.
+     Where a class is charged per seat, the area converts at PLUS_SEAT_AREA first,
+     which is what plusSlotsFor does. */
   function rowParking(row, unit){
     const u = rowUnit(row, unit);
     const cls = rowClass(row);
     const code = cls ? resolveCode(cls) : null;
     if(!code) return { code:null, rate:NaN, bays:NaN, needsQty:false, unit:u };
-    const slots = Math.max(0, num(row.slots) || 0);
     const eff = effectiveRate(code.code);
     const rate = eff ? eff.rate_total : code.rate_total;
+    const w = ROWPLAN ? ROWPLAN.byRow.get(row.id) : null;
+    if(w) return { code:code, rate:rate, raw:w.bays, bays:w.bays,
+                   needsQty:false, eff:eff, unit:u,
+                   floor:w.area, weighted:w };
+    /* No weighting to go on -- no plot size, or nothing the mapping recognises.
+       Report it rather than substituting a fixed area and calling it a result. */
+    const slots = Math.max(0, num(row.slots) || 0);
     let driver;
     if(code.driver_kind === "count"){
       const qty = num(row.qty);
       if(!(qty > 0)) return { code:code, rate:rate, bays:NaN, needsQty:true, eff:eff, unit:u };
       driver = qty;
     } else {
-      driver = slots * u.area;                  // floor area this activity holds
+      driver = NaN;                             // the weighting supplies this
     }
     const raw = driver * code.conversion * rate;
     // No rounding here. Rounding every row up and then adding charges for part
@@ -1516,25 +1526,32 @@ tbody tr:last-child td{border-bottom:0}
      since the tenancies are leasable area -- but only GFA is treated as a hard cap. */
   function schedTotals(allowed, capGFA, capGLA){
     const unit = pick("unit", COEF.unitArea).value || 60;
-    let slots = 0, raw = 0, incomplete = 0, floor = 0, manualUnits = 0;
+    let slots = 0, raw = 0, incomplete = 0, floor = 0;
     SCHED.forEach(r => {
-      const sl = Math.max(0, num(r.slots) || 0);
-      slots += sl;
-      const u = rowUnit(r, unit);
-      if(u.manual) manualUnits++;
-      floor += sl * u.area;
+      slots += Math.max(0, num(r.slots) || 0);
       const p = rowParking(r, unit);
+      // The floor area a row consumes is the area it was charged on, which is now
+      // its weighted share. Summing slots x a fixed unit area was the old basis
+      // and would no longer match what the rates were applied to.
+      if(Number.isFinite(p.floor)) floor += p.floor;
       if(Number.isFinite(p.raw)){ raw += p.raw; }
       else if(r.act || r.itcOverride) incomplete++;
     });
+    /* The weights partition the GFA, so the scheduled floor area comes to the whole
+       of it by construction and cannot overrun. What can be checked is the half the
+       weights actually divide -- the floor area given to the plot's own land uses --
+       which is what L-1 and L-2 bound. Those live in limitationChecks. */
+    const permitted = ROWPLAN ? ROWPLAN.permittedArea : NaN;
+    const topUp = ROWPLAN ? ROWPLAN.topUpArea : NaN;
     // One ceiling, on the total: a part space still has to be built as a whole one.
     const baysCeil = Math.max(0, Math.ceil(raw - 1e-9));
     return { slots:slots, allowed:allowed, bays:baysCeil, baysCeil:baysCeil, raw:raw,
-             floor:floor, manualUnits:manualUnits,
+             floor:floor, manualUnits:0,
+             permittedArea:permitted, topUpArea:topUp,
              capGFA:capGFA, capGLA:capGLA,
              overSlots: Number.isFinite(allowed) && slots > allowed,
-             overFloor: Number.isFinite(capGFA) && floor > capGFA + 1e-9,
-             overGLA:   Number.isFinite(capGLA) && floor > capGLA + 1e-9,
+             overFloor: Number.isFinite(capGFA) && floor > capGFA + 1e-6,
+             overGLA:   Number.isFinite(capGLA) && floor > capGLA + 1e-6,
              incomplete:incomplete, rows:SCHED.length };
   }
   /* The two long option lists are built once and cloned. Creating them per row
@@ -1668,26 +1685,20 @@ tbody tr:last-child td{border-bottom:0}
      ITC category, rate/qty, bays, remove. */
   /* Whichever basis is showing, the bays a row reports come from here, so the cell
      and its live repaint cannot drift apart. */
-  function rowBays(row, p){
-    if(SCHED_BASIS === "plus"){
-      const w = ROWPLAN ? ROWPLAN.byRow.get(row.id) : null;
-      return w ? w.bays : NaN;
-    }
-    return p.raw;
-  }
+  function rowBays(row, p){ return p.raw; }
 
   function paintRowDerived(tr, row){
     const unit = pick("unit", COEF.unitArea).value || 60;
     const u = rowUnit(row, unit);
     const p = rowParking(row, unit);
-    if(SCHED_BASIS === "plus"){ refreshRowPlan(); renderBasis(); }
+    refreshRowPlan(); renderBasis();
 
     // Queried, not indexed. These used to be tr.cells[2] and tr.cells[5], which
     // silently pointed at the wrong cells the moment a column was inserted.
-    const uf = tr.querySelector(".uflag");
-    // On the weighted basis the cell is a reported figure, not an input, and its
-    // flag already reads "weighted" -- leave it alone.
-    if(uf && SCHED_BASIS !== "plus"){
+    // The area cell is a reported figure now, not an input, and its flag reads
+    // "weighted" -- nothing to relabel.
+    const uf = null;
+    if(uf){
       uf.className = "uflag " + (u.manual ? "uflag-manual" : "uflag-auto");
       uf.textContent = u.manual ? "entered" : "inherited";
     }
@@ -1789,44 +1800,19 @@ tbody tr:last-child td{border-bottom:0}
       td1.appendChild(sl);
       tr.appendChild(td1);
 
-      // On the weighted basis there is nothing to type: the area is this row's
-      // share of its land use's allocation, so the cell reports it instead.
-      const gu = pick("unit", COEF.unitArea).value || 60;
-      const u = rowUnit(row, gu);
+      /* Nothing to type here any more. The area an activity is charged on is its
+         share of what its land use holds under the weighting, so the cell reports
+         that figure rather than offering a unit area to override. */
       const tdU = el("td", "n");
-      if(SCHED_BASIS === "plus"){
-        const w = ROWPLAN ? ROWPLAN.byRow.get(row.id) : null;
-        tdU.appendChild(Object.assign(el("span", "warea"),
-          { textContent: w ? fmt(w.area, 2) : "\u2014" }));
-        tdU.appendChild(el("div", "uflag uflag-auto",
-          w ? "weighted" : "not weighted"));
-        if(w) tdU.title = w.group + " holds " + fmt(w.groupGfa,2) + " m\u00b2 across "
-          + fmt(w.groupCount) + " " + plural(w.groupCount,"code","codes")
-          + "; this row takes " + fmt(w.share*100,2) + "% of it";
-        tr.appendChild(tdU);
-      } else {
-      const ui = el("input");
-      ui.type = "number"; ui.min = "1"; ui.step = "1";
-      ui.value = u.area;
-      ui.title = u.manual
-        ? "Entered for this activity \u2014 clear the field to go back to the fixed value"
-        : "Following the fixed value of " + fmt(gu) + " m\u00b2";
-      digitsOnly(ui);
-      ui.addEventListener("input", ()=>{
-        if(ui.value.trim() === ""){          // cleared: follow the fixed value again
-          row.unitManual = false;
-          row.unitArea = "";
-        } else {
-          row.unitManual = true;
-          row.unitArea = ui.value;
-        }
-        paintRowDerived(tr, row); render();          // no rebuild: keeps focus
-      });
-      tdU.appendChild(ui);
-      tdU.appendChild(el("div", "uflag " + (u.manual ? "uflag-manual" : "uflag-auto"),
-                         u.manual ? "entered" : "inherited"));
+      const w = ROWPLAN ? ROWPLAN.byRow.get(row.id) : null;
+      tdU.appendChild(Object.assign(el("span", "warea"),
+        { textContent: w ? fmt(w.area, 2) : "\u2014" }));
+      tdU.appendChild(el("div", "uflag uflag-auto",
+        w ? "weighted" : "not weighted"));
+      if(w) tdU.title = w.group + " holds " + fmt(w.groupGfa,2) + " m\u00b2 across "
+        + fmt(w.groupCount) + " " + plural(w.groupCount,"code","codes")
+        + "; this row takes " + fmt(w.share*100,2) + "% of it";
       tr.appendChild(tdU);
-      }
 
       // ITC category, auto or overridden
       const td2 = el("td");
@@ -2285,24 +2271,24 @@ tbody tr:last-child td{border-bottom:0}
         " are permitted by step 4."
       ]));
     }
-    // A hand-entered unit area can put the schedule over the plot's GFA while the
-    // slot count still reads as within the permitted number, so this is checked in
-    // its own right rather than inferred from the slots.
-    if(t && t.overFloor){
-      F.appendChild(flag("crit","GFA",[
-        "The scheduled activities occupy ", strong(area(t.floor)),
-        " of floor area, over the ", strong(area(t.capGFA)),
-        " the FAR permits \u2014 over by ", strong(area(t.floor - t.capGFA)),
-        ". Reduce a unit area or drop an activity."
-      ]));
-    } else if(t && t.overGLA){
-      F.appendChild(flag("","GLA",[
-        "The scheduled activities occupy ", strong(area(t.floor)),
-        ", which fits the ", strong(area(t.capGFA)), " of GFA but exceeds the ",
-        strong(area(t.capGLA)), " of leasable area by ",
-        strong(area(t.floor - t.capGLA)),
-        ". Tenancies are let from GLA, so that is the binding limit in practice."
-      ]));
+    /* The old GFA and GLA overrun checks are gone. Both compared the scheduled
+       floor area against a cap, which made sense while that area was a sum of
+       hand-set tenancy sizes. The weights partition the GFA, so the scheduled area
+       is the whole of it by construction: the GFA check could never fire and the
+       GLA one always would. Neither carried information. What the split can be
+       checked against is L-1 and L-2 -- the half the weights divide -- so that is
+       reported instead. */
+    if(t && Number.isFinite(t.permittedArea) && Number.isFinite(c.maxGFA)){
+      const half = c.maxGFA / 2;
+      const ok = Math.abs(t.permittedArea - half) < 1e-6;
+      F.appendChild(flag(ok ? "" : "crit", ok ? "L-1/2" : "L-1",
+        ok ? ["The plot\u2019s own land uses hold ", strong(area(t.permittedArea)),
+              " \u2014 half the ", strong(area(c.maxGFA)), " of GFA, with the ",
+              "remainder as Local Shopping Centre. L-1 caps that share at 50% and ",
+              "L-2 floors it at 50%, so both are met exactly."]
+           : ["The plot\u2019s own land uses hold ", strong(area(t.permittedArea)),
+              " against the ", strong(area(half)), " that is half the GFA. L-1 caps ",
+              "this at 50% and L-2 floors it at 50%."]));
     }
     if(t && t.incomplete){
       F.appendChild(flag("","qty",[
@@ -2884,10 +2870,16 @@ tbody tr:last-child td{border-bottom:0}
                    foldedIntoLocalShopping: PLUS_FOLD_INTO_LSC.slice() }
       },
       schedule: {
-        basis: SCHED_BASIS,
+        basis: "weighted",
         rows: c.sched.rows, slotsUsed: c.sched.slots, slotsAllowed: c.sched.allowed,
         baysRaw: c.sched.raw, baysRequired: c.sched.baysCeil,
         floorAreaUsed: c.sched.floor, manualUnitAreas: c.sched.manualUnits,
+        /* The two halves the weighting produces. permittedArea is the floor area
+           given to the plot's own land uses -- what L-1 and L-2 bound -- and
+           topUpArea is the Local Shopping Centre remainder. Together they are the
+           GFA, which is what floorAreaUsed reports. */
+        permittedArea: c.sched.permittedArea, topUpArea: c.sched.topUpArea,
+        halfGFA: Number.isFinite(c.maxGFA) ? c.maxGFA / 2 : null,
         rowsIncomplete: c.sched.incomplete,
         overSlots: !!c.sched.overSlots, overGFA: !!c.sched.overFloor,
         overGLA: !!c.sched.overGLA
@@ -3054,7 +3046,13 @@ tbody tr:last-child td{border-bottom:0}
                    const reg = p && p.approved ? p.approved.region : null;
                    if(!reg) return [];
                    const half = Number.isFinite(c.maxGFA) ? c.maxGFA / 2 : NaN;
-                   const used = c.sched ? c.sched.floor : NaN;
+                   /* The floor area given to the uses permitted under this Item is
+                      the half the weights divide -- not the whole scheduled area,
+                      which includes the Local Shopping Centre remainder and is the
+                      entire GFA by construction. Testing the whole against half of
+                      itself would fail on every plot and mean nothing. */
+                   const used = c.sched && Number.isFinite(c.sched.permittedArea)
+                              ? c.sched.permittedArea : NaN;
                    const seen = new Set();
                    return NOTES.filter(r => r.region === reg && r.kind === "limitation"
                                          && bandHolds(r, c.plot))
@@ -3065,7 +3063,8 @@ tbody tr:last-child td{border-bottom:0}
                                      description: r.description, evaluated: false };
                        if(r.code === "L-1"){
                          out.evaluated = true;
-                         out.test = "scheduled floor area must not exceed 50% of Max GFA";
+                         out.test = "floor area to the permitted uses must not "
+                                  + "exceed 50% of Max GFA";
                          out.value = used; out.threshold = half;
                          out.passes = Number.isFinite(used) && Number.isFinite(half)
                                     ? used <= half + 1e-9 : null;
@@ -3073,7 +3072,8 @@ tbody tr:last-child td{border-bottom:0}
                                         && used > half ? used - half : 0;
                        } else if(r.code === "L-2"){
                          out.evaluated = true;
-                         out.test = "scheduled floor area must be at least 50% of Max GFA";
+                         out.test = "floor area to the permitted uses must be at "
+                                  + "least 50% of Max GFA";
                          out.value = used; out.threshold = half;
                          out.passes = Number.isFinite(used) && Number.isFinite(half)
                                     ? used >= half - 1e-9 : null;
@@ -3460,7 +3460,8 @@ tbody tr:last-child td{border-bottom:0}
                    + n2(c.o.pcPct.original) + "%" : "from the Code"]);
     inRows.push(["GLA share of Max GFA", n2(c.glaPct) + "%",
                  "assumption, not a Code figure" + ov("glaPct")]);
-    inRows.push(["Unit area per activity", m2(c.unit), "minimum tenancy size" + ov("unit")]);
+    inRows.push(["Unit area per activity", m2(c.unit),
+                 "divisor for the permitted activity count" + ov("unit")]);
     inRows.push(["Area per parking space", n2(p.per) + " m²",
                  "from the standard" + ov("spaceArea")]);
     inRows.push(["Usable per basement floor", n2(p.useP) + "%",
@@ -3809,18 +3810,30 @@ tbody tr:last-child td{border-bottom:0}
              basis: fmt(gfa,2) + " m²" };
   }
 
+  /* The weights divide half the GFA between the plot's own land uses; the other
+     half is Local Shopping Centre on top of its share. The two are tracked apart
+     because they answer different questions: the weighted half is the floor area
+     given to the uses permitted under this Item, which is what limitations L-1 and
+     L-2 of the notes workbook bound at 50% from either side -- and the reason the
+     methodology halves the GFA in the first place. Added together they are the
+     whole GFA, which is what the parking is charged on. */
   function plusAllocate(groups, gfa){
     const total = groups.reduce((a,g) => a + g.count, 0);
     const half = gfa / 2;
-    let slots = 0, unpriced = 0;
+    let slots = 0, unpriced = 0, permitted = 0, topUp = 0;
     const out = groups.map(g => {
       const weight = total ? g.count / total : 0;
-      const alloc = weight * half + (g.equivalent === PLUS_LSC ? half : 0);
+      const share = weight * half;                       // of the permitted half
+      const extra = g.equivalent === PLUS_LSC ? half : 0; // the retail remainder
+      const alloc = share + extra;
       const s = plusSlotsFor(g, alloc);
       if(Number.isFinite(s.slots)) slots += s.slots; else unpriced++;
-      return Object.assign({}, g, { weight, gfa: alloc }, s);
+      permitted += share; topUp += extra;
+      return Object.assign({}, g, { weight, gfa: alloc,
+                                    permittedArea: share, topUpArea: extra }, s);
     });
-    return { rows: out.sort((a,b) => b.gfa - a.gfa), total, slots, unpriced, gfa };
+    return { rows: out.sort((a,b) => b.gfa - a.gfa), total, slots, unpriced, gfa,
+             permittedArea: permitted, topUpArea: topUp, halfGFA: half };
   }
 
   function dcrPlus(c){
@@ -3909,7 +3922,6 @@ tbody tr:last-child td{border-bottom:0}
      every activity a share of the GFA set by its land use's weight, so a fixed
      60 m2 has nothing to do with the figure the optimisation reaches. This lets the
      schedule be read on either basis. */
-  let SCHED_BASIS = "code";                    // "code" | "plus"
 
   /* The weighting reads the SCHEDULE rather than the register, so adding, removing
      or recategorising an activity moves the weights. On an untouched plot the two
@@ -3950,8 +3962,12 @@ tbody tr:last-child td{border-bottom:0}
      linear in the area it is charged on, so the row figures sum back to the group
      figure: the schedule reconciles with the panel instead of offering a second
      opinion on the same plot. */
+  /* No 800 m2 guard here. That threshold decides whether parking is accommodated
+     on the plot, not whether the demand exists: a small plot still generates
+     parking, it just cannot hold it. Gating the allocation on it left plots under
+     800 m2 with no per-activity areas at all. */
   function plusRowPlan(c){
-    if(!Number.isFinite(c.plot) || c.plot < PLUS_MIN_PLOT) return null;
+    if(!Number.isFinite(c.plot)) return null;
     const groups = plusGroupsFromSched();
     if(!groups.length) return null;
     const gfa = c.plot * c.far;
@@ -3968,10 +3984,14 @@ tbody tr:last-child td{border-bottom:0}
         byRow.set(r.id, { area: g.gfa * share, share, group: g.equivalent,
                           itcClass: g.itcClass, bays: one.slots,
                           basis: one.basis, code: one.code, rate: one.rate,
-                          groupGfa: g.gfa, groupCount: g.count, weight: g.weight });
+                          groupGfa: g.gfa, groupCount: g.count, weight: g.weight,
+                          permittedArea: g.permittedArea * share,
+                          topUpArea: g.topUpArea * share });
       });
     });
-    return { alloc, byRow, gfa, slotsRaw: alloc.slots };
+    return { alloc, byRow, gfa, slotsRaw: alloc.slots,
+             permittedArea: alloc.permittedArea, topUpArea: alloc.topUpArea,
+             halfGFA: alloc.halfGFA };
   }
   let ROWPLAN = null;                 // rebuilt once a render, not once a row
 
@@ -3979,39 +3999,24 @@ tbody tr:last-child td{border-bottom:0}
      render, a rebuild, a single row repainting after a keystroke -- gets the same
      plan without having to have one to hand. */
   function refreshRowPlan(){
-    if(SCHED_BASIS !== "plus"){ ROWPLAN = null; return; }
     const dRow = luRow();
     ROWPLAN = plusRowPlan({ plot: num($("#plotSize").value),
                             far: pick("far", dRow ? num(dRow.far) : null).value });
   }
 
   function renderBasis(){
-    const plus = SCHED_BASIS === "plus";
-    const bc = $("#basisCode"), bp = $("#basisPlus");
-    bc.classList.toggle("on", !plus); bc.setAttribute("aria-pressed", String(!plus));
-    bp.classList.toggle("on",  plus); bp.setAttribute("aria-pressed", String(plus));
-    const ta = $("#thArea"), tb = $("#thBays"), note = $("#basisNote");
-    ta.textContent = plus ? "Weighted area" : "Unit area";
-    tb.textContent = plus ? "Bays / Plus"   : "Bays";
-    if(!plus){
-      note.textContent = "Each activity charged on a fixed unit area.";
-      return;
-    }
+    const note = $("#basisNote");
     if(!ROWPLAN){
       note.textContent = SCHED.length
-        ? "No weighting: the plot is under " + fmt(PLUS_MIN_PLOT) + " m\u00b2."
+        ? "No weighting yet \u2014 enter a plot size and a land use."
         : "No activities to weight.";
       return;
     }
-    // The rows are the panel's own figure taken apart, so say so -- and say if it
-    // ever stops adding up rather than letting two totals sit side by side.
     let sum = 0; ROWPLAN.byRow.forEach(w => { if(Number.isFinite(w.bays)) sum += w.bays; });
-    const ok = Math.abs(sum - ROWPLAN.slotsRaw) < 1e-6;
-    note.textContent = "Each activity charged on its share of the weighted GFA. "
-      + "Rows total " + fmt(sum,2) + " "
-      + plural(sum,"space","spaces")
-      + (ok ? ", the optimisation panel's figure."
-            : " against the panel's " + fmt(ROWPLAN.slotsRaw,2) + " \u2014 they should agree.");
+    note.innerHTML = "Each activity is charged on its share of the weighted GFA \u2014 "
+      + "<b>" + area(ROWPLAN.permittedArea) + "</b> divided between the plot\u2019s own "
+      + "land uses, and <b>" + area(ROWPLAN.topUpArea) + "</b> as Local Shopping Centre. "
+      + "Rows total <b>" + fmt(sum,2) + "</b> " + plural(sum,"space","spaces") + ".";
   }
   /* The saved form of the optimisation. Kept separate from dcrPlus() so the panel
      and the file cannot drift apart: both read the same computed object. */
@@ -4259,12 +4264,6 @@ tbody tr:last-child td{border-bottom:0}
 //    });
 //    paintUpSetup();
     const svBtn = document.getElementById("saveConfig");
-    const setBasis = b => { if(SCHED_BASIS === b) return;
-                            SCHED_BASIS = b; renderSched(); render(); };
-    const bc = document.getElementById("basisCode");
-    const bp = document.getElementById("basisPlus");
-    if(bc) bc.addEventListener("click", ()=>{ setBasis("code"); });
-    if(bp) bp.addEventListener("click", ()=>{ setBasis("plus"); });
     if(svBtn) svBtn.addEventListener("click", ()=>{ doSave(); });
     ["plotSize","farManual","pcPct","glaPct"].forEach(id=>{
       document.getElementById(id).addEventListener("input", render);
